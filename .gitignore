@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+android/
+ios/
+*.log
+.env*
+*.db
+*.db-journal
+backups/
+.DS_Store

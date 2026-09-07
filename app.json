@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Iron",
+    "slug": "iron",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "iron",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "dev.rakesh.iron",
+      "permissions": [
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "dev.rakesh.iron",
+      "supportsTablet": false
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#E8552E"
+        }
+      ],
+      "expo-secure-store",
+      "expo-splash-screen"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
