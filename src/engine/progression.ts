@@ -157,7 +157,7 @@ export function buildWarmups(
 ): { weight: number; reps: number }[] {
   if (cfg.loadType === 'bodyweight' || workWeight <= 20) return [];
   const heavy = cfg.primaryMuscles.length > 1 || cfg.loadType === 'barbell';
-  const ramp = heavy
+  const ramp: [number, number][] = heavy
     ? [[0.4, 8], [0.6, 5], [0.8, 3], [0.9, 1]]
     : [[0.5, 8], [0.75, 4]];
   return ramp.map(([pct, reps]) => ({

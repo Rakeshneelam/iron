@@ -50,7 +50,10 @@ export function weeklyRateKg(weighIns: WeighIn[], days = 14, alpha = 0.1): numbe
   const window = t.slice(-days);
   if (window.length < 7) return 0;
   const spanDays = Math.max(1, window.length - 1);
-  const delta = window[window.length - 1].trend - window[0].trend;
+  const firstW = window[0];
+  const lastW = window[window.length - 1];
+  if (!firstW || !lastW) return 0;
+  const delta = lastW.trend - firstW.trend;
   return (delta / spanDays) * 7;
 }
 
@@ -83,8 +86,11 @@ export function adaptiveTDEE(
   const trend = weightTrend(weighIns);
   if (trend.length < 14) return null;
 
-  const first = trend.find((t) => t.date >= intakeWindow[0].date) ?? trend[0];
+  const windowStart = intakeWindow[0];
+  if (!windowStart) return null;
+  const first = trend.find((t) => t.date >= windowStart.date) ?? trend[0];
   const lastT = trend[trend.length - 1];
+  if (!first || !lastT) return null;
   const spanDays = Math.max(1, daysBetween(first.date, lastT.date));
   if (spanDays < 10) return null;
 
