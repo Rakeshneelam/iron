@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["dev.rakesh.iron.resttimer.RestTimerModule"]
+  }
+}

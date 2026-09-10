@@ -14,10 +14,10 @@
         "POST_NOTIFICATIONS",
         "RECEIVE_BOOT_COMPLETED",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "VIBRATE",
         "WAKE_LOCK"
-      ]
+      ],
+      "versionCode": 1
     },
     "ios": {
       "bundleIdentifier": "dev.rakesh.iron",
@@ -38,10 +38,16 @@
         }
       ],
       "expo-secure-store",
-      "expo-splash-screen"
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B0B0D"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "backgroundColor": "#0B0B0D"
   }
 }

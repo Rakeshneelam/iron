@@ -31,7 +31,7 @@ export const radius = { sm: 8, md: 12, lg: 16, xl: 24, pill: 999 } as const;
 
 export const font = {
   /** Tabular figures everywhere numbers change — no jitter on steppers or timers. */
-  numeric: { fontVariant: ['tabular-nums'] as const },
+  numeric: { fontVariant: ['tabular-nums'] as ['tabular-nums'] },
   display: { fontSize: 56, fontWeight: '700' as const, letterSpacing: -1.5 },
   title: { fontSize: 28, fontWeight: '700' as const, letterSpacing: -0.5 },
   heading: { fontSize: 20, fontWeight: '600' as const },

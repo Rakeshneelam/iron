@@ -409,3 +409,45 @@ app/program/[dayId].tsx         day editor
 app/settings/index.tsx
 app/settings/equipment.tsx
 ```
+
+---
+
+## Amendments made during the build
+
+Recorded so the next session does not "fix" these back.
+
+1. **`useLive` replaces `useLiveQuery`** (§Global decisions 2). Drizzle's hook starts
+   every mount at `data = []` and fills it in an effect — a one-frame empty flash on
+   every screen, i.e. the skeleton `docs/05` bans. `useLive(read, tables, deps)` in
+   `@/db/live` reads synchronously on first render and re-reads on
+   `addDatabaseChangeListener` for the listed tables. Table names are the SQLite
+   (snake_case) names.
+2. **New modules** not in the original contract:
+   `@/db/repositories/equipment` (gym inventory), `@/db/repositories/mappers`
+   (`toEngineSet`, `groupBy`, `parseIdList` — kept separate so repositories never
+   import each other in a cycle), `@/services/hydration` (`hydrationTarget`,
+   `hydrationPlan` — shared by the Water screen and the notification service),
+   `@/features/session/prescription` (the only caller of `prescribe()`).
+3. **`sessions.ts` additions:** `getSession`, `getSessionPlan`, `setSessionOrder`,
+   `unskipExercise`, `isReadinessDone` / `markReadinessDone`. `endSession` returns
+   `{ discarded }` — a session with no working sets is deleted rather than kept,
+   otherwise opening and closing a workout would advance the routine cycle.
+4. **`stats.writeSessionStats`** is the single writer of `exercise_session_stat`,
+   used by both `endSession` and `rebuildAllStats`.
+5. **`food.intakeBetween(from, to)`** added; `intakeHistory(days, endISO?)` gained
+   the optional end date so targets can exclude the in-progress day.
+6. **Export** writes into a folder picked with `Directory.pickDirectoryAsync()`:
+   React Native's `Share` cannot share files on Android and `expo-sharing` is not
+   installed. `exportAll()` is the entry point.
+7. **Hydration "silent when ahead"** (docs/06) is implemented as: the first nudge
+   may not land before pro-rata pace catches up with what he has drunk. The literal
+   reading — schedule nothing — would leave a day he is ahead at 10:00 with no
+   reminder at all, even after he falls behind.
+8. **Water quick-log actions open the app briefly** to write the row. Logging fully
+   in the background needs `expo-task-manager`, which is not installed.
+9. **Bodyweight exercises at 0 kg added load** stay at 0 kg unless the engine says
+   ADD_LOAD. `prescribe()`'s `done()` floors every load at one `loadStep`, which
+   would otherwise add 2.5 kg to an unweighted pull-up every session. Handled in the
+   adapter; the proper fix belongs in the engine with a test.
+10. **Accepting a deload** in Review sets `lastDeloadDate`; for the next 7 days the
+    adapter passes each prescription through the engine's `deloadPrescription()`.

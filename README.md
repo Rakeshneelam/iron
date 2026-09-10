@@ -40,3 +40,30 @@ npx expo run:android     # dev build — Expo Go will NOT work for this app
 | `docs/06-NOTIFICATIONS.md` | Android reliability. The riskiest part of the build. |
 | `docs/07-BACKUP.md` | Encrypted Drive appDataFolder backup/restore |
 | `docs/08-BUILD-PLAN.md` | Phased tickets, in build order |
+
+## Build an APK and install it
+
+This machine has no Android SDK, so APKs are built in the cloud with EAS. Every
+profile in `eas.json` emits a sideloadable `.apk` (never an AAB — this app is not
+going to the Play Store).
+
+```bash
+npx eas-cli login                                # once — free Expo account
+npx eas-cli init                                 # once — links this folder to an EAS project
+npx eas-cli build -p android --profile preview   # ~10–30 min on the free queue
+```
+
+Open the link it prints on the phone, download the `.apk`, allow "install unknown
+apps" for your browser, install. The JS is bundled in: no dev server, no Expo Go.
+
+Before spending a build slot, check locally — each of these catches a different
+class of failure that would otherwise surface 15 minutes into the cloud build:
+
+```bash
+npm test                                  # engine: 42 tests
+npm run typecheck                         # app + tests projects
+npx expo export --platform android        # Metro bundle (.sql imports, module resolution)
+```
+
+The native rest-timer module (`modules/rest-timer`) is only compiled by the cloud
+build. See its README for the device tests it still has to pass.
