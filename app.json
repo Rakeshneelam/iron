@@ -48,6 +48,13 @@
     "experiments": {
       "typedRoutes": true
     },
-    "backgroundColor": "#0B0B0D"
+    "backgroundColor": "#0B0B0D",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8a3d4212-67e5-46a9-936d-ecfd7b19f081"
+      }
+    },
+    "owner": "crazybutton"
   }
 }
