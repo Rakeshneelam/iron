@@ -2,7 +2,7 @@
   "expo": {
     "name": "Iron",
     "slug": "iron",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "orientation": "portrait",
     "scheme": "iron",
     "userInterfaceStyle": "dark",
@@ -17,7 +17,7 @@
         "VIBRATE",
         "WAKE_LOCK"
       ],
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B0B0D"

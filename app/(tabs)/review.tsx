@@ -11,6 +11,7 @@ import { buildDeloadInput, e1rmSeries, weeklySetsPerMuscle } from '@/db/reposito
 import { shouldDeload } from '@/engine/progression';
 import type { Recommendation } from '@/engine/recommend';
 import { siteDef } from '@/features/body/sites';
+import { computeTargets } from '@/features/food/targets';
 import { VolumeList } from '@/features/program/VolumeList';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
 import { addDays, daysBetweenISO, fmtDayLabel, todayISO, weekStartISO } from '@/lib/date';
@@ -44,9 +45,9 @@ export default function ProgressScreen() {
   );
   const deload = useLive(() => shouldDeload(buildDeloadInput()), ['exercise_session_stat', 'session', 'setting']);
   const insights = useLive(
-    () => weekInsights(weekStart, hydrationTarget().ml),
-    ['session', 'set_log', 'exercise_session_stat', 'weigh_in', 'water_log', 'setting'],
-    [weekStart],
+    () => weekInsights(weekStart, hydrationTarget().ml, computeTargets(today).proteinG),
+    ['session', 'set_log', 'exercise_session_stat', 'weigh_in', 'water_log', 'meal_log', 'setting'],
+    [weekStart, today],
   );
   const workouts = useLive(() => recentWorkouts(8), ['session', 'set_log']);
 

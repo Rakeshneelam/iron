@@ -15,6 +15,7 @@ import { detectRecords, type RecordEvent } from '@/engine/records';
 import { addDays, daysBetweenISO, todayISO } from '@/lib/date';
 
 import { listMeasurements, listWeighIns } from './body';
+import { intakeBetween } from './food';
 import { groupBy } from './mappers';
 import { getActiveRoutine, getDays, getSlots, plannedWeeklySets } from './program';
 import type { Session } from './sessions';
@@ -375,7 +376,7 @@ function setsByHalf(from: string, to: string): { upper: number; lower: number } 
 }
 
 /** Up to three plain-language statements about the week, from the data alone. */
-export function weekInsights(weekStart: string, waterTargetMl: number): string[] {
+export function weekInsights(weekStart: string, waterTargetMl: number, proteinTargetG = 0): string[] {
   const end = addDays(weekStart, 6);
   const week = weekSummary(weekStart, waterTargetMl);
   const weekSessions = db
@@ -401,6 +402,19 @@ export function weekInsights(weekStart: string, waterTargetMl: number): string[]
     goal: getSettings().phase,
     water: { hit: week.water.daysHit, days: week.water.days },
     skippedLabels: weekSessions.filter((w) => w.session.status === 'skipped').map((w) => w.label ?? 'a workout'),
+    nutrition: nutritionWeek(weekStart, end, proteinTargetG),
   };
   return weeklyInsights(facts);
+}
+
+/** Food logging for one week, or null when nothing was ever logged. */
+function nutritionWeek(weekStart: string, end: string, targetProteinG: number): WeekFacts['nutrition'] {
+  const days = intakeBetween(weekStart, end);
+  if (days.length === 0) return null;
+  return {
+    daysLogged: days.length,
+    days: 7,
+    avgProteinG: days.reduce((a, d) => a + (d.proteinG ?? 0), 0) / days.length,
+    targetProteinG,
+  };
 }

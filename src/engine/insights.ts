@@ -21,6 +21,8 @@ export interface WeekFacts {
   water: { hit: number; days: number };
   /** Day labels of plan days skipped this week. */
   skippedLabels: readonly string[];
+  /** Food logging for the week; null when the user doesn't track food at all. */
+  nutrition: { daysLogged: number; days: number; avgProteinG: number; targetProteinG: number } | null;
 }
 
 const REGION_NOUN: Record<LiftRegion, string> = { push: 'pressing', pull: 'pulling', legs: 'lower-body', other: 'overall' };
@@ -74,6 +76,20 @@ export function weeklyInsights(f: WeekFacts): string[] {
         ? { text: `Weight trend ${signed(bw)} kg — in line with your ${GOAL_WORD[f.goal]} goal.`, weight: 1 }
         : { text: `Weight trend ${signed(bw)} kg — moving against your ${GOAL_WORD[f.goal]} goal.`, weight: 2.5 },
     );
+  }
+
+  // Protein is the one macro that measurably changes what training does; flag it only
+  // when there is enough logging to mean something, and never nag about the rest.
+  const n = f.nutrition;
+  if (n && n.daysLogged >= 3 && n.targetProteinG > 0) {
+    const gap = n.targetProteinG - n.avgProteinG;
+    if (gap > n.targetProteinG * 0.15) {
+      out.push({ text: `Protein averaged ${Math.round(n.avgProteinG)} g on the days you logged, against a ${Math.round(n.targetProteinG)} g target.`, weight: 2 });
+    } else if (n.daysLogged >= 5) {
+      out.push({ text: `Protein held at ${Math.round(n.avgProteinG)} g a day across ${n.daysLogged} logged days.`, weight: 1 });
+    }
+  } else if (n && n.daysLogged > 0 && n.daysLogged < 3 && n.days >= 7) {
+    out.push({ text: `Food logged on ${n.daysLogged} of ${n.days} days — a few more and the calorie estimate starts working.`, weight: 1 });
   }
 
   if (f.water.days >= 3) {

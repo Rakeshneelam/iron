@@ -9,7 +9,7 @@ import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButt
 import { CATALOG, CATALOG_BY_ID, type Stress } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import type { Exercise } from '@/db/repositories/exercises';
-import { getDay } from '@/db/repositories/program';
+import { getDay, getSlots } from '@/db/repositories/program';
 import {
   addSessionExercise,
   cancelSession,
@@ -74,6 +74,12 @@ export default function SessionScreen() {
   const plan = useLive(() => getSessionPlan(id), ['session_exercise', 'set_log', 'exercise'], [id]);
   const sets = useLive(() => getSessionSets(id), ['set_log'], [id]);
   const readinessDone = useLive(() => isReadinessDone(id), ['setting'], [id]);
+  // Plan notes are read live, not snapshotted: editing a cue should show up next workout.
+  const notes = useLive(
+    () => new Map((session?.routineDayId ? getSlots(session.routineDayId) : []).map((s) => [s.exerciseId, s.notes])),
+    ['routine_slot'],
+    [session?.routineDayId],
+  );
   const warmupState = useLive(() => getWarmupState(id), ['setting'], [id]);
   const ctx = useMemo(() => suggestionContext(), []);
 
@@ -180,13 +186,14 @@ export default function SessionScreen() {
   const doneCount = plan.filter((p) => stateOf(p) === 'done' || stateOf(p) === 'skipped').length;
   const totalWork = sets.filter((s) => s.isWarmup === 0).length;
   const step = current?.exercise.loadStep ?? 2.5;
-  const restSeconds = current?.slot?.restSeconds ?? 120;
   const target = current ? targetOf(current) : 3;
   const currentState = current ? stateOf(current) : 'todo';
   const next = plan.slice(idx + 1).find((p) => stateOf(p) !== 'done' && stateOf(p) !== 'skipped');
   const nextIdx = next ? plan.indexOf(next) : -1;
 
   const entry = current ? CATALOG_BY_ID.get(current.exerciseId) : undefined;
+  // Added-today exercises have no slot: a compound needs far more rest than a curl.
+  const restSeconds = current?.slot?.restSeconds ?? (entry?.compound === false ? 75 : 150);
   const measure = suggestion?.measure ?? 'reps';
   const loadType = current?.exercise.loadType ?? 'barbell';
   const repHi = current?.slot?.repHi ?? suggestion?.repTarget[1] ?? 12;
@@ -197,6 +204,10 @@ export default function SessionScreen() {
 
   const workKg = suggestion ? (suggestion.verdict === 'CALIBRATE' ? (current?.slot?.startWeight ?? 0) : suggestion.weight) : 0;
   const ramp = current && liftIdx >= 0 ? rampFor(lifts, liftIdx, workKg, step, warmupState !== 'skipped') : [];
+
+  // Exercises paired with the current one (same superset letter), in plan order.
+  const group = current?.slot?.supersetGroup ?? null;
+  const partners = group ? plan.filter((p) => !p.skipped && p.slot?.supersetGroup === group) : [];
 
   const goTo = (i: number) => {
     setIndex(Math.max(0, Math.min(i, plan.length - 1)));
@@ -222,6 +233,19 @@ export default function SessionScreen() {
     if (settings.hapticsEnabled) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPain(false);
     if (asWarmup) return;
+    // Superset: move straight to the partner that is a set behind and rest only
+    // once the round is finished — that alternation is the point of pairing them.
+    const behind = partners.find((p) => p.exerciseId !== current.exerciseId && (counts.get(p.exerciseId) ?? 0) < exWork.length + 1 && (counts.get(p.exerciseId) ?? 0) < targetOf(p));
+    if (behind) {
+      goTo(plan.indexOf(behind));
+      toast(`Set ${exWork.length + 1} logged · ${setText(w, r)} · next: ${behind.exercise.name}`, {
+        label: 'Undo',
+        onPress: () => deleteSet(row.id),
+      });
+      return;
+    }
+    const roundStart = partners.length > 1 ? partners.find((p) => (counts.get(p.exerciseId) ?? 0) < targetOf(p)) : undefined;
+    if (roundStart && roundStart.exerciseId !== current.exerciseId) goTo(plan.indexOf(roundStart));
     if (settings.restTimerAutoStart && !cardio) void startRest(id, restSeconds, current.exercise.name);
     toast(`Set ${exWork.length + 1} logged · ${setText(w, r)}`, {
       label: 'Undo',
@@ -406,6 +430,13 @@ export default function SessionScreen() {
               </Pressable>
               <IconButton icon="chevronRight" accessibilityLabel="Next exercise" disabled={idx >= plan.length - 1} onPress={() => goTo(idx + 1)} />
             </View>
+
+            {notes.get(current.exerciseId) ? (
+              <View style={styles.note}>
+                <Icon name="info" size={14} color={color.accent} />
+                <Text style={[styles.caption, styles.flex1]}>{notes.get(current.exerciseId)}</Text>
+              </View>
+            ) : null}
 
             {current.skipped ? (
               <Card>
@@ -663,6 +694,7 @@ export default function SessionScreen() {
 }
 
 const styles = StyleSheet.create({
+  note: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.xs },
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   scroll: { padding: layout.screenPadding, paddingBottom: space.xxxl, gap: space.md },

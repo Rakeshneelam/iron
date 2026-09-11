@@ -183,6 +183,7 @@ function SlotEditor({
 }) {
   const [name, setName] = useState(slot.exercise.name);
   const [renaming, setRenaming] = useState(false);
+  const [note, setNote] = useState(slot.notes ?? '');
   return (
     <View style={styles.editor}>
       <View style={styles.pair}>
@@ -208,6 +209,15 @@ function SlotEditor({
       <ChipRow options={RIR} value={slot.targetRir} onChange={(v) => updateSlot(slot.id, { targetRir: v })} />
       <Text style={styles.label}>Superset group</Text>
       <ChipRow options={GROUPS} value={slot.supersetGroup ?? '—'} onChange={(v) => updateSlot(slot.id, { supersetGroup: v === '—' ? null : v })} />
+      <Text style={styles.label}>Note</Text>
+      <TextInput
+        value={note}
+        onChangeText={setNote}
+        placeholder="Setup, cue, seat height…"
+        placeholderTextColor={color.textFaint}
+        onEndEditing={() => updateSlot(slot.id, { notes: note.trim() || null })}
+        style={styles.noteInput}
+      />
       {renaming ? (
         <TextInput
           value={name}
@@ -234,6 +244,7 @@ function SlotEditor({
 
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
+  noteInput: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.default },
   nameInput: {
     ...font.heading,
     color: color.text,

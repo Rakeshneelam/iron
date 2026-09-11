@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, EmptyState, Icon, PrimaryButton, Screen, SectionHeader, toast } from '@/components';
+import { Card, EmptyState, Icon, PrimaryButton, Screen, SectionHeader, toast, TrendChart } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { getExercise } from '@/db/repositories/exercises';
@@ -31,6 +31,12 @@ export default function ExerciseScreen() {
   }
   const measure = CATALOG_BY_ID.get(id)?.measure ?? 'reps';
   const best = history.series.reduce((m, p) => Math.max(m, p.e1rm), 0);
+  // Estimated 1RM over time: raw dots plus a 3-session average, same as the body trend.
+  const raw = history.series.map((p, i) => ({ x: i, y: p.e1rm }));
+  const trend = raw.map((p, i) => {
+    const w = raw.slice(Math.max(0, i - 2), i + 1);
+    return { x: p.x, y: w.reduce((a, b) => a + b.y, 0) / w.length };
+  });
   const disliked = settings.disliked.includes(id);
   const toggleDislike = () => {
     const next = disliked ? settings.disliked.filter((x) => x !== id) : [...settings.disliked, id];
@@ -66,6 +72,18 @@ export default function ExerciseScreen() {
                 .join('  ')}
             </Text>
           </View>
+          {measure === 'reps' && raw.length >= 3 ? (
+            <View style={styles.chart}>
+              <TrendChart
+                trend={trend}
+                raw={raw}
+                height={140}
+                format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`}
+                formatX={(x) => fmtDayLabel(history.series[Math.max(0, Math.min(history.series.length - 1, Math.round(x)))]?.date ?? '')}
+              />
+              <Text style={styles.muted}>Estimated 1-rep max per session — the line is a 3-session average.</Text>
+            </View>
+          ) : null}
         </Card>
       ) : (
         <Text style={styles.muted}>Not logged yet.</Text>
@@ -88,4 +106,5 @@ const styles = StyleSheet.create({
   value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600', flexShrink: 1 },
   muted: { ...font.label, color: color.textMuted },
   gap: { marginTop: space.xl },
+  chart: { marginTop: space.md, gap: space.xs },
 });

@@ -8,7 +8,7 @@ import { useLive } from '@/db/live';
 import { getWeighIn } from '@/db/repositories/body';
 import { getActiveRoutine, getDay, getDays, getSlots, resolveNextDay } from '@/db/repositories/program';
 import { recentMuscles } from '@/db/repositories/progress';
-import { cancelSession, deleteSession, getActiveSession, getSessionSets, listSessions, planProgress, skipDay, startSession } from '@/db/repositories/sessions';
+import { cancelSession, deleteSession, getActiveSession, getSessionSets, listSessions, planProgress, skipDay, startSession, type SessionStatus } from '@/db/repositories/sessions';
 import { useSettings } from '@/db/repositories/settings';
 import { getDayTotal } from '@/db/repositories/water';
 import { estimateSeconds, fitSession, type FitSlot } from '@/engine/planner';
@@ -18,13 +18,14 @@ import { drillKit } from '@/features/profile';
 import { Elapsed } from '@/features/session/Elapsed';
 import { fmtSet, suggestFor, suggestionContext } from '@/features/session/prescription';
 import { RoutineSheet } from '@/features/warmup/RoutineSheet';
-import { todayISO } from '@/lib/date';
+import { addDays, parseISODate, todayISO, weekStartISO } from '@/lib/date';
 import { kg, ml } from '@/lib/format';
 import { hydrationTarget } from '@/services/hydration';
 import { cancelRest } from '@/services/restTimer';
 import { color, font, layout, radius, space } from '@/theme/tokens';
 
 const BUDGETS = [0, 45, 30, 20];
+const WEEK_STATUSES: readonly SessionStatus[] = ['completed', 'partial', 'skipped', 'cancelled'];
 
 /** Today: what to train, one big Start button. Everything else is a glance. */
 export default function Today() {
@@ -46,6 +47,7 @@ export default function Today() {
         water: getDayTotal(today),
         waterTarget: hydrationTarget().ml,
         trainedToday: listSessions(5).some((s) => s.date === today),
+        week: listSessions(20, WEEK_STATUSES),
       };
     },
     ['session', 'set_log', 'session_exercise', 'routine', 'routine_day', 'weigh_in', 'water_log', 'setting'],
@@ -75,6 +77,7 @@ export default function Today() {
   const subtitle = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
   const gear = <IconButton icon="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />;
   const glance = <Glance water={state.water} target={state.waterTarget} weighedKg={state.weighIn?.kg ?? null} />;
+  const weekStrip = <WeekStrip today={today} sessions={state.week} trainingDays={settings.trainingDays} />;
   const startEmpty = () => router.push(`/session/${startSession(null).id}`);
   const restDay = !settings.trainingDays.includes(new Date().getDay());
   const recoveryCard =
@@ -139,7 +142,8 @@ export default function Today() {
           </Card>
           <PrimaryButton label="Discard workout" tone="ghost" icon={<Icon name="trash" size={16} color={color.textMuted} />} onPress={discard} />
           <View style={styles.gap} />
-          {glance}
+          {weekStrip}
+        {glance}
         </Screen>
         <ActionBar>
           <PrimaryButton label="Resume workout" size="gym" icon={<Icon name="play" size={18} color={color.onAccent} />} onPress={() => router.push(`/session/${a.id}`)} />
@@ -161,6 +165,7 @@ export default function Today() {
         <PrimaryButton label="Start an empty workout" tone="ghost" icon={<Icon name="plus" size={16} />} onPress={startEmpty} />
         {recoveryCard}
         <View style={styles.gap} />
+        {weekStrip}
         {glance}
         {recoverySheet}
       </Screen>
@@ -256,6 +261,7 @@ export default function Today() {
         </View>
         {state.trainedToday ? recoveryCard : null}
         <View style={styles.gap} />
+        {weekStrip}
         {glance}
         {recoverySheet}
       </Screen>
@@ -267,6 +273,39 @@ export default function Today() {
           onPress={() => router.push(`/session/${startSession(day.id, fit ? { fit: fit.slots } : {}).id}`)}
         />
       </ActionBar>
+    </View>
+  );
+}
+
+/**
+ * The current week at a glance. Deliberately not a streak: a missed day is a plain
+ * empty circle, never a broken chain (AGENTS §6).
+ */
+function WeekStrip({ today, sessions, trainingDays }: { today: string; sessions: { date: string; status: SessionStatus }[]; trainingDays: number[] }) {
+  const start = weekStartISO(today);
+  const byDate = new Map(sessions.map((s) => [s.date, s.status]));
+  return (
+    <View style={styles.week}>
+      {Array.from({ length: 7 }, (_, i) => {
+        const date = addDays(start, i);
+        const status = byDate.get(date);
+        const planned = trainingDays.includes(parseISODate(date).getDay());
+        const isToday = date === today;
+        const trained = status === 'completed' || status === 'partial' || status === 'cancelled';
+        return (
+          <View key={date} style={styles.weekDay}>
+            <Text style={[styles.weekLabel, isToday && styles.weekLabelOn]}>{'MTWTFSS'[i]}</Text>
+            <View
+              style={[
+                styles.weekDot,
+                trained && { backgroundColor: status === 'completed' ? color.accent : color.accentSoft },
+                !trained && planned && styles.weekPlanned,
+                isToday && styles.weekToday,
+              ]}
+            />
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -309,6 +348,13 @@ function Glance({ water, target, weighedKg }: { water: number; target: number; w
 }
 
 const styles = StyleSheet.create({
+  week: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.sm, marginBottom: space.md },
+  weekDay: { alignItems: 'center', gap: space.xs },
+  weekLabel: { ...font.caption, color: color.textFaint },
+  weekLabelOn: { color: color.text, fontWeight: '700' },
+  weekDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: color.surfaceHigh },
+  weekPlanned: { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.border },
+  weekToday: { borderWidth: 1, borderColor: color.accent },
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   gap: { height: space.lg },
