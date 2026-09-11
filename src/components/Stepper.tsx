@@ -48,8 +48,13 @@ export function Stepper({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
 
+  /** Latest typed text, so closing the sheet mid-edit still saves the number. */
+  const pending = useRef<string | null>(null);
+  const commitRef = useRef<(text: string) => void>(() => {});
+
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
+    if (pending.current !== null) commitRef.current(pending.current);
   }, []);
 
   const clampRound = (v: number) => {
@@ -80,9 +85,15 @@ export function Stepper({
     timer.current = null;
   };
 
-  const commitDraft = () => {
-    const parsed = Number(draft.replace(',', '.'));
+  const apply = (text: string) => {
+    const parsed = Number(text.replace(',', '.'));
     if (Number.isFinite(parsed)) onChange(clampRound(parsed));
+  };
+  commitRef.current = apply;
+
+  const commitDraft = () => {
+    pending.current = null;
+    apply(draft);
     setEditing(false);
   };
 
@@ -109,7 +120,10 @@ export function Stepper({
           <TextInput
             autoFocus
             value={draft}
-            onChangeText={setDraft}
+            onChangeText={(t) => {
+              setDraft(t);
+              pending.current = t;
+            }}
             onSubmitEditing={commitDraft}
             onBlur={commitDraft}
             keyboardType="decimal-pad"
@@ -125,6 +139,7 @@ export function Stepper({
                 return;
               }
               setDraft(value.toFixed(dp));
+              pending.current = null;
               setEditing(true);
             }}
             accessibilityHint="Long-press to type a value"

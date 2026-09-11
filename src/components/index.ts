@@ -15,6 +15,7 @@ export { Screen, useReducedMotion, type ScreenProps } from './Screen';
 export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
 export { Sheet, type SheetProps } from './Sheet';
 export { StatTile, type StatTileProps, type StatTone } from './StatTile';
+export { TextField, type TextFieldProps } from './TextField';
 export { Stepper, type StepperProps } from './Stepper';
 export { dismissToast, toast, ToastHost } from './Toast';
 export { ToggleChips } from './ToggleChips';

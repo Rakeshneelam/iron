@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, confirm, EmptyState, Icon, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast } from '@/components';
+import { Card, ChipRow, confirm, EmptyState, Icon, Pill, PrimaryButton, Screen, SectionHeader, StatTile, TextField, toast } from '@/components';
 import { useLive } from '@/db/live';
 import { getExercise } from '@/db/repositories/exercises';
 import { countFinishedWorkouts, recentWorkouts, sessionRecords } from '@/db/repositories/progress';
@@ -43,7 +43,6 @@ export default function SummaryScreen() {
     ['session'],
     [id],
   );
-  const [notes, setNotes] = useState(() => summary?.session.notes ?? '');
   const [length, setLength] = useState<CooldownLength>('short');
   const [cooling, setCooling] = useState(false);
   const kit = drillKit(settings);
@@ -133,12 +132,10 @@ export default function SummaryScreen() {
 
           <SectionHeader title="How did it feel?" />
           <ChipRow options={EFFORT} value={s.sessionRpe} onChange={(v) => setSessionFeedback(id, { sessionRpe: v })} />
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            onEndEditing={() => setSessionFeedback(id, { notes: notes.trim() || null })}
+          <TextField
+            value={s.notes ?? ''}
+            onCommit={(v) => setSessionFeedback(id, { notes: v || null })}
             placeholder="Notes (optional)"
-            placeholderTextColor={color.textFaint}
             multiline
             style={styles.input}
           />

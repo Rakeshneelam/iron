@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, Stepper, toast } from '@/components';
+import { Card, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, Stepper, TextField, toast } from '@/components';
 import { useLive } from '@/db/live';
 import {
   addDay,
@@ -32,8 +32,6 @@ export default function PlanScreen() {
     ['routine_day', 'routine_slot', 'exercise'],
     [id],
   );
-  const [name, setName] = useState('');
-  useEffect(() => setName(routine?.name ?? ''), [routine?.name]);
   const [showVolume, setShowVolume] = useState(false);
 
   if (!routine) {
@@ -62,13 +60,11 @@ export default function PlanScreen() {
 
   return (
     <Screen title="Edit plan" right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        onEndEditing={() => renameRoutine(id, name)}
+      <TextField
+        value={routine.name}
+        onCommit={(v) => v && renameRoutine(id, v)}
         style={styles.nameInput}
         placeholder="Plan name"
-        placeholderTextColor={color.textFaint}
         accessibilityLabel="Plan name"
       />
       <View style={styles.statusRow}>

@@ -1,9 +1,9 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, confirm, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, ToggleChips } from '@/components';
+import { Card, ChipRow, confirm, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, TextField, ToggleChips } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { wipeAllData } from '@/db/repositories/admin';
 import { PHASES, setSetting, useSettings } from '@/db/repositories/settings';
@@ -22,8 +22,6 @@ const ON_OFF = [
 
 export default function SettingsScreen() {
   const s = useSettings();
-  const [name, setName] = useState(s.name);
-  useEffect(() => setName(s.name), [s.name]);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const tools = toolsOf(s);
@@ -54,13 +52,12 @@ export default function SettingsScreen() {
     <Screen title="Settings" right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
       <SectionHeader title="Profile" />
       <Card>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          onEndEditing={() => setSetting('name', name.trim())}
+        <TextField
+          value={s.name}
+          onCommit={(v) => setSetting('name', v)}
           placeholder="Your name"
-          placeholderTextColor={color.textFaint}
           style={styles.input}
+          autoCapitalize="words"
           accessibilityLabel="Your name"
         />
         <View style={styles.pair}>
