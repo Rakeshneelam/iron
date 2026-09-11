@@ -8,6 +8,13 @@
       "when": 1788800444937,
       "tag": "0000_illegal_ultragirl",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789093253890,
+      "tag": "0001_session_status_plans",
+      "breakpoints": true
     }
   ]
 }

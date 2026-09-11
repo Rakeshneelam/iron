@@ -69,7 +69,7 @@ export function archiveExercise(id: string): void {
  * The bridge to the engine. The slot supplies rep range, sets and RIR; without one
  * (an ad-hoc exercise) a conservative hypertrophy default is used.
  */
-export function toExerciseConfig(ex: Exercise, slot?: RoutineSlot | null): ExerciseConfig {
+export function toExerciseConfig(ex: Exercise, slot?: Pick<RoutineSlot, 'repLo' | 'repHi' | 'targetSets' | 'targetRir'> | null): ExerciseConfig {
   const repLo = slot?.repLo ?? 8;
   const repHi = slot?.repHi ?? 12;
   return {

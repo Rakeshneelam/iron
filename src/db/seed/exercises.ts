@@ -66,6 +66,11 @@ export const EXERCISES: SeedExercise[] = [
   { id: 'calf-raise', name: 'Standing Calf Raise', loadType: 'machine', loadStep: 5, primaryMuscles: ['calves'] },
   { id: 'seated-calf', name: 'Seated Calf Raise', loadType: 'machine', loadStep: 2.5, primaryMuscles: ['calves'] },
 
+  { id: 'bb-deadlift', name: 'Deadlift', loadType: 'barbell', loadStep: 2.5, primaryMuscles: ['hamstrings', 'glutes'], secondaryMuscles: ['back', 'traps', 'quads'] },
+  { id: 'goblet-squat', name: 'Goblet Squat', loadType: 'dumbbell', loadStep: 2, primaryMuscles: ['quads'], secondaryMuscles: ['glutes'] },
+  { id: 'db-lunge', name: 'Dumbbell Walking Lunge', loadType: 'dumbbell', loadStep: 2, primaryMuscles: ['quads'], secondaryMuscles: ['glutes', 'hamstrings'], isUnilateral: true },
+  { id: 'push-up', name: 'Push-Up', loadType: 'bodyweight', loadStep: 2.5, primaryMuscles: ['chest'], secondaryMuscles: ['triceps', 'shoulders'] },
+
   // ---- Core
   { id: 'cable-crunch', name: 'Cable Crunch', loadType: 'cable', loadStep: 2.5, primaryMuscles: ['abs'] },
   { id: 'hanging-leg-raise', name: 'Hanging Leg Raise', loadType: 'bodyweight', loadStep: 2.5, primaryMuscles: ['abs'] },

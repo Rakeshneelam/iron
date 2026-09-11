@@ -7,22 +7,17 @@ import { and, asc, desc, eq, gte, isNotNull, lte, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
-import { phaseCheck, weeklyRateKg, weightTrend } from '@/engine/metabolic';
 import {
   bestE1RM,
   readinessModifier,
   shouldDeload,
   slope,
   tonnage,
-  VOLUME_LANDMARKS,
-  volumeStatus,
   working,
   type DeloadInput,
 } from '@/engine/progression';
 import { addDays, daysBetweenISO, lastNDays, todayISO, weekStartISO } from '@/lib/date';
 
-import { listWeighIns } from './body';
-import { intakeBetween } from './food';
 import { groupBy, toEngineSet } from './mappers';
 import { getSettings } from './settings';
 
@@ -199,101 +194,4 @@ export function countConsecutiveResets(exerciseId: string): number {
     prevTop = r.topWeight;
   }
   return resets;
-}
-
-/* ============================ weekly review ============================= */
-
-export interface LiftTrend {
-  exerciseId: string;
-  name: string;
-  trend: number;
-  e1rm: number;
-}
-
-export interface WeeklyReview {
-  weekStart: string;
-  progressed: LiftTrend[];
-  stalled: LiftTrend[];
-  volume: { muscle: string; sets: number; status: 'under' | 'optimal' | 'high' | 'over'; mev: number; mav: number; mrv: number }[];
-  deload: { deload: boolean; reasons: string[] };
-  bodyweight: { rateKgPerWeek: number; trendKg: number | null; check: ReturnType<typeof phaseCheck> | null };
-  nutrition: { avgKcal: number | null; avgProtein: number | null; daysLogged: number };
-  plateaus: { exerciseId: string; name: string; note: string }[];
-  sessionsLogged: number;
-}
-
-export function weeklyReview(weekStart: string = weekStartISO(todayISO())): WeeklyReview {
-  const end = weekEnd(weekStart);
-  const names = new Map(db.select({ id: schema.exercise.id, name: schema.exercise.name, m: schema.exercise.primaryMuscles }).from(schema.exercise).all().map((e) => [e.id, e]));
-  const sets = weeklySetsPerMuscle(weekStart);
-
-  const progressed: LiftTrend[] = [];
-  const stalled: LiftTrend[] = [];
-  const plateaus: WeeklyReview['plateaus'] = [];
-  for (const t of recentTrends()) {
-    const ex = names.get(t.exerciseId);
-    const name = ex?.name ?? t.exerciseId;
-    const lift = { exerciseId: t.exerciseId, name, trend: t.trend, e1rm: t.e1rm };
-    if (t.n >= 3 && t.trend <= 0) {
-      stalled.push(lift);
-      const muscle = ex?.m[0];
-      if (muscle) {
-        const have = sets[muscle] ?? 0;
-        const mav = VOLUME_LANDMARKS[muscle]?.mav;
-        const advice =
-          mav === undefined
-            ? 'hold the weight and chase one more rep before changing anything'
-            : have < mav
-              ? `${muscle} volume is at ${have} sets, below MAV — try the extra set before dropping load`
-              : `${muscle} volume is already at ${have} sets — a 10% reset will likely restart progress`;
-        plateaus.push({ exerciseId: t.exerciseId, name, note: `${name} flat ${t.n} sessions; ${advice}.` });
-      }
-    } else if (t.n >= 2 && t.trend > 0) {
-      progressed.push(lift);
-    }
-  }
-  progressed.sort((a, b) => b.trend - a.trend);
-
-  const volume = Object.entries(VOLUME_LANDMARKS).map(([muscle, l]) => {
-    const n = sets[muscle] ?? 0;
-    return { muscle, sets: n, status: volumeStatus(muscle, n), mev: l.mev, mav: l.mav, mrv: l.mrv };
-  });
-
-  const settings = getSettings();
-  const weighIns = listWeighIns().filter((w) => w.date <= end);
-  const trend = weightTrend(weighIns);
-  const lastTrend = trend[trend.length - 1];
-  const rate = weeklyRateKg(weighIns);
-  const bodyweight = {
-    rateKgPerWeek: rate,
-    trendKg: lastTrend?.trend ?? null,
-    check: lastTrend && trend.length >= 7 ? phaseCheck(settings.phase, lastTrend.trend, rate) : null,
-  };
-
-  const intake = intakeBetween(weekStart, end);
-  const nutrition = {
-    avgKcal: intake.length ? intake.reduce((a, d) => a + d.kcal, 0) / intake.length : null,
-    avgProtein: intake.length ? intake.reduce((a, d) => a + (d.proteinG ?? 0), 0) / intake.length : null,
-    daysLogged: intake.length,
-  };
-
-  const sessionsLogged = Number(
-    db
-      .select({ n: sql<number>`count(*)` })
-      .from(schema.session)
-      .where(and(isNotNull(schema.session.endedAt), gte(schema.session.date, weekStart), lte(schema.session.date, end)))
-      .get()?.n ?? 0,
-  );
-
-  return {
-    weekStart,
-    progressed,
-    stalled,
-    volume,
-    deload: shouldDeload(buildDeloadInput()),
-    bodyweight,
-    nutrition,
-    plateaus,
-    sessionsLogged,
-  };
 }

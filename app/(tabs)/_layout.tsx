@@ -1,17 +1,17 @@
 import { Tabs } from 'expo-router/js-tabs';
-import { Text } from 'react-native';
 
+import { Icon, type IconName } from '@/components/Icon';
 import { color, font } from '@/theme/tokens';
 
-/** PRD priority order. Glyphs are plain Unicode — no icon package. */
-const TABS = [
-  { name: 'index', title: 'Today', glyph: '●' },
-  { name: 'program', title: 'Program', glyph: '☰' },
-  { name: 'body', title: 'Body', glyph: '◒' },
-  { name: 'food', title: 'Food', glyph: '◍' },
-  { name: 'water', title: 'Water', glyph: '◌' },
-  { name: 'review', title: 'Review', glyph: '▦' },
-] as const;
+/** Route names are kept from v1 (deep links and notifications point at them); titles are what users see. */
+const TABS: { name: string; title: string; icon: IconName }[] = [
+  { name: 'index', title: 'Today', icon: 'dumbbell' },
+  { name: 'program', title: 'Plans', icon: 'plans' },
+  { name: 'review', title: 'Progress', icon: 'progress' },
+  { name: 'body', title: 'Body', icon: 'body' },
+  { name: 'water', title: 'Water', icon: 'water' },
+  { name: 'food', title: 'Food', icon: 'food' },
+];
 
 export default function TabsLayout() {
   return (
@@ -21,7 +21,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: color.accent,
         tabBarInactiveTintColor: color.textMuted,
         tabBarStyle: { backgroundColor: color.surface, borderTopColor: color.border },
-        tabBarLabelStyle: font.caption,
+        tabBarLabelStyle: { ...font.caption, fontWeight: '600' },
         sceneStyle: { backgroundColor: color.bg },
       }}
     >
@@ -31,7 +31,7 @@ export default function TabsLayout() {
           name={t.name}
           options={{
             title: t.title,
-            tabBarIcon: ({ color: tint }) => <Text style={{ color: tint, fontSize: font.heading.fontSize }}>{t.glyph}</Text>,
+            tabBarIcon: ({ color: tint }) => <Icon name={t.icon} size={22} color={tint} />,
           }}
         />
       ))}

@@ -53,6 +53,8 @@ export const routine = sqliteTable('routine', {
   daysPerWeek: integer('days_per_week').notNull(),
   active: integer('active').notNull().default(0),
   createdAt: text('created_at').notNull(),
+  /** Archived plans are hidden from the list but keep their history links. */
+  archivedAt: text('archived_at'),
 });
 
 export const routineDay = sqliteTable('routine_day', {
@@ -74,9 +76,14 @@ export const routineSlot = sqliteTable('routine_slot', {
   restSeconds: integer('rest_seconds').notNull().default(150),
   supersetGroup: text('superset_group'),
   notes: text('notes'),
+  /** Optional first-session weight, used only while there is no history (CALIBRATE). */
+  startWeight: real('start_weight'),
 });
 
 /* ============================= Logging ================================== */
+
+export const SESSION_STATUSES = ['active', 'completed', 'partial', 'skipped', 'cancelled'] as const;
+export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
 export const session = sqliteTable('session', {
   id: text('id').primaryKey(),
@@ -85,6 +92,12 @@ export const session = sqliteTable('session', {
   date: text('date').notNull(),
   startedAt: text('started_at').notNull(),
   endedAt: text('ended_at'),
+  /**
+   * active → in progress. completed / partial → finished (all / some planned work).
+   * skipped → the day was skipped on purpose (no sets). cancelled → stopped early,
+   * logged sets kept but the day does NOT count as done.
+   */
+  status: text('status', { enum: SESSION_STATUSES }).notNull().default('completed'),
   bodyweightKg: real('bodyweight_kg'),
   sleepHours: real('sleep_hours'),
   soreness: integer('soreness'),
@@ -93,6 +106,29 @@ export const session = sqliteTable('session', {
   notes: text('notes'),
 }, (t) => ({
   byDate: index('idx_session_date').on(t.date),
+}));
+
+/**
+ * The workout's own exercise list, snapshotted from the plan when it starts. Holds
+ * the planned targets (so history can show planned vs done after the plan changes),
+ * additions, skips, swaps and order — everything that is "today only".
+ */
+export const sessionExercise = sqliteTable('session_exercise', {
+  sessionId: text('session_id').notNull().references(() => session.id, { onDelete: 'cascade' }),
+  exerciseId: text('exercise_id').notNull().references(() => exercise.id),
+  position: integer('position').notNull(),
+  /** 'plan' = from the routine day; 'added' = added during the workout. */
+  source: text('source', { enum: ['plan', 'added'] }).notNull(),
+  skipped: integer('skipped').notNull().default(0),
+  targetSets: integer('target_sets'),
+  repLo: integer('rep_lo'),
+  repHi: integer('rep_hi'),
+  targetRir: integer('target_rir'),
+  restSeconds: integer('rest_seconds'),
+  supersetGroup: text('superset_group'),
+  startWeight: real('start_weight'),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.sessionId, t.exerciseId] }),
 }));
 
 export const setLog = sqliteTable('set_log', {
@@ -138,6 +174,11 @@ export const weighIn = sqliteTable('weigh_in', {
   note: text('note'),
 });
 
+/**
+ * One reading per row. `cm` holds the value in the site's unit — cm for
+ * circumferences, % for `bodyFat` (see features/body/sites.ts). Kept as `cm` so no
+ * migration rewrites existing rows.
+ */
 export const measurement = sqliteTable('measurement', {
   id: text('id').primaryKey(),
   date: text('date').notNull(),

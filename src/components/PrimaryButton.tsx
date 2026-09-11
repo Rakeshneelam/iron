@@ -16,6 +16,8 @@ export interface PrimaryButtonProps {
   icon?: ReactNode;
   /** Light haptic on press. Commits (log set) fire their own, stronger one. */
   haptic?: boolean;
+  /** Overrides the label for screen readers when the label alone is ambiguous. */
+  accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -36,11 +38,13 @@ export function PrimaryButton({
   icon,
   haptic = false,
   style,
+  accessibilityLabel,
 }: PrimaryButtonProps) {
   const fg = tone === 'neutral' || tone === 'ghost' ? color.text : color.onAccent;
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={() => {

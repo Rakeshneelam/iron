@@ -6,6 +6,7 @@ import { color, font, space } from '@/theme/tokens';
 import { STATUS_TONE, volumeRows } from './volume';
 
 const cap = (s: string) => (s ? s[0]?.toUpperCase() + s.slice(1) : s);
+const STATUS_WORD = { under: 'below minimum', optimal: 'good', high: 'high', over: 'too much' } as const;
 
 export function VolumeList({ weekly }: { weekly: Record<string, number> }) {
   return (
@@ -15,7 +16,7 @@ export function VolumeList({ weekly }: { weekly: Record<string, number> }) {
           <View style={styles.head}>
             <Text style={styles.name}>{cap(r.muscle)}</Text>
             <Text style={styles.meta}>
-              {r.sets} sets · {r.status}  (MEV {r.mev} · MAV {r.mav} · MRV {r.mrv})
+              {r.sets} sets · {STATUS_WORD[r.status]}
             </Text>
           </View>
           <Bar value={r.sets} max={r.mrv * 1.15} tone={STATUS_TONE[r.status]} markers={[r.mev, r.mav, r.mrv]} />

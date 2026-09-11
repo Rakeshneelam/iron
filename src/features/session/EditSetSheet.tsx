@@ -5,12 +5,13 @@ import { ChipRow } from '@/components/ChipRow';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
 import { Stepper } from '@/components/Stepper';
-import { deleteSet, updateSet, type SetRow } from '@/db/repositories/sessions';
+import { toast } from '@/components/Toast';
+import { deleteSet, restoreSet, updateSet, type SetRow } from '@/db/repositories/sessions';
 import { space } from '@/theme/tokens';
 
 import { RIR_OPTIONS } from './SetControls';
 
-/** Long-press a logged set to edit or delete it. Writes land immediately on Save/Delete. */
+/** Tap a logged set to fix it. Delete is instant and undoable. */
 export function EditSetSheet({ set, step, onClose }: { set: SetRow | null; step: number; onClose: () => void }) {
   const [weight, setWeight] = useState(0);
   const [reps, setReps] = useState(0);
@@ -53,7 +54,11 @@ export function EditSetSheet({ set, step, onClose }: { set: SetRow | null; step:
           tone="danger"
           size="gym"
           onPress={() => {
-            if (set) deleteSet(set.id);
+            if (set) {
+              const row = set;
+              deleteSet(row.id);
+              toast('Set deleted', { label: 'Undo', onPress: () => restoreSet(row) });
+            }
             onClose();
           }}
         />

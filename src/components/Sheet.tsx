@@ -4,6 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { color, font, radius, space } from '@/theme/tokens';
 
+import { ToastHost } from './Toast';
+
 export interface SheetProps {
   visible: boolean;
   onClose: () => void;
@@ -32,6 +34,8 @@ export function Sheet({ visible, onClose, title, children }: SheetProps) {
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      {/* A Modal covers the root toast host; Undo must stay reachable from inside a sheet. */}
+      <ToastHost />
     </Modal>
   );
 }

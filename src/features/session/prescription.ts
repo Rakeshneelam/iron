@@ -2,10 +2,11 @@
  * Adapter between the screens and prescribe(). It does not change a rule: it feeds
  * the engine real history and config, then snaps loads to the real equipment.
  */
+import type { PillTone } from '@/components/Pill';
 import { listWeighIns } from '@/db/repositories/body';
 import { listEquipment } from '@/db/repositories/equipment';
 import { toExerciseConfig, type Exercise } from '@/db/repositories/exercises';
-import { getActiveRoutine, plannedWeeklySets, type RoutineSlot } from '@/db/repositories/program';
+import { getActiveRoutine, plannedWeeklySets, type Targets } from '@/db/repositories/program';
 import { getExerciseHistory, type Session } from '@/db/repositories/sessions';
 import { weightTrend } from '@/engine/metabolic';
 import { getSettings } from '@/db/repositories/settings';
@@ -54,7 +55,7 @@ export function readinessFrom(session: Session | undefined | null): Readiness | 
 
 export function suggestFor(
   exercise: Exercise,
-  slot: RoutineSlot | null,
+  slot: Targets | null,
   readiness: Readiness | undefined,
   ctx: SuggestionContext,
 ): Suggestion {
@@ -90,6 +91,19 @@ export function deloadActive(): boolean {
   const since = getSettings().lastDeloadDate;
   return since !== null && daysBetweenISO(since, todayISO()) < 7;
 }
+
+/** Colour by meaning: going up is positive, easing off is a warning, first time is neutral. */
+export const VERDICT_TONE: Record<Prescription['verdict'], PillTone> = {
+  CALIBRATE: 'accent',
+  ADD_LOAD: 'positive',
+  ADD_REPS: 'positive',
+  ADD_SET: 'positive',
+  HOLD: 'muted',
+  BACKOFF: 'warning',
+  RESET: 'warning',
+  SWAP: 'warning',
+  DELOAD: 'muted',
+};
 
 export const VERDICT_LABEL: Record<Prescription['verdict'], string> = {
   CALIBRATE: 'First time',

@@ -17,8 +17,9 @@ export function RestTimerBar({ sessionId }: { sessionId: string }) {
         <Text style={styles.label} numberOfLines={1}>
           rest · {t.label ?? ''}
         </Text>
+        <PrimaryButton label="−15s" tone="neutral" onPress={() => t.add(-15)} />
         <PrimaryButton label="+30s" tone="neutral" onPress={() => t.add(30)} />
-        <PrimaryButton label="Skip" tone="ghost" onPress={t.cancel} />
+        <PrimaryButton label="Skip" accessibilityLabel="Skip rest" tone="ghost" onPress={t.cancel} />
       </View>
       <Bar value={t.remainingMs} max={t.totalMs || t.remainingMs} tone="accent" />
     </View>

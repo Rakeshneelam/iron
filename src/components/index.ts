@@ -1,7 +1,12 @@
 export { Bar, type BarProps, type BarTone } from './Bar';
 export { Card, type CardProps, type CardTone } from './Card';
 export { ChipRow, type ChipOption, type ChipRowProps } from './ChipRow';
+export { confirm } from './confirm';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
+export { Icon, type IconName, type IconProps } from './Icon';
+export { IconButton, type IconButtonProps } from './IconButton';
+export { MiniBars, type MiniBarsProps } from './MiniBars';
+export { Pill, type PillTone } from './Pill';
 export { PrimaryButton, type ButtonTone, type PrimaryButtonProps } from './PrimaryButton';
 export { ReasonLine, type ReasonLineProps } from './ReasonLine';
 export { Ring, type RingProps, type RingTone } from './Ring';
@@ -10,4 +15,5 @@ export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
 export { Sheet, type SheetProps } from './Sheet';
 export { StatTile, type StatTileProps, type StatTone } from './StatTile';
 export { Stepper, type StepperProps } from './Stepper';
+export { dismissToast, toast, ToastHost } from './Toast';
 export { TrendChart, type TrendChartProps } from './TrendChart';

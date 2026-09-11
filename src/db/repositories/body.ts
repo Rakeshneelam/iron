@@ -7,7 +7,6 @@ import type { WeighIn } from '@/engine/metabolic';
 import { newId } from '@/lib/ids';
 
 export type Measurement = typeof schema.measurement.$inferSelect;
-export const MEASUREMENT_SITES = ['waist', 'arm', 'chest', 'thigh'] as const;
 
 /** One weigh-in per day: re-logging the same morning replaces it. */
 export function upsertWeighIn(dateISO: string, kg: number, note?: string): void {
@@ -55,8 +54,27 @@ export function getLatestWeight(): number | undefined {
   return s?.kg ?? undefined;
 }
 
-export function addMeasurement(date: string, site: string, cm: number): void {
-  db.insert(schema.measurement).values({ id: newId(), date, site, cm }).run();
+export function addMeasurement(date: string, site: string, cm: number): Measurement {
+  const row: Measurement = { id: newId(), date, site, cm: Math.round(cm * 10) / 10 };
+  db.insert(schema.measurement).values(row).run();
+  return row;
+}
+
+export function updateMeasurement(id: string, patch: Partial<Pick<Measurement, 'date' | 'cm'>>): void {
+  db.update(schema.measurement).set(patch).where(eq(schema.measurement.id, id)).run();
+}
+
+/** Undo for a delete: the exact row back. */
+export function restoreMeasurement(row: Measurement): void {
+  db.insert(schema.measurement).values(row).onConflictDoNothing().run();
+}
+
+/** Moves a weigh-in to another day (a wrong date is a common slip). Replaces any reading there. */
+export function moveWeighIn(fromISO: string, toISO: string, kg: number): void {
+  db.transaction(() => {
+    if (fromISO !== toISO) deleteWeighIn(fromISO);
+    upsertWeighIn(toISO, kg);
+  });
 }
 
 export function deleteMeasurement(id: string): void {

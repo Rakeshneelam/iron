@@ -41,6 +41,13 @@ npx expo run:android     # dev build — Expo Go will NOT work for this app
 | `docs/07-BACKUP.md` | Encrypted Drive appDataFolder backup/restore |
 | `docs/08-BUILD-PLAN.md` | Phased tickets, in build order |
 
+## Sharing it with friends
+
+Everyone installs the same APK. Each phone keeps its own database: a fresh install
+opens a one-screen setup (name, body stats, goal, pick a plan), and nothing is ever
+shared between phones. Export (Settings → Your data) writes a structured JSON file
+anyone can hand to a coach or an AI model, plus CSVs and a full backup.
+
 ## Build an APK and install it
 
 This machine has no Android SDK, so APKs are built in the cloud with EAS. Every

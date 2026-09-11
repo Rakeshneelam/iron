@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { ToastHost } from '@/components/Toast';
 import { initDatabase } from '@/db/client';
 import {
   ensureChannels,
@@ -23,7 +24,7 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 type Boot = { state: 'loading' } | { state: 'ready' } | { state: 'error'; message: string };
 
-/** No onboarding, no login: straight into Today once the database is open (AGENTS.md §1.2). */
+/** No login: straight into Today once the database is open. A fresh install sees setup once. */
 export default function RootLayout() {
   const [boot, setBoot] = useState<Boot>({ state: 'loading' });
 
@@ -50,7 +51,10 @@ export default function RootLayout() {
         {boot.state === 'ready' ? (
           <>
             <AppServices />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg }, animation: 'fade' }} />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg }, animation: 'fade' }}>
+              <Stack.Screen name="setup" options={{ gestureEnabled: false }} />
+            </Stack>
+            <ToastHost />
           </>
         ) : boot.state === 'error' ? (
           <View style={styles.center}>

@@ -1,5 +1,8 @@
-/** The program: routine -> day -> ordered slots. Exactly one routine is active. */
-import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
+/**
+ * Plans: routine -> day -> ordered slots. Any number of plans; at most one active.
+ * Archived plans are hidden but keep their days, so history still has day names.
+ */
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
@@ -12,6 +15,8 @@ export type Routine = typeof schema.routine.$inferSelect;
 export type RoutineDay = typeof schema.routineDay.$inferSelect;
 export type RoutineSlot = typeof schema.routineSlot.$inferSelect;
 export type SlotWithExercise = RoutineSlot & { exercise: Exercise };
+/** What a workout needs from a slot. Session snapshots carry the same shape. */
+export type Targets = Pick<RoutineSlot, 'targetSets' | 'repLo' | 'repHi' | 'targetRir' | 'restSeconds' | 'supersetGroup' | 'startWeight'>;
 
 export function getActiveRoutine(): Routine | undefined {
   return db.select().from(schema.routine).where(eq(schema.routine.active, 1)).limit(1).get();
@@ -21,19 +26,38 @@ export function getRoutine(id: string): Routine | undefined {
   return db.select().from(schema.routine).where(eq(schema.routine.id, id)).get();
 }
 
-export function listRoutines(): Routine[] {
-  return db.select().from(schema.routine).orderBy(asc(schema.routine.createdAt)).all();
+/** Active first, then oldest. Archived plans only when asked for. */
+export function listRoutines(opts: { archived?: boolean } = {}): Routine[] {
+  return db
+    .select()
+    .from(schema.routine)
+    .where(opts.archived ? isNotNull(schema.routine.archivedAt) : isNull(schema.routine.archivedAt))
+    .orderBy(desc(schema.routine.active), asc(schema.routine.createdAt))
+    .all();
 }
 
 export function setActiveRoutine(id: string): void {
-  db.transaction((tx) => {
-    tx.update(schema.routine).set({ active: 0 }).run();
-    tx.update(schema.routine).set({ active: 1 }).where(eq(schema.routine.id, id)).run();
+  db.transaction(() => {
+    db.update(schema.routine).set({ active: 0 }).run();
+    db.update(schema.routine).set({ active: 1, archivedAt: null }).where(eq(schema.routine.id, id)).run();
   });
 }
 
 export function renameRoutine(id: string, name: string): void {
-  db.update(schema.routine).set({ name }).where(eq(schema.routine.id, id)).run();
+  if (!name.trim()) return;
+  db.update(schema.routine).set({ name: name.trim() }).where(eq(schema.routine.id, id)).run();
+}
+
+export function setDaysPerWeek(id: string, daysPerWeek: number): void {
+  db.update(schema.routine).set({ daysPerWeek: Math.max(1, Math.min(7, Math.round(daysPerWeek))) }).where(eq(schema.routine.id, id)).run();
+}
+
+/** Archiving the active plan leaves no plan active — Today then asks to pick one. */
+export function archiveRoutine(id: string, archived: boolean): void {
+  db.update(schema.routine)
+    .set(archived ? { archivedAt: nowISO(), active: 0 } : { archivedAt: null })
+    .where(eq(schema.routine.id, id))
+    .run();
 }
 
 export function getDays(routineId: string): RoutineDay[] {
@@ -60,8 +84,8 @@ export function getSlot(slotId: string): RoutineSlot | undefined {
 }
 
 /**
- * Cycle position, NOT the calendar: the day after the last completed session's.
- * A missed Tuesday leaves him on the same day — it never skips him forward.
+ * Cycle position, NOT the calendar: the day after the last finished or skipped one.
+ * A missed Tuesday leaves you on the same day. Cancelled workouts don't count.
  */
 export function resolveNextDay(routineId: string): RoutineDay | undefined {
   const days = getDays(routineId);
@@ -70,7 +94,14 @@ export function resolveNextDay(routineId: string): RoutineDay | undefined {
     .select({ dayId: schema.session.routineDayId })
     .from(schema.session)
     .innerJoin(schema.routineDay, eq(schema.session.routineDayId, schema.routineDay.id))
-    .where(and(eq(schema.routineDay.routineId, routineId), isNotNull(schema.session.endedAt)))
+    .where(
+      and(
+        eq(schema.routineDay.routineId, routineId),
+        isNotNull(schema.session.endedAt),
+        // Mirrors DAY_DONE in ./sessions (not imported: sessions imports this module).
+        inArray(schema.session.status, ['completed', 'partial', 'skipped']),
+      ),
+    )
     .orderBy(desc(schema.session.startedAt))
     .limit(1)
     .get();
@@ -80,17 +111,85 @@ export function resolveNextDay(routineId: string): RoutineDay | undefined {
 }
 
 export function createRoutine(name: string, daysPerWeek: number): Routine {
-  const row: Routine = { id: newId(), name: name.trim() || 'New routine', daysPerWeek, active: 0, createdAt: nowISO() };
+  const row: Routine = { id: newId(), name: name.trim() || 'New plan', daysPerWeek, active: 0, createdAt: nowISO(), archivedAt: null };
   db.insert(schema.routine).values(row).run();
   return row;
 }
 
+export type SlotDraft = { exerciseId: string } & Partial<Omit<RoutineSlot, 'id' | 'routineDayId' | 'position' | 'exerciseId'>>;
+export interface PlanDraft {
+  name: string;
+  daysPerWeek: number;
+  days: { label: string; slots: SlotDraft[] }[];
+}
+
+/** Writes a whole plan in one transaction — used by templates and Duplicate. */
+export function createPlan(draft: PlanDraft, opts: { activate?: boolean } = {}): Routine {
+  const routine = createRoutineRow(draft);
+  db.transaction(() => {
+    db.insert(schema.routine).values(routine).run();
+    draft.days.forEach((d, dayIndex) => {
+      const dayId = newId();
+      db.insert(schema.routineDay).values({ id: dayId, routineId: routine.id, dayIndex, label: d.label }).run();
+      d.slots
+        .filter((s) => getExercise(s.exerciseId))
+        .forEach((s, position) => {
+          db.insert(schema.routineSlot)
+            .values({
+              id: newId(),
+              routineDayId: dayId,
+              exerciseId: s.exerciseId,
+              position,
+              targetSets: s.targetSets ?? 3,
+              repLo: s.repLo ?? 8,
+              repHi: s.repHi ?? 12,
+              targetRir: s.targetRir ?? 1,
+              restSeconds: s.restSeconds ?? 120,
+              supersetGroup: s.supersetGroup ?? null,
+              notes: s.notes ?? null,
+              startWeight: s.startWeight ?? null,
+            })
+            .run();
+        });
+    });
+  });
+  if (opts.activate) setActiveRoutine(routine.id);
+  return routine;
+}
+
+function createRoutineRow(draft: PlanDraft): Routine {
+  return { id: newId(), name: draft.name.trim() || 'New plan', daysPerWeek: Math.max(1, draft.daysPerWeek), active: 0, createdAt: nowISO(), archivedAt: null };
+}
+
+export function duplicateRoutine(id: string): Routine | undefined {
+  const r = getRoutine(id);
+  if (!r) return undefined;
+  return createPlan({
+    name: `${r.name} (copy)`,
+    daysPerWeek: r.daysPerWeek,
+    days: getDays(id).map((d) => ({
+      label: d.label,
+      slots: getSlots(d.id).map((s) => ({
+        exerciseId: s.exerciseId,
+        targetSets: s.targetSets,
+        repLo: s.repLo,
+        repHi: s.repHi,
+        targetRir: s.targetRir,
+        restSeconds: s.restSeconds,
+        supersetGroup: s.supersetGroup,
+        notes: s.notes,
+        startWeight: s.startWeight,
+      })),
+    })),
+  });
+}
+
 export function deleteRoutine(id: string): void {
-  db.transaction((tx) => {
-    const dayIds = tx.select({ id: schema.routineDay.id }).from(schema.routineDay).where(eq(schema.routineDay.routineId, id)).all();
+  db.transaction(() => {
+    const dayIds = db.select({ id: schema.routineDay.id }).from(schema.routineDay).where(eq(schema.routineDay.routineId, id)).all();
     // Sessions keep their data; they just stop pointing at a day that no longer exists.
-    for (const d of dayIds) tx.update(schema.session).set({ routineDayId: null }).where(eq(schema.session.routineDayId, d.id)).run();
-    tx.delete(schema.routine).where(eq(schema.routine.id, id)).run();
+    for (const d of dayIds) db.update(schema.session).set({ routineDayId: null }).where(eq(schema.session.routineDayId, d.id)).run();
+    db.delete(schema.routine).where(eq(schema.routine.id, id)).run();
   });
 }
 
@@ -101,10 +200,7 @@ export function addDay(routineId: string, label: string): RoutineDay {
     .where(eq(schema.routineDay.routineId, routineId))
     .get();
   const row: RoutineDay = { id: newId(), routineId, dayIndex: Number(max?.n ?? -1) + 1, label: label.trim() || 'New day' };
-  db.transaction((tx) => {
-    tx.insert(schema.routineDay).values(row).run();
-    tx.update(schema.routine).set({ daysPerWeek: row.dayIndex + 1 }).where(eq(schema.routine.id, routineId)).run();
-  });
+  db.insert(schema.routineDay).values(row).run();
   return row;
 }
 
@@ -112,15 +208,29 @@ export function renameDay(dayId: string, label: string): void {
   db.update(schema.routineDay).set({ label }).where(eq(schema.routineDay.id, dayId)).run();
 }
 
+/** Up/down reorder of plan days. The cycle follows the new order. */
+export function moveDay(dayId: string, delta: -1 | 1): void {
+  const day = getDay(dayId);
+  if (!day) return;
+  const days = getDays(day.routineId);
+  const i = days.findIndex((d) => d.id === dayId);
+  const a = days[i];
+  const b = days[i + delta];
+  if (!a || !b) return;
+  db.transaction(() => {
+    db.update(schema.routineDay).set({ dayIndex: b.dayIndex }).where(eq(schema.routineDay.id, a.id)).run();
+    db.update(schema.routineDay).set({ dayIndex: a.dayIndex }).where(eq(schema.routineDay.id, b.id)).run();
+  });
+}
+
 export function removeDay(dayId: string): void {
   const day = getDay(dayId);
   if (!day) return;
-  db.transaction((tx) => {
-    tx.update(schema.session).set({ routineDayId: null }).where(eq(schema.session.routineDayId, dayId)).run();
-    tx.delete(schema.routineDay).where(eq(schema.routineDay.id, dayId)).run();
-    const rest = tx.select().from(schema.routineDay).where(eq(schema.routineDay.routineId, day.routineId)).orderBy(asc(schema.routineDay.dayIndex)).all();
-    rest.forEach((d, i) => tx.update(schema.routineDay).set({ dayIndex: i }).where(eq(schema.routineDay.id, d.id)).run());
-    tx.update(schema.routine).set({ daysPerWeek: Math.max(1, rest.length) }).where(eq(schema.routine.id, day.routineId)).run();
+  db.transaction(() => {
+    db.update(schema.session).set({ routineDayId: null }).where(eq(schema.session.routineDayId, dayId)).run();
+    db.delete(schema.routineDay).where(eq(schema.routineDay.id, dayId)).run();
+    const rest = db.select().from(schema.routineDay).where(eq(schema.routineDay.routineId, day.routineId)).orderBy(asc(schema.routineDay.dayIndex)).all();
+    rest.forEach((d, i) => db.update(schema.routineDay).set({ dayIndex: i }).where(eq(schema.routineDay.id, d.id)).run());
   });
 }
 
@@ -142,9 +252,21 @@ export function addSlot(routineDayId: string, exerciseId: string, partial: Parti
     restSeconds: partial.restSeconds ?? 120,
     supersetGroup: partial.supersetGroup ?? null,
     notes: partial.notes ?? null,
+    startWeight: partial.startWeight ?? null,
   };
   db.insert(schema.routineSlot).values(row).run();
   return row;
+}
+
+/** Undo for removeSlot: the exact row back, at its old position. */
+export function restoreSlot(row: RoutineSlot): void {
+  db.transaction(() => {
+    db.update(schema.routineSlot)
+      .set({ position: sql`${schema.routineSlot.position} + 1` })
+      .where(and(eq(schema.routineSlot.routineDayId, row.routineDayId), sql`${schema.routineSlot.position} >= ${row.position}`))
+      .run();
+    db.insert(schema.routineSlot).values(row).onConflictDoNothing().run();
+  });
 }
 
 export function updateSlot(id: string, patch: Partial<Omit<RoutineSlot, 'id' | 'routineDayId'>>): void {
@@ -164,20 +286,21 @@ export function updateSlot(id: string, patch: Partial<Omit<RoutineSlot, 'id' | '
   db.update(schema.routineSlot).set(next).where(eq(schema.routineSlot.id, id)).run();
 }
 
-export function removeSlot(id: string): void {
+export function removeSlot(id: string): RoutineSlot | undefined {
   const slot = getSlot(id);
-  if (!slot) return;
-  db.transaction((tx) => {
-    tx.delete(schema.routineSlot).where(eq(schema.routineSlot.id, id)).run();
-    const rest = tx.select({ id: schema.routineSlot.id }).from(schema.routineSlot).where(eq(schema.routineSlot.routineDayId, slot.routineDayId)).orderBy(asc(schema.routineSlot.position)).all();
-    rest.forEach((s, i) => tx.update(schema.routineSlot).set({ position: i }).where(eq(schema.routineSlot.id, s.id)).run());
+  if (!slot) return undefined;
+  db.transaction(() => {
+    db.delete(schema.routineSlot).where(eq(schema.routineSlot.id, id)).run();
+    const rest = db.select({ id: schema.routineSlot.id }).from(schema.routineSlot).where(eq(schema.routineSlot.routineDayId, slot.routineDayId)).orderBy(asc(schema.routineSlot.position)).all();
+    rest.forEach((s, i) => db.update(schema.routineSlot).set({ position: i }).where(eq(schema.routineSlot.id, s.id)).run());
   });
+  return slot;
 }
 
 export function reorderSlots(routineDayId: string, orderedIds: string[]): void {
-  db.transaction((tx) => {
+  db.transaction(() => {
     orderedIds.forEach((id, i) =>
-      tx.update(schema.routineSlot).set({ position: i }).where(and(eq(schema.routineSlot.id, id), eq(schema.routineSlot.routineDayId, routineDayId))).run(),
+      db.update(schema.routineSlot).set({ position: i }).where(and(eq(schema.routineSlot.id, id), eq(schema.routineSlot.routineDayId, routineDayId))).run(),
     );
   });
 }

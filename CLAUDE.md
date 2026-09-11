@@ -1,8 +1,9 @@
 # AGENTS.md — read this first, every session
 
-You are building **Iron** — a personal, single-user, local-first fitness app for one
-person (Rakesh). It is not a product. There are no other users, no server, no
-accounts, no monetisation. Optimise for *his* daily use, not for generality.
+You are building **Iron** — a local-first fitness app. Each install is one person's
+private app: the same APK is shared with friends, and every phone keeps its own
+profile, plans and history. No server, no accounts, no monetisation. Optimise for
+daily use in a real gym, not for generality.
 
 If you read only one file, read this one. Everything else is detail in `/docs`.
 
@@ -14,13 +15,17 @@ If you read only one file, read this one. Everything else is detail in `/docs`.
    network call the app is allowed to make is an optional, user-initiated encrypted
    backup to the user's own Google Drive `appDataFolder`. No analytics, no crash
    reporting SaaS, no remote config, no ads, no telemetry.
-2. **No accounts, no login, no onboarding wizard beyond a single settings screen.**
-   The app opens straight into today's workout.
+2. **No accounts, no login.** A fresh install shows ONE setup screen (profile + pick
+   a plan); after that the app opens straight into today's workout. An upgrade of
+   an existing install never shows it.
 3. **Writes are immediate.** Every logged set hits SQLite the moment the user taps.
    Never hold a workout in React state and save "on finish" — the app will be killed
    in the background and the session must survive it.
-4. **Never block the gym flow.** No confirmation dialogs, no modals, no "are you
-   sure", no network waits on the logging screen.
+4. **Never block the gym flow, never trap the user.** Reversible actions happen at
+   once with an Undo toast. A confirm dialog is allowed ONLY for destroying data that
+   has no undo (deleting a plan, discarding logged sets). No network waits on the
+   logging screen. Every workout can be cancelled, every exercise skipped, removed or
+   swapped, every entry edited or deleted — and cancelling never counts as completing.
 5. **The suggestion engine advises; the user decides.** Every prescription must show
    a plain-English reason and must be overridable with one tap. Never silently change
    a weight, an exercise, or a program.
@@ -38,11 +43,11 @@ Six surfaces, in priority order:
 | # | Surface | Purpose |
 |---|---|---|
 | 1 | **Today** | The workout for today, logged set by set, with next-set suggestions |
-| 2 | **Program** | Build/edit routines: a 4-day Upper/Lower split, exercises per day |
+| 2 | **Plans** | Any number of plans (templates or custom), one active; days → exercises |
 | 3 | **Body** | Morning bodyweight before training; smoothed trend, not raw dots |
 | 4 | **Food** | Calories/macros with one-tap repeats of his real meals |
 | 5 | **Water** | Daily target, quick log, debt-based reminders |
-| 6 | **Review** | Weekly digest: what progressed, what stalled, is the phase on track |
+| 6 | **Progress** | Weekly summary + plan suggestions the user approves (`src/engine/recommend.ts`) |
 
 The core intelligence is already written and tested in `src/engine/`. **Do not
 rewrite it.** Wire it up.

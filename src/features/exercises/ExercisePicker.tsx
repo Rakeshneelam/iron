@@ -13,12 +13,14 @@ const cap = (s: string) => (s ? s[0]?.toUpperCase() + s.slice(1) : s);
 export interface ExercisePickerProps {
   onPick: (ex: Exercise) => void;
   excludeIds?: readonly string[];
+  /** Pre-select a muscle filter — a swap starts with same-muscle options. */
+  initialMuscle?: string;
 }
 
 /** Search + muscle filter over the catalogue, with inline custom-exercise creation. */
-export function ExercisePicker({ onPick, excludeIds = [] }: ExercisePickerProps) {
+export function ExercisePicker({ onPick, excludeIds = [], initialMuscle }: ExercisePickerProps) {
   const [q, setQ] = useState('');
-  const [muscle, setMuscle] = useState<string>('all');
+  const [muscle, setMuscle] = useState<string>(initialMuscle && MUSCLES.includes(initialMuscle) ? initialMuscle : 'all');
   const [creating, setCreating] = useState(false);
   const [loadType, setLoadType] = useState<LoadType>('dumbbell');
   const [primary, setPrimary] = useState<string>(MUSCLES[0] ?? 'chest');

@@ -8,10 +8,22 @@ import { newId } from '@/lib/ids';
 
 export type WaterEntry = typeof schema.waterLog.$inferSelect;
 
-export function logWater(ml: number, dateISO: string = todayISO()): void {
+export function logWater(ml: number, dateISO: string = todayISO()): WaterEntry | undefined {
   const amount = Math.round(ml);
-  if (!(amount > 0)) return;
-  db.insert(schema.waterLog).values({ id: newId(), date: dateISO, ml: amount, loggedAt: nowISO() }).run();
+  if (!(amount > 0)) return undefined;
+  const row: WaterEntry = { id: newId(), date: dateISO, ml: amount, loggedAt: nowISO() };
+  db.insert(schema.waterLog).values(row).run();
+  return row;
+}
+
+export function updateEntry(id: string, ml: number): void {
+  const amount = Math.round(ml);
+  if (amount > 0) db.update(schema.waterLog).set({ ml: amount }).where(eq(schema.waterLog.id, id)).run();
+}
+
+/** Undo for a delete: the exact row back. */
+export function restoreEntry(row: WaterEntry): void {
+  db.insert(schema.waterLog).values(row).onConflictDoNothing().run();
 }
 
 export function getDayTotal(dateISO: string): number {

@@ -14,20 +14,12 @@ import { eq } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
-import { nowISO } from '@/lib/date';
+import { migrateLegacySessionPlans } from '@/db/repositories/sessions';
 
 import { EQUIPMENT, EXERCISES } from './exercises';
 import { FOODS_IN } from './foods-in';
-import { UPPER_LOWER } from './routine-upper-lower';
 
 /* ============================ ids & shapes ============================== */
-
-/** Deterministic ids, per docs/09. Changing these breaks idempotency. */
-export const ROUTINE_ID = 'rt-upper-lower';
-
-const routineDayId = (dayIndex: number): string => `rd-upper-lower-${dayIndex}`;
-const routineSlotId = (dayIndex: number, position: number): string =>
-  `rs-upper-lower-${dayIndex}-${position}`;
 
 type EquipmentKind = (typeof schema.equipment.$inferInsert)['kind'];
 
@@ -88,9 +80,10 @@ export function seedIfNeeded(): void {
     seedExercises(tx);
     seedEquipment(tx);
     seedFoods(tx);
-    seedProgram(tx);
+    seedSetupFlag(tx);
     seedSettings(tx);
   });
+  migrateLegacySessionPlans();
 }
 
 function seedExercises(tx: SeedTx): void {
@@ -150,71 +143,16 @@ function seedFoods(tx: SeedTx): void {
   }
 }
 
-function seedProgram(tx: SeedTx): void {
-  const activeRoutines = tx
-    .select({ id: schema.routine.id })
-    .from(schema.routine)
-    .where(eq(schema.routine.active, 1))
-    .all();
-  const hasActiveRoutine = activeRoutines.length > 0;
-
-  const existing = tx
-    .select({ id: schema.routine.id })
-    .from(schema.routine)
-    .where(eq(schema.routine.id, ROUTINE_ID))
-    .all();
-
-  if (existing.length === 0) {
-    tx.insert(schema.routine)
-      .values({
-        id: ROUTINE_ID,
-        name: UPPER_LOWER.name,
-        daysPerWeek: UPPER_LOWER.daysPerWeek,
-        active: hasActiveRoutine ? 0 : 1,
-        createdAt: nowISO(),
-      })
-      .onConflictDoNothing()
-      .run();
-
-    const dayRows: (typeof schema.routineDay.$inferInsert)[] = UPPER_LOWER.days.map((day) => ({
-      id: routineDayId(day.dayIndex),
-      routineId: ROUTINE_ID,
-      dayIndex: day.dayIndex,
-      label: day.label,
-    }));
-    for (const batch of chunked(dayRows)) {
-      tx.insert(schema.routineDay).values(batch).onConflictDoNothing().run();
-    }
-
-    const slotRows: (typeof schema.routineSlot.$inferInsert)[] = UPPER_LOWER.days.flatMap((day) =>
-      day.slots.map((slot, position) => ({
-        id: routineSlotId(day.dayIndex, position),
-        routineDayId: routineDayId(day.dayIndex),
-        exerciseId: slot.exerciseId,
-        position,
-        targetSets: slot.targetSets,
-        repLo: slot.repLo,
-        repHi: slot.repHi,
-        targetRir: slot.targetRir,
-        restSeconds: slot.restSeconds,
-        supersetGroup: slot.supersetGroup ?? null,
-        notes: null,
-      })),
-    );
-    for (const batch of chunked(slotRows)) {
-      tx.insert(schema.routineSlot).values(batch).onConflictDoNothing().run();
-    }
-  }
-
-  // Exactly one routine is active (docs/03). Mark the seeded one active when
-  // nothing else is — but never steal it back from a routine he switched to,
-  // which would be silently changing his program (AGENTS.md §1.5).
-  if (!hasActiveRoutine) {
-    tx.update(schema.routine)
-      .set({ active: 1 })
-      .where(eq(schema.routine.id, ROUTINE_ID))
-      .run();
-  }
+/**
+ * First-run setup is shown only on a fresh install. An existing database (plans or
+ * workouts already there) is treated as set up, so an upgrade never shows it.
+ */
+function seedSetupFlag(tx: SeedTx): void {
+  const has = tx.select({ key: schema.setting.key }).from(schema.setting).where(eq(schema.setting.key, 'setupDone')).all();
+  if (has.length) return;
+  const routines = tx.select({ id: schema.routine.id }).from(schema.routine).limit(1).all();
+  const sessions = tx.select({ id: schema.session.id }).from(schema.session).limit(1).all();
+  tx.insert(schema.setting).values({ key: 'setupDone', value: JSON.stringify(routines.length + sessions.length > 0) }).run();
 }
 
 function seedSettings(tx: SeedTx): void {

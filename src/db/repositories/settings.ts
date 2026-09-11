@@ -11,6 +11,10 @@ import * as schema from '@/db/schema';
 import type { Phase, Sex } from '@/engine/metabolic';
 
 export interface AppSettings {
+  /** Shown on Today. Optional — the app works nameless. */
+  name: string;
+  /** False on a fresh install until the first-run setup is finished. */
+  setupDone: boolean;
   phase: Phase;
   heightCm: number;
   age: number;
@@ -29,6 +33,8 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  name: '',
+  setupDone: false,
   phase: 'recomp',
   heightCm: 173,
   age: 28,

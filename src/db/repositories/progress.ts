@@ -1,0 +1,282 @@
+/**
+ * Weekly progress and the inputs for plan recommendations. Read-only: trends come
+ * from the engine; this file only gathers the numbers.
+ */
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, sql } from 'drizzle-orm';
+
+import { db } from '@/db/client';
+import * as schema from '@/db/schema';
+import { weightTrend } from '@/engine/metabolic';
+import { slope, VOLUME_LANDMARKS } from '@/engine/progression';
+import { recommend, type RecExercise, type RecInput, type Recommendation } from '@/engine/recommend';
+import { addDays, daysBetweenISO, todayISO } from '@/lib/date';
+
+import { listMeasurements, listWeighIns } from './body';
+import { groupBy } from './mappers';
+import { getActiveRoutine, getDays, getSlots, plannedWeeklySets } from './program';
+import type { Session } from './sessions';
+import { getRaw, setRaw } from './settings';
+import { countConsecutiveResets, e1rmSeries } from './stats';
+
+export interface LiftChange {
+  exerciseId: string;
+  name: string;
+  topWeight: number;
+  prevTopWeight: number | null;
+  bestE1rm: number;
+  prevBestE1rm: number | null;
+}
+
+export interface WeekSummary {
+  weekStart: string;
+  weekEnd: string;
+  plannedDays: number;
+  completed: number;
+  partial: number;
+  skipped: number;
+  cancelled: number;
+  exercises: number;
+  sets: number;
+  reps: number;
+  tonnage: number;
+  minutes: number;
+  /** Lifts trained this week vs the last time before it. */
+  lifts: LiftChange[];
+  /** Smoothed bodyweight just before the week and at its end. */
+  bodyweight: { start: number | null; end: number | null };
+  /** Sites measured this week vs the previous reading. */
+  measurements: { site: string; value: number; prev: number | null }[];
+  water: { days: number; daysLogged: number; daysHit: number; avgMl: number };
+}
+
+export function weekSummary(weekStart: string, waterTargetMl: number): WeekSummary {
+  const weekEnd = addDays(weekStart, 6);
+  const inWeek = and(gte(schema.session.date, weekStart), lte(schema.session.date, weekEnd), isNotNull(schema.session.endedAt));
+
+  const sessions = db.select().from(schema.session).where(inWeek).all();
+  const count = (st: Session['status']) => sessions.filter((s) => s.status === st).length;
+  const minutes = sessions
+    .filter((s) => s.status !== 'skipped' && s.endedAt)
+    .reduce((m, s) => m + Math.max(0, (Date.parse(s.endedAt ?? s.startedAt) - Date.parse(s.startedAt)) / 60_000), 0);
+
+  const agg = db
+    .select({
+      sets: sql<number>`count(*)`,
+      reps: sql<number>`coalesce(sum(${schema.setLog.reps}), 0)`,
+      tonnage: sql<number>`coalesce(sum(${schema.setLog.weight} * ${schema.setLog.reps}), 0)`,
+      exercises: sql<number>`count(distinct ${schema.setLog.exerciseId})`,
+    })
+    .from(schema.setLog)
+    .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
+    .where(and(inWeek, eq(schema.setLog.isWarmup, 0)))
+    .get();
+
+  const names = new Map(db.select({ id: schema.exercise.id, name: schema.exercise.name }).from(schema.exercise).all().map((e) => [e.id, e.name]));
+  const stats = db
+    .select()
+    .from(schema.exerciseSessionStat)
+    .where(and(gte(schema.exerciseSessionStat.date, weekStart), lte(schema.exerciseSessionStat.date, weekEnd)))
+    .all();
+  const lifts: LiftChange[] = [];
+  for (const [exerciseId, rows] of groupBy(stats, (r) => r.exerciseId)) {
+    const prev = db
+      .select()
+      .from(schema.exerciseSessionStat)
+      .where(and(eq(schema.exerciseSessionStat.exerciseId, exerciseId), lt(schema.exerciseSessionStat.date, weekStart)))
+      .orderBy(desc(schema.exerciseSessionStat.date))
+      .limit(1)
+      .get();
+    lifts.push({
+      exerciseId,
+      name: names.get(exerciseId) ?? exerciseId,
+      topWeight: Math.max(...rows.map((r) => r.topWeight)),
+      prevTopWeight: prev?.topWeight ?? null,
+      bestE1rm: Math.max(...rows.map((r) => r.bestE1rm)),
+      prevBestE1rm: prev?.bestE1rm ?? null,
+    });
+  }
+  lifts.sort((a, b) => (b.bestE1rm - (b.prevBestE1rm ?? b.bestE1rm)) - (a.bestE1rm - (a.prevBestE1rm ?? a.bestE1rm)));
+
+  const trend = weightTrend(listWeighIns().filter((w) => w.date <= weekEnd));
+  const before = [...trend].reverse().find((t) => t.date < weekStart);
+  const firstIn = trend.find((t) => t.date >= weekStart);
+  const last = trend[trend.length - 1];
+  const bodyweight = {
+    start: before?.trend ?? firstIn?.trend ?? null,
+    end: last && last.date >= weekStart ? last.trend : null,
+  };
+
+  const all = listMeasurements();
+  const measurements: WeekSummary['measurements'] = [];
+  for (const [site, rows] of groupBy(all.filter((m) => m.date >= weekStart && m.date <= weekEnd), (m) => m.site)) {
+    const latest = rows[0];
+    if (!latest) continue;
+    const prev = all.find((m) => m.site === site && m.date < weekStart);
+    measurements.push({ site, value: latest.cm, prev: prev?.cm ?? null });
+  }
+
+  const water = db
+    .select({ date: schema.waterLog.date, ml: sql<number>`sum(${schema.waterLog.ml})` })
+    .from(schema.waterLog)
+    .where(and(gte(schema.waterLog.date, weekStart), lte(schema.waterLog.date, weekEnd)))
+    .groupBy(schema.waterLog.date)
+    .all()
+    .map((r) => Number(r.ml));
+  const logged = water.filter((ml) => ml > 0);
+
+  return {
+    weekStart,
+    weekEnd,
+    plannedDays: getActiveRoutine()?.daysPerWeek ?? 0,
+    completed: count('completed'),
+    partial: count('partial'),
+    skipped: count('skipped'),
+    cancelled: count('cancelled'),
+    exercises: Number(agg?.exercises ?? 0),
+    sets: Number(agg?.sets ?? 0),
+    reps: Number(agg?.reps ?? 0),
+    tonnage: Number(agg?.tonnage ?? 0),
+    minutes: Math.round(minutes),
+    lifts,
+    bodyweight,
+    measurements,
+    water: {
+      days: Math.max(0, Math.min(7, daysBetweenISO(weekStart, todayISO()) + 1)),
+      daysLogged: logged.length,
+      daysHit: logged.filter((ml) => ml >= waterTargetMl).length,
+      avgMl: logged.length ? logged.reduce((a, b) => a + b, 0) / logged.length : 0,
+    },
+  };
+}
+
+/** Every finished or skipped workout, newest first, with its day name and set count. */
+export function recentWorkouts(limit = 10): { session: Session; dayLabel: string | null; sets: number }[] {
+  const rows = db
+    .select({ session: schema.session, dayLabel: schema.routineDay.label })
+    .from(schema.session)
+    .leftJoin(schema.routineDay, eq(schema.session.routineDayId, schema.routineDay.id))
+    .where(isNotNull(schema.session.endedAt))
+    .orderBy(desc(schema.session.startedAt))
+    .limit(limit)
+    .all();
+  const ids = rows.map((r) => r.session.id);
+  const counts = ids.length
+    ? new Map(
+        db
+          .select({ id: schema.setLog.sessionId, n: sql<number>`count(*)` })
+          .from(schema.setLog)
+          .where(and(inArray(schema.setLog.sessionId, ids), eq(schema.setLog.isWarmup, 0)))
+          .groupBy(schema.setLog.sessionId)
+          .all()
+          .map((r) => [r.id, Number(r.n)]),
+      )
+    : new Map<string, number>();
+  return rows.map((r) => ({ session: r.session, dayLabel: r.dayLabel, sets: counts.get(r.session.id) ?? 0 }));
+}
+
+/* ============================ recommendations =========================== */
+
+const WINDOW_DAYS = 28;
+
+export function buildRecInput(today: string = todayISO()): RecInput | null {
+  const routine = getActiveRoutine();
+  if (!routine) return null;
+  const since = addDays(today, -(WINDOW_DAYS - 1));
+  const windowSessions = db
+    .select({ id: schema.session.id, status: schema.session.status, rpe: schema.session.sessionRpe })
+    .from(schema.session)
+    .where(and(gte(schema.session.date, since), isNotNull(schema.session.endedAt)))
+    .all();
+  const ids = windowSessions.filter((s) => s.status !== 'skipped').map((s) => s.id);
+  const listed = ids.length
+    ? db
+        .select({ exerciseId: schema.sessionExercise.exerciseId, skipped: schema.sessionExercise.skipped, source: schema.sessionExercise.source })
+        .from(schema.sessionExercise)
+        .where(inArray(schema.sessionExercise.sessionId, ids))
+        .all()
+    : [];
+  const sets = ids.length
+    ? db
+        .select({ sessionId: schema.setLog.sessionId, exerciseId: schema.setLog.exerciseId, pain: schema.setLog.painFlag })
+        .from(schema.setLog)
+        .where(and(inArray(schema.setLog.sessionId, ids), eq(schema.setLog.isWarmup, 0)))
+        .all()
+    : [];
+
+  const exercises: RecExercise[] = [];
+  const seen = new Set<string>();
+  for (const day of getDays(routine.id)) {
+    for (const slot of getSlots(day.id)) {
+      if (seen.has(slot.exerciseId)) continue;
+      seen.add(slot.exerciseId);
+      const series = e1rmSeries(slot.exerciseId, 5).map((p) => p.e1rm);
+      const mine = sets.filter((r) => r.exerciseId === slot.exerciseId);
+      const onList = listed.filter((r) => r.exerciseId === slot.exerciseId && r.source === 'plan');
+      exercises.push({
+        exerciseId: slot.exerciseId,
+        name: slot.exercise.name,
+        primaryMuscle: slot.exercise.primaryMuscles[0] ?? '',
+        slotId: slot.id,
+        targetSets: slot.targetSets,
+        planned: onList.length,
+        skipped: onList.filter((r) => r.skipped === 1).length,
+        trained: new Set(mine.map((r) => r.sessionId)).size,
+        painSessions: new Set(mine.filter((r) => r.pain === 1).map((r) => r.sessionId)).size,
+        trend: series.length >= 2 ? slope(series) : 0,
+        trendSessions: series.length,
+        consecutiveResets: countConsecutiveResets(slot.exerciseId),
+      });
+    }
+  }
+
+  const first = db.select({ date: schema.session.date }).from(schema.session).orderBy(asc(schema.session.date)).limit(1).get();
+  const weeks = first ? Math.max(1, Math.min(4, Math.ceil((daysBetweenISO(first.date, today) + 1) / 7))) : 1;
+  const rpes = windowSessions.map((s) => s.rpe).filter((x): x is number => x !== null);
+
+  return {
+    exercises,
+    plannedWeeklySets: plannedWeeklySets(routine.id),
+    landmarks: VOLUME_LANDMARKS,
+    consistency: {
+      weeks,
+      daysPerWeek: routine.daysPerWeek,
+      done: windowSessions.filter((s) => s.status === 'completed' || s.status === 'partial').length,
+      skippedDays: windowSessions.filter((s) => s.status === 'skipped').length,
+    },
+    avgSessionRpe: rpes.length >= 3 ? rpes.reduce((a, b) => a + b, 0) / rpes.length : null,
+  };
+}
+
+const DISMISSED_KEY = 'rec:dismissed';
+/** A dismissed recommendation stays hidden this long, then may come back if still true. */
+const DISMISS_DAYS = 14;
+
+function dismissed(): Record<string, string> {
+  try {
+    const v: unknown = JSON.parse(getRaw(DISMISSED_KEY) ?? '{}');
+    return v && typeof v === 'object' ? (v as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function dismissRecommendation(id: string): void {
+  setRaw(DISMISSED_KEY, JSON.stringify({ ...dismissed(), [id]: todayISO() }));
+}
+
+export function undismissRecommendation(id: string): void {
+  const d = dismissed();
+  delete d[id];
+  setRaw(DISMISSED_KEY, JSON.stringify(d));
+}
+
+export function activeRecommendations(): Recommendation[] {
+  const input = buildRecInput();
+  if (!input) return [];
+  const d = dismissed();
+  const today = todayISO();
+  return recommend(input).filter((r) => {
+    const at = d[r.id];
+    return !at || daysBetweenISO(at, today) >= DISMISS_DAYS;
+  });
+}

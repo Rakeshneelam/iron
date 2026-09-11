@@ -1,23 +1,35 @@
 /**
  * Sessions and sets — the hot path. Every write here is synchronous and committed
  * before it returns (AGENTS.md §1.3): the app can be killed the instant after a tap.
+ *
+ * A workout's exercise list lives in `session_exercise`, snapshotted from the plan
+ * at start. Skips, additions, swaps and order are "today only" and never touch the
+ * plan; the snapshot keeps planned targets so history can show planned vs done.
  */
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
+import type { SessionStatus } from '@/db/schema';
 import { e1RM, type SessionLog } from '@/engine/progression';
 import { nowISO, todayISO } from '@/lib/date';
 import { newId } from '@/lib/ids';
 
 import { getExercise, getLinkedSources, type Exercise } from './exercises';
 import { groupBy, parseIdList, toEngineSet } from './mappers';
-import { getSlots, type RoutineSlot } from './program';
-import { deleteRaw, getRaw, setRaw } from './settings';
+import { getSlots, type Targets } from './program';
+import { deleteRaw, getRaw } from './settings';
 import { writeSessionStats } from './stats';
 
 export type Session = typeof schema.session.$inferSelect;
 export type SetRow = typeof schema.setLog.$inferSelect;
+export type SessionExerciseRow = typeof schema.sessionExercise.$inferSelect;
+export type { SessionStatus };
+
+/** The plan's day counts as done — these advance the routine cycle. */
+export const DAY_DONE: readonly SessionStatus[] = ['completed', 'partial', 'skipped'];
+/** Training actually happened (sets exist). */
+export const TRAINED: readonly SessionStatus[] = ['completed', 'partial', 'cancelled'];
 
 /* ============================ lifecycle ================================= */
 
@@ -27,6 +39,30 @@ export function getActiveSession(): Session | undefined {
 
 export function getSession(id: string): Session | undefined {
   return db.select().from(schema.session).where(eq(schema.session.id, id)).get();
+}
+
+function planRows(sessionId: string, routineDayId: string): SessionExerciseRow[] {
+  const out: SessionExerciseRow[] = [];
+  const seen = new Set<string>();
+  for (const s of getSlots(routineDayId)) {
+    if (seen.has(s.exerciseId)) continue;
+    seen.add(s.exerciseId);
+    out.push({
+      sessionId,
+      exerciseId: s.exerciseId,
+      position: out.length,
+      source: 'plan',
+      skipped: 0,
+      targetSets: s.targetSets,
+      repLo: s.repLo,
+      repHi: s.repHi,
+      targetRir: s.targetRir,
+      restSeconds: s.restSeconds,
+      supersetGroup: s.supersetGroup,
+      startWeight: s.startWeight,
+    });
+  }
+  return out;
 }
 
 /** Never two open sessions: an unfinished one is resumed rather than duplicated. */
@@ -39,6 +75,7 @@ export function startSession(routineDayId: string | null): Session {
     date: todayISO(),
     startedAt: nowISO(),
     endedAt: null,
+    status: 'active',
     bodyweightKg: null,
     sleepHours: null,
     soreness: null,
@@ -46,42 +83,90 @@ export function startSession(routineDayId: string | null): Session {
     sessionRpe: null,
     notes: null,
   };
-  db.insert(schema.session).values(row).run();
+  db.transaction(() => {
+    db.insert(schema.session).values(row).run();
+    const rows = routineDayId ? planRows(row.id, routineDayId) : [];
+    if (rows.length) db.insert(schema.sessionExercise).values(rows).run();
+  });
   return row;
+}
+
+/** Records a deliberately skipped plan day: no sets, advances the cycle. Undo = deleteSession. */
+export function skipDay(routineDayId: string): string {
+  const now = nowISO();
+  const id = newId();
+  db.insert(schema.session)
+    .values({ id, routineDayId, date: todayISO(), startedAt: now, endedAt: now, status: 'skipped' })
+    .run();
+  return id;
 }
 
 const rawKeys = (id: string) => [`session:${id}:adhoc`, `session:${id}:skipped`, `session:${id}:order`, `session:${id}:readinessDone`];
 
-/**
- * Close the session and precompute per-exercise stats (ticket 3.5).
- * A session with no working sets is discarded rather than kept as an empty row —
- * otherwise opening and closing a workout would advance the routine cycle.
- */
-export function endSession(sessionId: string): { discarded: boolean } {
-  const hasWork = db
+function workingSetCount(sessionId: string): number {
+  const row = db
     .select({ n: sql<number>`count(*)` })
     .from(schema.setLog)
     .where(and(eq(schema.setLog.sessionId, sessionId), eq(schema.setLog.isWarmup, 0)))
     .get();
-  if (Number(hasWork?.n ?? 0) === 0) {
-    abandonSession(sessionId);
-    return { discarded: true };
-  }
-  db.transaction((tx) => {
-    tx.update(schema.session).set({ endedAt: nowISO() }).where(eq(schema.session.id, sessionId)).run();
-    tx.delete(schema.timerState).run();
+  return Number(row?.n ?? 0);
+}
+
+function close(sessionId: string, status: SessionStatus): void {
+  db.transaction(() => {
+    db.update(schema.session).set({ endedAt: nowISO(), status }).where(eq(schema.session.id, sessionId)).run();
+    db.delete(schema.timerState).run();
     writeSessionStats(sessionId);
   });
   for (const k of rawKeys(sessionId)) deleteRaw(k);
-  return { discarded: false };
 }
 
-export function abandonSession(sessionId: string): void {
-  db.transaction((tx) => {
-    tx.delete(schema.timerState).run();
-    tx.delete(schema.session).where(eq(schema.session.id, sessionId)).run();
+/**
+ * Finish: `completed` when every planned exercise hit its target sets, else `partial`.
+ * A workout with no working sets is discarded — opening and closing one by accident
+ * must never advance the routine or leave an empty row in history.
+ */
+export function finishSession(sessionId: string): { discarded: boolean; status: SessionStatus | null } {
+  if (workingSetCount(sessionId) === 0) {
+    deleteSession(sessionId);
+    return { discarded: true, status: null };
+  }
+  const p = planProgress(sessionId);
+  const status: SessionStatus = p.done === p.planned ? 'completed' : 'partial';
+  close(sessionId, status);
+  return { discarded: false, status };
+}
+
+/**
+ * Cancel: never counts as done and never advances the cycle. With `keepSets` the
+ * sets stay in history (they really happened) under status `cancelled`; otherwise
+ * the whole workout is deleted.
+ */
+export function cancelSession(sessionId: string, keepSets: boolean): void {
+  if (keepSets && workingSetCount(sessionId) > 0) close(sessionId, 'cancelled');
+  else deleteSession(sessionId);
+}
+
+/** Removes a session and everything hanging off it (sets, stats, exercise list). */
+export function deleteSession(sessionId: string): void {
+  db.transaction(() => {
+    db.delete(schema.timerState).where(eq(schema.timerState.sessionId, sessionId)).run();
+    db.delete(schema.session).where(eq(schema.session.id, sessionId)).run();
   });
   for (const k of rawKeys(sessionId)) deleteRaw(k);
+}
+
+/** Undo for an accidental Finish/Cancel. Refuses while another workout is open. */
+export function reopenSession(sessionId: string): boolean {
+  const open = getActiveSession();
+  if (open && open.id !== sessionId) return false;
+  const s = getSession(sessionId);
+  if (!s || s.status === 'skipped') return false;
+  db.transaction(() => {
+    db.update(schema.session).set({ endedAt: null, status: 'active' }).where(eq(schema.session.id, sessionId)).run();
+    db.delete(schema.exerciseSessionStat).where(eq(schema.exerciseSessionStat.sessionId, sessionId)).run();
+  });
+  return true;
 }
 
 export function setReadiness(
@@ -98,15 +183,19 @@ export function setReadiness(
 }
 
 export function markReadinessDone(sessionId: string): void {
-  setRaw(`session:${sessionId}:readinessDone`, 'true');
+  db.insert(schema.setting)
+    .values({ key: `session:${sessionId}:readinessDone`, value: 'true' })
+    .onConflictDoNothing()
+    .run();
 }
 
 export function isReadinessDone(sessionId: string): boolean {
   return getRaw(`session:${sessionId}:readinessDone`) === 'true';
 }
 
-export function setSessionNotes(sessionId: string, notes: string): void {
-  db.update(schema.session).set({ notes }).where(eq(schema.session.id, sessionId)).run();
+/** Post-workout feedback: effort (session RPE 1–10) and free-text notes. */
+export function setSessionFeedback(sessionId: string, patch: { sessionRpe?: number | null; notes?: string | null }): void {
+  db.update(schema.session).set(patch).where(eq(schema.session.id, sessionId)).run();
 }
 
 /* =============================== sets =================================== */
@@ -145,6 +234,11 @@ export function insertSet(input: {
   };
   db.insert(schema.setLog).values(row).run();
   return row;
+}
+
+/** Undo for a deleted set: puts the exact row back. */
+export function restoreSet(row: SetRow): void {
+  db.insert(schema.setLog).values(row).onConflictDoNothing().run();
 }
 
 export function updateSet(
@@ -220,7 +314,7 @@ export function getExerciseHistory(exerciseId: string, limit = 8): SessionLog[] 
   return out;
 }
 
-/** What he did last time on exactly this exercise, excluding the current session. */
+/** What was done last time on exactly this exercise, excluding the current session. */
 export function getLastPerformance(exerciseId: string, excludeSessionId?: string): { date: string; sets: SetRow[] } | undefined {
   const where = excludeSessionId
     ? and(eq(schema.setLog.exerciseId, exerciseId), ne(schema.setLog.sessionId, excludeSessionId))
@@ -237,15 +331,24 @@ export function getLastPerformance(exerciseId: string, excludeSessionId?: string
   return { date: latest.date, sets: getSetsFor(latest.sessionId, exerciseId) };
 }
 
-export function listSessions(limit = 20): Session[] {
-  return db.select().from(schema.session).where(isNotNull(schema.session.endedAt)).orderBy(desc(schema.session.startedAt)).limit(limit).all();
+/** Finished sessions, newest first. Defaults to ones where training happened. */
+export function listSessions(limit = 20, statuses: readonly SessionStatus[] = TRAINED): Session[] {
+  return db
+    .select()
+    .from(schema.session)
+    .where(and(isNotNull(schema.session.endedAt), inArray(schema.session.status, [...statuses])))
+    .orderBy(desc(schema.session.startedAt))
+    .limit(limit)
+    .all();
 }
 
 export interface SessionSummary {
   session: Session;
   totalTonnage: number;
   hardSets: number;
+  totalReps: number;
   durationMin: number;
+  progress: PlanProgress;
   perExercise: {
     exerciseId: string;
     name: string;
@@ -254,6 +357,7 @@ export interface SessionSummary {
     isPR: boolean;
     tonnage: number;
     sets: number;
+    topSet: string;
   }[];
 }
 
@@ -265,12 +369,14 @@ export function getSessionSummary(sessionId: string): SessionSummary | undefined
   const perExercise: SessionSummary['perExercise'] = [];
   let totalTonnage = 0;
   let hardSets = 0;
+  let totalReps = 0;
 
   for (const [exerciseId, group] of groupBy(sets, (s) => s.exerciseId)) {
     const work = group.filter((s) => s.isWarmup === 0);
     if (work.length === 0) continue;
     const tonnage = work.reduce((t, s) => t + s.weight * s.reps, 0);
     const best = Math.max(...work.map((s) => s.e1rm));
+    const top = work.reduce((a, b) => (b.weight > a.weight || (b.weight === a.weight && b.reps > a.reps) ? b : a));
     const prev = db
       .select({ best: schema.exerciseSessionStat.bestE1rm })
       .from(schema.exerciseSessionStat)
@@ -286,6 +392,7 @@ export function getSessionSummary(sessionId: string): SessionSummary | undefined
     const allTimeBest = allTime?.best == null ? null : Number(allTime.best);
     totalTonnage += tonnage;
     hardSets += work.length;
+    totalReps += work.reduce((t, s) => t + s.reps, 0);
     perExercise.push({
       exerciseId,
       name: getExercise(exerciseId)?.name ?? exerciseId,
@@ -294,85 +401,189 @@ export function getSessionSummary(sessionId: string): SessionSummary | undefined
       isPR: allTimeBest !== null && best > allTimeBest + 0.05,
       tonnage,
       sets: work.length,
+      topSet: `${top.weight}×${top.reps}`,
     });
   }
 
   const end = session.endedAt ? Date.parse(session.endedAt) : Date.now();
   const durationMin = Math.max(0, Math.round((end - Date.parse(session.startedAt)) / 60_000));
-  return { session, totalTonnage, hardSets, durationMin, perExercise };
+  return { session, totalTonnage, hardSets, totalReps, durationMin, progress: planProgress(sessionId), perExercise };
 }
 
-/* ======================= plan, ad-hoc, skip, order ====================== */
-
-export function addAdHocExercise(sessionId: string, exerciseId: string): void {
-  const ids = getAdHocExercises(sessionId);
-  if (!ids.includes(exerciseId)) setRaw(`session:${sessionId}:adhoc`, JSON.stringify([...ids, exerciseId]));
-  unskipExercise(sessionId, exerciseId);
-}
-
-export function getAdHocExercises(sessionId: string): string[] {
-  return parseIdList(getRaw(`session:${sessionId}:adhoc`));
-}
-
-/** Skipping is never failure — it is just not today. */
-export function skipExercise(sessionId: string, exerciseId: string): void {
-  const ids = getSkipped(sessionId);
-  if (!ids.includes(exerciseId)) setRaw(`session:${sessionId}:skipped`, JSON.stringify([...ids, exerciseId]));
-}
-
-export function unskipExercise(sessionId: string, exerciseId: string): void {
-  const ids = getSkipped(sessionId).filter((id) => id !== exerciseId);
-  setRaw(`session:${sessionId}:skipped`, JSON.stringify(ids));
-}
-
-export function getSkipped(sessionId: string): string[] {
-  return parseIdList(getRaw(`session:${sessionId}:skipped`));
-}
-
-export function setSessionOrder(sessionId: string, exerciseIds: string[]): void {
-  setRaw(`session:${sessionId}:order`, JSON.stringify(exerciseIds));
-}
+/* ===================== the workout's exercise list ====================== */
 
 export interface PlannedExercise {
   exerciseId: string;
   exercise: Exercise;
-  slot: RoutineSlot | null;
+  /** Planned targets, or null for an exercise added during the workout. */
+  slot: Targets | null;
   adHoc: boolean;
   skipped: boolean;
 }
 
-/**
- * Everything on today's list: the day's slots, then ad-hoc additions, then anything
- * logged that is in neither (e.g. after a mid-session swap). Honours a saved order.
- */
+function targetsOf(r: SessionExerciseRow): Targets | null {
+  if (r.targetSets === null) return null;
+  return {
+    targetSets: r.targetSets,
+    repLo: r.repLo ?? 8,
+    repHi: r.repHi ?? 12,
+    targetRir: r.targetRir ?? 1,
+    restSeconds: r.restSeconds ?? 120,
+    supersetGroup: r.supersetGroup,
+    startWeight: r.startWeight,
+  };
+}
+
+/** The list, in order, plus anything logged that is no longer on it (e.g. after a swap). */
 export function getSessionPlan(sessionId: string): PlannedExercise[] {
-  const session = getSession(sessionId);
-  if (!session) return [];
-  const skipped = new Set(getSkipped(sessionId));
-  const out: PlannedExercise[] = [];
-  const seen = new Set<string>();
-
-  if (session.routineDayId) {
-    for (const s of getSlots(session.routineDayId)) {
-      if (seen.has(s.exerciseId)) continue;
-      seen.add(s.exerciseId);
-      const { exercise, ...slot } = s;
-      out.push({ exerciseId: s.exerciseId, exercise, slot, adHoc: false, skipped: skipped.has(s.exerciseId) });
-    }
-  }
-  const logged = [...new Set(getSessionSets(sessionId).map((s) => s.exerciseId))];
-  for (const id of [...getAdHocExercises(sessionId), ...logged]) {
-    if (seen.has(id)) continue;
-    const exercise = getExercise(id);
-    if (!exercise) continue;
-    seen.add(id);
-    out.push({ exerciseId: id, exercise, slot: null, adHoc: true, skipped: skipped.has(id) });
-  }
-
-  const order = parseIdList(getRaw(`session:${sessionId}:order`));
-  if (order.length) {
-    const rank = new Map(order.map((id, i) => [id, i]));
-    out.sort((a, b) => (rank.get(a.exerciseId) ?? 1e6) - (rank.get(b.exerciseId) ?? 1e6));
+  const rows = db
+    .select({ se: schema.sessionExercise, exercise: schema.exercise })
+    .from(schema.sessionExercise)
+    .innerJoin(schema.exercise, eq(schema.sessionExercise.exerciseId, schema.exercise.id))
+    .where(eq(schema.sessionExercise.sessionId, sessionId))
+    .orderBy(asc(schema.sessionExercise.position))
+    .all();
+  const out: PlannedExercise[] = rows.map(({ se, exercise }) => ({
+    exerciseId: se.exerciseId,
+    exercise,
+    slot: targetsOf(se),
+    adHoc: se.source === 'added',
+    skipped: se.skipped === 1,
+  }));
+  const seen = new Set(out.map((p) => p.exerciseId));
+  for (const s of getSessionSets(sessionId)) {
+    if (seen.has(s.exerciseId)) continue;
+    seen.add(s.exerciseId);
+    const exercise = getExercise(s.exerciseId);
+    if (exercise) out.push({ exerciseId: s.exerciseId, exercise, slot: null, adHoc: true, skipped: false });
   }
   return out;
+}
+
+export interface PlanProgress {
+  /** Exercises that came from the plan. */
+  planned: number;
+  /** Planned exercises that reached their target sets. */
+  done: number;
+  skipped: number;
+}
+
+export function planProgress(sessionId: string): PlanProgress {
+  const plan = getSessionPlan(sessionId).filter((p) => !p.adHoc);
+  const counts = new Map<string, number>();
+  for (const s of getSessionSets(sessionId)) if (s.isWarmup === 0) counts.set(s.exerciseId, (counts.get(s.exerciseId) ?? 0) + 1);
+  return {
+    planned: plan.length,
+    done: plan.filter((p) => !p.skipped && (counts.get(p.exerciseId) ?? 0) >= (p.slot?.targetSets ?? 1)).length,
+    skipped: plan.filter((p) => p.skipped).length,
+  };
+}
+
+const seKey = (sessionId: string, exerciseId: string) =>
+  and(eq(schema.sessionExercise.sessionId, sessionId), eq(schema.sessionExercise.exerciseId, exerciseId));
+
+function getRow(sessionId: string, exerciseId: string): SessionExerciseRow | undefined {
+  return db.select().from(schema.sessionExercise).where(seKey(sessionId, exerciseId)).get();
+}
+
+function nextPosition(sessionId: string): number {
+  const row = db
+    .select({ n: sql<number>`coalesce(max(${schema.sessionExercise.position}), -1)` })
+    .from(schema.sessionExercise)
+    .where(eq(schema.sessionExercise.sessionId, sessionId))
+    .get();
+  return Number(row?.n ?? -1) + 1;
+}
+
+/** Adds to today's list only. Re-adding a skipped one just un-skips it. */
+export function addSessionExercise(sessionId: string, exerciseId: string): void {
+  if (getRow(sessionId, exerciseId)) {
+    unskipExercise(sessionId, exerciseId);
+    return;
+  }
+  db.insert(schema.sessionExercise)
+    .values({ sessionId, exerciseId, position: nextPosition(sessionId), source: 'added', skipped: 0 })
+    .run();
+}
+
+export interface RemovedExercise {
+  row: SessionExerciseRow | undefined;
+  sets: SetRow[];
+}
+
+/** Takes an exercise off today's list together with its sets. Returns what undo needs. */
+export function removeSessionExercise(sessionId: string, exerciseId: string): RemovedExercise {
+  const removed = { row: getRow(sessionId, exerciseId), sets: getSetsFor(sessionId, exerciseId) };
+  db.transaction(() => {
+    db.delete(schema.setLog).where(and(eq(schema.setLog.sessionId, sessionId), eq(schema.setLog.exerciseId, exerciseId))).run();
+    db.delete(schema.sessionExercise).where(seKey(sessionId, exerciseId)).run();
+  });
+  return removed;
+}
+
+export function restoreSessionExercise(r: RemovedExercise): void {
+  db.transaction(() => {
+    if (r.row) db.insert(schema.sessionExercise).values(r.row).onConflictDoNothing().run();
+    for (const s of r.sets) db.insert(schema.setLog).values(s).onConflictDoNothing().run();
+  });
+}
+
+/** Skipping is never failure — it is just not today. */
+export function skipExercise(sessionId: string, exerciseId: string): void {
+  db.update(schema.sessionExercise).set({ skipped: 1 }).where(seKey(sessionId, exerciseId)).run();
+}
+
+export function unskipExercise(sessionId: string, exerciseId: string): void {
+  db.update(schema.sessionExercise).set({ skipped: 0 }).where(seKey(sessionId, exerciseId)).run();
+}
+
+/**
+ * Today-only swap (machine taken, tweaked shoulder). The planned targets move to the
+ * new exercise; sets already logged on the old one stay and still show on the list.
+ */
+export function swapSessionExercise(sessionId: string, fromId: string, toId: string): void {
+  if (fromId === toId || getRow(sessionId, toId)) return;
+  if (getRow(sessionId, fromId)) {
+    db.update(schema.sessionExercise).set({ exerciseId: toId, skipped: 0 }).where(seKey(sessionId, fromId)).run();
+  } else {
+    addSessionExercise(sessionId, toId);
+  }
+}
+
+/** Persists an explicit order. Exercises only known from logged sets get a row here. */
+export function setSessionOrder(sessionId: string, exerciseIds: string[]): void {
+  db.transaction(() => {
+    exerciseIds.forEach((exerciseId, position) => {
+      db.insert(schema.sessionExercise)
+        .values({ sessionId, exerciseId, position, source: 'added', skipped: 0 })
+        .onConflictDoUpdate({ target: [schema.sessionExercise.sessionId, schema.sessionExercise.exerciseId], set: { position } })
+        .run();
+    });
+  });
+}
+
+/**
+ * One-off upgrade: workouts left open by the previous version kept their list in
+ * settings keys (adhoc / skipped / order). Rebuild those as session_exercise rows.
+ */
+export function migrateLegacySessionPlans(): void {
+  const open = db.select().from(schema.session).where(isNull(schema.session.endedAt)).all();
+  for (const s of open) {
+    const has = db.select({ n: sql<number>`count(*)` }).from(schema.sessionExercise).where(eq(schema.sessionExercise.sessionId, s.id)).get();
+    if (Number(has?.n ?? 0) > 0) continue;
+    const rows = s.routineDayId ? planRows(s.id, s.routineDayId) : [];
+    const skipped = new Set(parseIdList(getRaw(`session:${s.id}:skipped`)));
+    for (const exerciseId of parseIdList(getRaw(`session:${s.id}:adhoc`))) {
+      if (rows.some((r) => r.exerciseId === exerciseId) || !getExercise(exerciseId)) continue;
+      rows.push({ sessionId: s.id, exerciseId, position: rows.length, source: 'added', skipped: 0, targetSets: null, repLo: null, repHi: null, targetRir: null, restSeconds: null, supersetGroup: null, startWeight: null });
+    }
+    const order = parseIdList(getRaw(`session:${s.id}:order`));
+    const rank = new Map(order.map((id, i) => [id, i]));
+    rows.sort((a, b) => (rank.get(a.exerciseId) ?? 1e6 + a.position) - (rank.get(b.exerciseId) ?? 1e6 + b.position));
+    rows.forEach((r, i) => {
+      r.position = i;
+      r.skipped = skipped.has(r.exerciseId) ? 1 : 0;
+    });
+    if (rows.length) db.insert(schema.sessionExercise).values(rows).onConflictDoNothing().run();
+  }
 }
