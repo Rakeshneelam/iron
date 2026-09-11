@@ -17,7 +17,11 @@
         "VIBRATE",
         "WAKE_LOCK"
       ],
-      "versionCode": 1
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0B0D"
+      }
     },
     "ios": {
       "bundleIdentifier": "dev.rakesh.iron",
@@ -41,7 +45,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B0B0D"
+          "backgroundColor": "#0B0B0D",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
         }
       ]
     ],
@@ -55,6 +61,7 @@
         "projectId": "8a3d4212-67e5-46a9-936d-ecfd7b19f081"
       }
     },
-    "owner": "crazybutton"
+    "owner": "crazybutton",
+    "icon": "./assets/icon.png"
   }
 }
