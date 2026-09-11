@@ -13,7 +13,7 @@ export const exercise = sqliteTable('exercise', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   loadType: text('load_type', {
-    enum: ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight'],
+    enum: ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'smith'],
   }).notNull(),
   /** Smallest increment HIS gym can actually load. Drives all rounding. */
   loadStep: real('load_step').notNull().default(2.5),

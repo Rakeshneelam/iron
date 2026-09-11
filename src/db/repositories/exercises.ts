@@ -3,7 +3,8 @@ import { asc, eq } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
-import { VOLUME_LANDMARKS, type ExerciseConfig, type LoadType } from '@/engine/progression';
+import { MUSCLE_LABEL } from '@/data/catalog';
+import type { ExerciseConfig, LoadType } from '@/engine/progression';
 import { nowISO } from '@/lib/date';
 import { newId } from '@/lib/ids';
 
@@ -12,9 +13,9 @@ import { countConsecutiveResets } from './stats';
 
 export type Exercise = typeof schema.exercise.$inferSelect;
 
-export const LOAD_TYPES: readonly LoadType[] = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight'];
-/** Every muscle the volume landmarks know about — the only valid primary muscles. */
-export const MUSCLES: readonly string[] = Object.keys(VOLUME_LANDMARKS);
+export const LOAD_TYPES: readonly LoadType[] = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'smith'];
+/** Every muscle the catalogue knows. Volume landmarks cover the main eleven. */
+export const MUSCLES: readonly string[] = Object.keys(MUSCLE_LABEL);
 
 export function getExercise(id: string): Exercise | undefined {
   return db.select().from(schema.exercise).where(eq(schema.exercise.id, id)).get();

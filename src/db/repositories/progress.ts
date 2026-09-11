@@ -8,14 +8,17 @@ import { db } from '@/db/client';
 import * as schema from '@/db/schema';
 import { weightTrend } from '@/engine/metabolic';
 import { slope, VOLUME_LANDMARKS } from '@/engine/progression';
+import { CATALOG_BY_ID, type Pattern } from '@/data/catalog';
+import { weeklyInsights, type LiftRegion, type WeekFacts } from '@/engine/insights';
 import { recommend, type RecExercise, type RecInput, type Recommendation } from '@/engine/recommend';
+import { detectRecords, type RecordEvent } from '@/engine/records';
 import { addDays, daysBetweenISO, todayISO } from '@/lib/date';
 
 import { listMeasurements, listWeighIns } from './body';
 import { groupBy } from './mappers';
 import { getActiveRoutine, getDays, getSlots, plannedWeeklySets } from './program';
 import type { Session } from './sessions';
-import { getRaw, setRaw } from './settings';
+import { getRaw, getSettings, setRaw } from './settings';
 import { countConsecutiveResets, e1rmSeries } from './stats';
 
 export interface LiftChange {
@@ -127,7 +130,7 @@ export function weekSummary(weekStart: string, waterTargetMl: number): WeekSumma
   return {
     weekStart,
     weekEnd,
-    plannedDays: getActiveRoutine()?.daysPerWeek ?? 0,
+    plannedDays: getSettings().trainingDays.length || (getActiveRoutine()?.daysPerWeek ?? 0),
     completed: count('completed'),
     partial: count('partial'),
     skipped: count('skipped'),
@@ -279,4 +282,125 @@ export function activeRecommendations(): Recommendation[] {
     const at = d[r.id];
     return !at || daysBetweenISO(at, today) >= DISMISS_DAYS;
   });
+}
+
+/* ============================ records & insights ======================== */
+
+export interface ExerciseRecords {
+  exerciseId: string;
+  name: string;
+  events: RecordEvent[];
+}
+
+/** Personal records set in one session, against every earlier finished session. */
+export function sessionRecords(sessionId: string): ExerciseRecords[] {
+  const s = db.select().from(schema.session).where(eq(schema.session.id, sessionId)).get();
+  if (!s) return [];
+  const sets = db
+    .select()
+    .from(schema.setLog)
+    .where(and(eq(schema.setLog.sessionId, sessionId), eq(schema.setLog.isWarmup, 0)))
+    .all();
+  const out: ExerciseRecords[] = [];
+  for (const [exerciseId, current] of groupBy(sets, (x) => x.exerciseId)) {
+    const prior = db
+      .select({ sessionId: schema.setLog.sessionId, weight: schema.setLog.weight, reps: schema.setLog.reps, e1rm: schema.setLog.e1rm })
+      .from(schema.setLog)
+      .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
+      .where(
+        and(
+          eq(schema.setLog.exerciseId, exerciseId),
+          eq(schema.setLog.isWarmup, 0),
+          isNotNull(schema.session.endedAt),
+          lt(schema.session.startedAt, s.startedAt),
+        ),
+      )
+      .all();
+    const events = detectRecords([...groupBy(prior, (p) => p.sessionId).values()], current, CATALOG_BY_ID.get(exerciseId)?.measure === 'time');
+    if (events.length) {
+      const name = db.select({ name: schema.exercise.name }).from(schema.exercise).where(eq(schema.exercise.id, exerciseId)).get()?.name ?? exerciseId;
+      out.push({ exerciseId, name, events });
+    }
+  }
+  return out;
+}
+
+/** Workouts where training happened and the day counted (completed or partial). */
+export function countFinishedWorkouts(): number {
+  const row = db
+    .select({ n: sql<number>`count(*)` })
+    .from(schema.session)
+    .where(inArray(schema.session.status, ['completed', 'partial']))
+    .get();
+  return Number(row?.n ?? 0);
+}
+
+/** Primary muscles worked in the last `days` days — for rest-day mobility. */
+export function recentMuscles(days = 2): string[] {
+  const since = addDays(todayISO(), -(days - 1));
+  const rows = db
+    .select({ muscles: schema.exercise.primaryMuscles })
+    .from(schema.setLog)
+    .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
+    .innerJoin(schema.exercise, eq(schema.setLog.exerciseId, schema.exercise.id))
+    .where(and(gte(schema.session.date, since), eq(schema.setLog.isWarmup, 0)))
+    .all();
+  return [...new Set(rows.flatMap((r) => r.muscles))];
+}
+
+const REGION_OF: Partial<Record<Pattern, LiftRegion>> = {
+  horizontal_push: 'push', vertical_push: 'push', fly: 'push', elbow_extension: 'push',
+  horizontal_pull: 'pull', vertical_pull: 'pull', elbow_flexion: 'pull', shrug: 'pull',
+  squat: 'legs', lunge: 'legs', hinge: 'legs', hip_extension: 'legs', knee_extension: 'legs', knee_flexion: 'legs', calf: 'legs', hip_abduction: 'legs', hip_adduction: 'legs',
+};
+const UPPER_MUSCLES = new Set(['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'traps']);
+const LOWER_MUSCLES = new Set(['quads', 'hamstrings', 'glutes', 'adductors', 'calves']);
+
+function setsByHalf(from: string, to: string): { upper: number; lower: number } {
+  const rows = db
+    .select({ muscles: schema.exercise.primaryMuscles, n: sql<number>`count(*)` })
+    .from(schema.setLog)
+    .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
+    .innerJoin(schema.exercise, eq(schema.setLog.exerciseId, schema.exercise.id))
+    .where(and(gte(schema.session.date, from), lte(schema.session.date, to), isNotNull(schema.session.endedAt), eq(schema.setLog.isWarmup, 0)))
+    .groupBy(schema.setLog.exerciseId)
+    .all();
+  const out = { upper: 0, lower: 0 };
+  for (const r of rows) {
+    const first = r.muscles[0] ?? '';
+    if (UPPER_MUSCLES.has(first)) out.upper += Number(r.n);
+    else if (LOWER_MUSCLES.has(first)) out.lower += Number(r.n);
+  }
+  return out;
+}
+
+/** Up to three plain-language statements about the week, from the data alone. */
+export function weekInsights(weekStart: string, waterTargetMl: number): string[] {
+  const end = addDays(weekStart, 6);
+  const week = weekSummary(weekStart, waterTargetMl);
+  const weekSessions = db
+    .select({ session: schema.session, label: schema.routineDay.label })
+    .from(schema.session)
+    .leftJoin(schema.routineDay, eq(schema.session.routineDayId, schema.routineDay.id))
+    .where(and(gte(schema.session.date, weekStart), lte(schema.session.date, end), isNotNull(schema.session.endedAt)))
+    .all();
+  const records = weekSessions.filter((w) => w.session.status !== 'skipped').reduce((n, w) => n + sessionRecords(w.session.id).length, 0);
+  const facts: WeekFacts = {
+    planned: week.plannedDays,
+    done: week.completed + week.partial,
+    skipped: week.skipped,
+    sets: setsByHalf(weekStart, end),
+    prevSets: setsByHalf(addDays(weekStart, -7), addDays(weekStart, -1)),
+    lifts: week.lifts.map((l) => ({
+      name: l.name,
+      region: REGION_OF[CATALOG_BY_ID.get(l.exerciseId)?.pattern ?? 'core_stability'] ?? 'other',
+      e1rmDelta: l.prevBestE1rm === null ? null : l.bestE1rm - l.prevBestE1rm,
+    })),
+    records,
+    bodyweightChange: week.bodyweight.start !== null && week.bodyweight.end !== null ? week.bodyweight.end - week.bodyweight.start : null,
+    goal: getSettings().phase,
+    water: { hit: week.water.daysHit, days: week.water.days },
+    skippedLabels: weekSessions.filter((w) => w.session.status === 'skipped').map((w) => w.label ?? 'a workout'),
+  };
+  return weeklyInsights(facts);
 }

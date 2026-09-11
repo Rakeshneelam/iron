@@ -1,21 +1,30 @@
 import { Redirect, router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Bar, Card, ChipRow, confirm, Icon, IconButton, PrimaryButton, Screen, toast } from '@/components';
+import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { getWeighIn } from '@/db/repositories/body';
 import { getActiveRoutine, getDay, getDays, getSlots, resolveNextDay } from '@/db/repositories/program';
-import { cancelSession, deleteSession, getActiveSession, getSessionSets, planProgress, skipDay, startSession } from '@/db/repositories/sessions';
+import { recentMuscles } from '@/db/repositories/progress';
+import { cancelSession, deleteSession, getActiveSession, getSessionSets, listSessions, planProgress, skipDay, startSession } from '@/db/repositories/sessions';
 import { useSettings } from '@/db/repositories/settings';
 import { getDayTotal } from '@/db/repositories/water';
+import { estimateSeconds, fitSession, type FitSlot } from '@/engine/planner';
+import { recoverySession } from '@/engine/recovery';
+import { WARMUP_BUDGET_S } from '@/engine/warmup';
+import { drillKit } from '@/features/profile';
 import { Elapsed } from '@/features/session/Elapsed';
-import { suggestFor, suggestionContext } from '@/features/session/prescription';
+import { fmtSet, suggestFor, suggestionContext } from '@/features/session/prescription';
+import { RoutineSheet } from '@/features/warmup/RoutineSheet';
 import { todayISO } from '@/lib/date';
 import { kg, ml } from '@/lib/format';
 import { hydrationTarget } from '@/services/hydration';
 import { cancelRest } from '@/services/restTimer';
 import { color, font, layout, radius, space } from '@/theme/tokens';
+
+const BUDGETS = [0, 45, 30, 20];
 
 /** Today: what to train, one big Start button. Everything else is a glance. */
 export default function Today() {
@@ -36,6 +45,7 @@ export default function Today() {
         weighIn: getWeighIn(today),
         water: getDayTotal(today),
         waterTarget: hydrationTarget().ml,
+        trainedToday: listSessions(5).some((s) => s.date === today),
       };
     },
     ['session', 'set_log', 'session_exercise', 'routine', 'routine_day', 'weigh_in', 'water_log', 'setting'],
@@ -43,6 +53,8 @@ export default function Today() {
   );
 
   const [pickedDayId, setPickedDayId] = useState<string | null>(null);
+  const [budget, setBudget] = useState(0);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
   const day = state.days.find((d) => d.id === pickedDayId) ?? state.next;
 
   const preview = useLive(
@@ -54,6 +66,8 @@ export default function Today() {
     ['routine_slot', 'exercise', 'exercise_session_stat', 'exercise_link', 'equipment', 'session'],
     [day?.id],
   );
+  const kit = drillKit(settings);
+  const recovery = useMemo(() => (recoveryOpen ? recoverySession(recentMuscles(2), kit) : { items: [], seconds: 0 }), [recoveryOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!settings.setupDone) return <Redirect href="/setup" />;
 
@@ -62,6 +76,34 @@ export default function Today() {
   const gear = <IconButton icon="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />;
   const glance = <Glance water={state.water} target={state.waterTarget} weighedKg={state.weighIn?.kg ?? null} />;
   const startEmpty = () => router.push(`/session/${startSession(null).id}`);
+  const restDay = !settings.trainingDays.includes(new Date().getDay());
+  const recoveryCard =
+    restDay || state.trainedToday ? (
+      <Card onPress={() => setRecoveryOpen(true)}>
+        <View style={styles.rowCenter}>
+          <Icon name="moon" size={20} color={color.accent} />
+          <View style={styles.flex1}>
+            <Text style={styles.rowTitle}>{state.trainedToday ? 'Done for today' : 'Rest day'} · easy mobility</Text>
+            <Text style={styles.muted}>About 8 minutes, gentle. Optional.</Text>
+          </View>
+          <Icon name="chevronRight" size={18} color={color.textMuted} />
+        </View>
+      </Card>
+    ) : null;
+  const recoverySheet = (
+    <RoutineSheet
+      visible={recoveryOpen}
+      title="Recovery"
+      routine={recovery}
+      available={kit}
+      onClose={() => setRecoveryOpen(false)}
+      doneLabel="Done"
+      onDone={() => {
+        setRecoveryOpen(false);
+        toast('Nice — recovery done');
+      }}
+    />
+  );
 
   /* ---------------------------- in progress ----------------------------- */
   if (state.active) {
@@ -114,21 +156,27 @@ export default function Today() {
         <Card>
           <Text style={styles.cardTitle}>{routine ? `${routine.name} has no days yet` : 'No active plan'}</Text>
           <Text style={styles.muted}>{routine ? 'Add a day and some exercises to get started.' : 'Pick a ready-made plan or build your own.'}</Text>
-          <PrimaryButton
-            label={routine ? 'Edit plan' : 'Choose a plan'}
-            style={styles.gapTop}
-            onPress={() => router.push(routine ? `/plan/${routine.id}` : '/program')}
-          />
+          <PrimaryButton label={routine ? 'Edit plan' : 'Choose a plan'} style={styles.gapTop} onPress={() => router.push(routine ? `/plan/${routine.id}` : '/program')} />
         </Card>
         <PrimaryButton label="Start an empty workout" tone="ghost" icon={<Icon name="plus" size={16} />} onPress={startEmpty} />
+        {recoveryCard}
         <View style={styles.gap} />
         {glance}
+        {recoverySheet}
       </Screen>
     );
   }
 
   /* ----------------------------- next day -------------------------------- */
-  const minutes = Math.round(preview.reduce((m, { slot }) => m + (slot.targetSets * (slot.restSeconds + 45)) / 60, 0) / 5) * 5;
+  const slots: FitSlot[] = preview.map(({ slot }) => {
+    const c = CATALOG_BY_ID.get(slot.exerciseId);
+    return { exerciseId: slot.exerciseId, sets: slot.targetSets, restSeconds: slot.restSeconds, compound: c?.compound ?? true, repHi: slot.repHi, measure: c?.measure };
+  });
+  const fullMinutes = Math.round((estimateSeconds(slots) + WARMUP_BUDGET_S[settings.warmupMode]) / 60 / 5) * 5;
+  const budgets = BUDGETS.filter((m) => m === 0 || m < fullMinutes);
+  const fit = budget > 0 && budget < fullMinutes ? fitSession(slots, budget, WARMUP_BUDGET_S.quick) : null;
+  const fitSets = new Map((fit?.slots ?? []).map((s) => [s.exerciseId, s.sets]));
+
   const skip = () => {
     const id = skipDay(day.id);
     setPickedDayId(null);
@@ -138,52 +186,85 @@ export default function Today() {
   return (
     <View style={styles.flex}>
       <Screen title={title} subtitle={subtitle} right={gear}>
-        <Text style={styles.eyebrow}>{day.id === state.next?.id ? 'UP NEXT' : 'CHOSEN'} · {state.routine.name.toUpperCase()}</Text>
+        {restDay && !state.trainedToday ? recoveryCard : null}
+        <Text style={styles.eyebrow}>
+          {day.id === state.next?.id ? 'UP NEXT' : 'CHOSEN'} · {state.routine.name.toUpperCase()}
+        </Text>
         <Text style={styles.dayTitle}>{day.label}</Text>
         <Text style={styles.muted}>
-          {preview.length} exercises · about {minutes} min
+          {preview.length} exercises · about {fit ? fit.minutes : fullMinutes} min
         </Text>
 
         {state.days.length > 1 ? (
-          <View style={styles.dayChips}>
+          <View style={styles.chipsGap}>
             <ChipRow options={state.days.map((d) => ({ label: d.label, value: d.id }))} value={day.id} onChange={setPickedDayId} fill={false} />
           </View>
         ) : null}
 
         <Card style={styles.list}>
           {preview.length === 0 ? <Text style={styles.muted}>No exercises on this day yet.</Text> : null}
-          {preview.map(({ slot, suggestion }, i) => (
-            <View key={slot.id} style={[styles.exRow, i > 0 && styles.divider]}>
-              <Text style={styles.exIdx}>{i + 1}</Text>
-              <View style={styles.flex1}>
-                <Text style={styles.exName} numberOfLines={1}>
-                  {slot.exercise.name}
-                </Text>
-                <Text style={styles.exMeta}>
-                  {slot.targetSets} × {slot.repLo}–{slot.repHi}
-                  {slot.supersetGroup ? `  ·  superset ${slot.supersetGroup}` : ''}
-                </Text>
+          {preview.map(({ slot, suggestion }, i) => {
+            const cut = fit !== null && !fitSets.has(slot.exerciseId);
+            const sets = fitSets.get(slot.exerciseId) ?? slot.targetSets;
+            const measure = suggestion.measure;
+            return (
+              <View key={slot.id} style={[styles.exRow, i > 0 && styles.divider, cut && styles.cut]}>
+                <Text style={styles.exIdx}>{i + 1}</Text>
+                <View style={styles.flex1}>
+                  <Text style={[styles.exName, cut && styles.strike]} numberOfLines={1}>
+                    {slot.exercise.name}
+                  </Text>
+                  <Text style={styles.exMeta}>
+                    {cut ? 'left out today' : `${sets} × ${slot.repLo}–${slot.repHi}${measure === 'time' ? ' s' : ''}`}
+                    {!cut && slot.supersetGroup ? `  ·  superset ${slot.supersetGroup}` : ''}
+                  </Text>
+                </View>
+                {!cut ? (
+                  <Text style={styles.exWeight}>
+                    {suggestion.verdict === 'CALIBRATE'
+                      ? slot.startWeight
+                        ? kg(slot.startWeight)
+                        : 'new'
+                      : measure === 'time'
+                        ? fmtSet('time', suggestion.weight, suggestion.repTarget[0])
+                        : suggestion.weight > 0
+                          ? kg(suggestion.weight)
+                          : '—'}
+                  </Text>
+                ) : null}
               </View>
-              <Text style={styles.exWeight}>
-                {suggestion.verdict === 'CALIBRATE' ? (slot.startWeight ? kg(slot.startWeight) : 'new') : kg(suggestion.weight)}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
         </Card>
+
+        {budgets.length > 1 ? (
+          <View style={styles.budget}>
+            <Text style={styles.label}>Short on time?</Text>
+            <ChipRow options={budgets.map((m) => ({ label: m === 0 ? 'Full' : `${m} min`, value: m }))} value={budget} onChange={setBudget} />
+            {fit ? (
+              <Text style={styles.muted}>
+                Keeps the main lifts{fit.trimmed.length ? `, trims ${fit.trimmed.length}` : ''}
+                {fit.dropped.length ? `, leaves out ${fit.dropped.length}` : ''} · quick warm-up{fit.over ? ' · still a little over' : ''}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         <View style={styles.secondary}>
           <PrimaryButton label="Skip day" tone="ghost" icon={<Icon name="skip" size={16} />} style={styles.flex1} onPress={skip} />
           <PrimaryButton label="Empty workout" tone="ghost" icon={<Icon name="plus" size={16} />} style={styles.flex1} onPress={startEmpty} />
         </View>
+        {state.trainedToday ? recoveryCard : null}
         <View style={styles.gap} />
         {glance}
+        {recoverySheet}
       </Screen>
       <ActionBar>
         <PrimaryButton
-          label={`Start ${day.label}`}
+          label={`Start ${day.label}${fit ? ` · ${budget} min` : ''}`}
           size="gym"
           icon={<Icon name="play" size={18} color={color.onAccent} />}
-          onPress={() => router.push(`/session/${startSession(day.id).id}`)}
+          onPress={() => router.push(`/session/${startSession(day.id, fit ? { fit: fit.slots } : {}).id}`)}
         />
       </ActionBar>
     </View>
@@ -232,18 +313,24 @@ const styles = StyleSheet.create({
   flex1: { flex: 1 },
   gap: { height: space.lg },
   gapTop: { marginTop: space.lg },
+  rowCenter: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  rowTitle: { ...font.body, color: color.text, fontWeight: '600' },
   eyebrow: { ...font.caption, color: color.textMuted, letterSpacing: 1, fontWeight: '600' },
   dayTitle: { ...font.title, color: color.text, marginTop: space.xs },
   cardTitle: { ...font.heading, color: color.text, marginTop: space.xs },
   muted: { ...font.label, color: color.textMuted, marginTop: space.xs },
-  dayChips: { marginTop: space.lg },
+  label: { ...font.label, color: color.text, fontWeight: '600' },
+  chipsGap: { marginTop: space.lg },
   list: { marginTop: space.lg, paddingVertical: space.xs },
   exRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  cut: { opacity: 0.45 },
+  strike: { textDecorationLine: 'line-through' },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
   exIdx: { ...font.label, ...font.numeric, color: color.textFaint, width: space.lg },
   exName: { ...font.body, color: color.text, fontWeight: '600' },
   exMeta: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: 2 },
   exWeight: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
+  budget: { gap: space.sm, marginBottom: space.md },
   secondary: { flexDirection: 'row', gap: space.sm },
   stats: { flexDirection: 'row', gap: space.xl, marginTop: space.md },
   stat: { gap: 2 },
@@ -268,3 +355,4 @@ const styles = StyleSheet.create({
     borderTopColor: color.border,
   },
 });
+

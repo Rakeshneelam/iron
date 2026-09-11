@@ -3,14 +3,17 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Card, ChipRow, Icon, PrimaryButton, Screen, SectionHeader, Stepper } from '@/components';
+import { Card, ChipRow, confirm, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, ToggleChips } from '@/components';
+import { CATALOG_BY_ID } from '@/data/catalog';
+import { wipeAllData } from '@/db/repositories/admin';
 import { PHASES, setSetting, useSettings } from '@/db/repositories/settings';
+import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle, toolsOf, TOOL_OPTIONS, WEEKDAYS } from '@/features/profile';
 import { GOALS } from '@/features/settings/goals';
 import { Row, TimeAdjuster } from '@/features/settings/Row';
+import { MODE_OPTIONS } from '@/features/warmup/labels';
 import { exportAll } from '@/services/export';
 import { openBatteryOptimisationSettings, rescheduleAll } from '@/services/notifications';
 import { color, font, hit, radius, space } from '@/theme/tokens';
-
 
 const ON_OFF = [
   { label: 'On', value: 1 },
@@ -23,10 +26,29 @@ export default function SettingsScreen() {
   useEffect(() => setName(s.name), [s.name]);
   const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const tools = toolsOf(s);
 
   const bool = (key: 'calorieCycling' | 'hapticsEnabled' | 'restTimerAutoStart') => (
     <ChipRow options={ON_OFF} value={s[key] ? 1 : 0} onChange={(v) => setSetting(key, v === 1)} fill={false} />
   );
+
+  const deleteAll = () =>
+    confirm({
+      title: 'Delete all your data?',
+      message: 'Workouts, plans, body measurements, water, food and settings are removed from this phone. Export first if you want a copy. This cannot be undone.',
+      confirmLabel: 'Continue',
+      destructive: true,
+      onConfirm: () =>
+        confirm({
+          title: 'Really delete everything?',
+          confirmLabel: 'Delete everything',
+          destructive: true,
+          onConfirm: () => {
+            wipeAllData();
+            router.replace('/setup');
+          },
+        }),
+    });
 
   return (
     <Screen title="Settings" right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
@@ -45,7 +67,7 @@ export default function SettingsScreen() {
           <Stepper label="Height" suffix="cm" value={s.heightCm} step={1} min={120} max={230} onChange={(v) => setSetting('heightCm', v)} />
           <Stepper label="Age" value={s.age} step={1} min={14} max={99} onChange={(v) => setSetting('age', v)} />
         </View>
-        <Row label="Sex" hint="Used for the first calorie estimate only.">
+        <Row label="Sex" hint="Calorie estimate and body diagrams.">
           <ChipRow
             options={[
               { label: 'Male', value: 'male' },
@@ -56,43 +78,68 @@ export default function SettingsScreen() {
             fill={false}
           />
         </Row>
-        <Text style={styles.label}>Goal</Text>
+        <Text style={styles.label}>Body-weight goal</Text>
         <ChipRow options={GOALS.filter((g) => PHASES.includes(g.value))} value={s.phase} onChange={(v) => setSetting('phase', v)} />
       </Card>
 
-      <SectionHeader title="Workout" />
+      <SectionHeader title="Training" />
       <Card>
+        <Text style={styles.label}>Main goal</Text>
+        <ChipRow options={GOAL_OPTIONS} value={s.goalFocus} onChange={(v) => setSetting('goalFocus', v)} />
+        <Text style={styles.label}>Experience</Text>
+        <ChipRow options={LEVEL_OPTIONS} value={s.experience} onChange={(v) => setSetting('experience', v)} />
+        <Text style={styles.label}>Training days</Text>
+        <ToggleChips options={WEEKDAYS} values={s.trainingDays} onToggle={(d) => { setSetting('trainingDays', toggle(s.trainingDays, d)); void rescheduleAll(); }} />
+        <Text style={styles.hint}>Your plan runs in order whatever the day — these only set reminders and "planned this week".</Text>
+        <View style={styles.gap}>
+          <Stepper label="Typical session length" suffix="min" value={s.trainingMinutes} step={5} min={15} max={180} onChange={(v) => setSetting('trainingMinutes', v)} />
+        </View>
+        <Text style={styles.label}>Default warm-up</Text>
+        <ChipRow options={MODE_OPTIONS} value={s.warmupMode} onChange={(v) => setSetting('warmupMode', v)} />
         <Row label="Auto-start rest timer">{bool('restTimerAutoStart')}</Row>
         <Row label="Haptics">{bool('hapticsEnabled')}</Row>
-        <Stepper label="Typical session length" suffix="min" value={s.trainingMinutes} step={15} min={15} max={180} onChange={(v) => setSetting('trainingMinutes', v)} />
-      </Card>
-      <Card onPress={() => router.push('/settings/equipment')}>
-        <View style={styles.linkRow}>
-          <View style={styles.flex1}>
-            <Text style={styles.link}>Gym equipment</Text>
-            <Text style={styles.hint}>Plates, dumbbells, bars — suggestions only use weights you can load.</Text>
-          </View>
-          <Icon name="chevronRight" size={20} color={color.textMuted} />
-        </View>
-      </Card>
-      <Card onPress={() => void openBatteryOptimisationSettings()}>
-        <View style={styles.linkRow}>
-          <View style={styles.flex1}>
-            <Text style={styles.link}>Battery optimisation</Text>
-            <Text style={styles.hint}>Lets the rest timer run with the screen off.</Text>
-          </View>
-          <Icon name="chevronRight" size={20} color={color.textMuted} />
-        </View>
       </Card>
 
-      <SectionHeader title="Day & reminders" />
+      <SectionHeader title="Equipment" />
+      <Card>
+        <ChipRow options={PRESET_OPTIONS} value={s.tools.length ? null : s.equipmentPreset} onChange={(v) => { setSetting('equipmentPreset', v); setSetting('tools', []); }} fill={false} />
+        <Text style={styles.label}>What you have{s.tools.length ? ' (custom)' : ''}</Text>
+        <ToggleChips options={TOOL_OPTIONS} values={[...tools]} onToggle={(t) => setSetting('tools', toggle([...tools], t))} />
+        <Text style={styles.hint}>Swaps, new plans and the exercise picker only suggest what you can do here.</Text>
+      </Card>
+      <Card onPress={() => router.push('/settings/equipment')}>
+        <LinkRow title="Plates and dumbbells" hint="Weights you can actually load — suggestions snap to these." />
+      </Card>
+
+      <SectionHeader title="Preferences" />
+      <Card>
+        <Text style={styles.label}>Go easy on (optional)</Text>
+        <ToggleChips options={LIMITATION_OPTIONS} values={s.limitations} onToggle={(v) => setSetting('limitations', toggle(s.limitations, v))} />
+        <Text style={styles.hint}>Exercises that load these areas are avoided in swaps and new plans. Not medical advice.</Text>
+        <Text style={styles.label}>Exercises you’d rather not do</Text>
+        {s.disliked.length === 0 ? <Text style={styles.hint}>None. Mark one from its guide in the exercise library.</Text> : null}
+        {s.disliked.map((id) => (
+          <View key={id} style={styles.dislike}>
+            <Text style={[styles.body, styles.flex1]}>{CATALOG_BY_ID.get(id)?.name ?? id}</Text>
+            <IconButton icon="close" accessibilityLabel="Allow again" onPress={() => setSetting('disliked', s.disliked.filter((x) => x !== id))} />
+          </View>
+        ))}
+      </Card>
+
+      <SectionHeader title="Reminders" />
+      <Card onPress={() => router.push('/settings/reminders')}>
+        <LinkRow title="Reminders" hint="Water, workouts, weigh-ins, measurements, weekly summary — each on or off." />
+      </Card>
       <Card>
         <Row label="Wake">
           <TimeAdjuster value={s.wakeMinutes} max={s.sleepMinutes - 60} onChange={(v) => { setSetting('wakeMinutes', v); void rescheduleAll(); }} />
         </Row>
-        <Row label="Sleep" hint="No reminder outside these hours.">
+        <Row label="Sleep" hint="Quiet hours: nothing between sleep and wake.">
           <TimeAdjuster value={s.sleepMinutes} min={s.wakeMinutes + 60} onChange={(v) => { setSetting('sleepMinutes', v); void rescheduleAll(); }} />
         </Row>
+      </Card>
+      <Card onPress={() => void openBatteryOptimisationSettings()}>
+        <LinkRow title="Battery optimisation" hint="Lets the rest timer and reminders run with the screen off." />
       </Card>
 
       <SectionHeader title="Water & food" />
@@ -127,10 +174,10 @@ export default function SettingsScreen() {
 
       <SectionHeader title="Your data" />
       <Card>
-        <Text style={styles.body}>Export everything</Text>
+        <Text style={styles.bodyStrong}>Export everything</Text>
         <Text style={styles.hint}>
-          A structured JSON file you can hand to a coach or an AI assistant (plans, every workout with planned vs done, body, water, weekly
-          summaries), CSV files for spreadsheets, and a full backup.
+          A structured JSON file for a coach or an AI assistant (profile, plans, every workout with planned vs done, records, body, water, weekly summaries), CSVs for
+          spreadsheets, and a full backup.
         </Text>
         <PrimaryButton
           label={exporting ? 'Exporting…' : 'Export to a folder'}
@@ -150,30 +197,37 @@ export default function SettingsScreen() {
           }}
         />
         {exportMsg ? <Text style={styles.hint}>{exportMsg}</Text> : null}
+        <PrimaryButton label="Delete all my data" tone="ghost" icon={<Icon name="trash" size={16} color={color.danger} />} style={styles.gap} onPress={deleteAll} />
       </Card>
       <Text style={styles.footer}>
-        Iron {Constants.expoConfig?.version ?? ''} · all data stays on this phone. Each phone has its own profile, plans and history.
+        Iron {Constants.expoConfig?.version ?? ''} · no account, no server. Everything stays on this phone, and nothing is sent anywhere unless you export it.
       </Text>
     </Screen>
   );
 }
 
+function LinkRow({ title, hint }: { title: string; hint: string }) {
+  return (
+    <View style={styles.linkRow}>
+      <View style={styles.flex1}>
+        <Text style={styles.body}>{title}</Text>
+        <Text style={styles.hint}>{hint}</Text>
+      </View>
+      <Icon name="chevronRight" size={20} color={color.textMuted} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
-  input: {
-    ...font.body,
-    color: color.text,
-    backgroundColor: color.surfaceHigh,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    minHeight: hit.default,
-  },
+  input: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.default },
   pair: { flexDirection: 'row', gap: space.md, marginVertical: space.md },
   label: { ...font.caption, color: color.textMuted, marginTop: space.md, marginBottom: space.xs },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  link: { ...font.body, color: color.text },
-  body: { ...font.body, color: color.text, fontWeight: '600' },
+  body: { ...font.body, color: color.text },
+  bodyStrong: { ...font.body, color: color.text, fontWeight: '600' },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   gap: { marginTop: space.md },
+  dislike: { flexDirection: 'row', alignItems: 'center', minHeight: hit.default },
   footer: { ...font.caption, color: color.textFaint, textAlign: 'center', marginTop: space.lg },
 });

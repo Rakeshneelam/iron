@@ -70,7 +70,7 @@ export function hydrationPlan(now: Date = new Date()): HydrationPlan {
 
   const caughtUpAt = wake + Math.min(1, consumedMl / Math.max(1, targetMl)) * span;
   const from = Math.max(nowMin, Math.ceil(caughtUpAt));
-  const slots = scheduleHydration({ targetMl, consumedMl, nowMinutes: from, wakeMinutes: wake, sleepMinutes: sleep }).filter(
+  const slots = scheduleHydration({ targetMl, consumedMl, nowMinutes: from, wakeMinutes: wake, sleepMinutes: sleep, minGapMinutes: s.reminders.water.minGapMinutes }).filter(
     (slot) => slot.atMinutes > nowMin && slot.atMinutes >= wake && slot.atMinutes < sleep,
   );
   return { targetMl, consumedMl, expectedByNowMl, ahead, slots, breakdown, wakeMinutes: wake, sleepMinutes: sleep };

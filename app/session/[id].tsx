@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, ReasonLine, Sheet, toast } from '@/components';
+import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, ReasonLine, Sheet, toast } from '@/components';
+import { CATALOG, CATALOG_BY_ID, type Stress } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import type { Exercise } from '@/db/repositories/exercises';
 import { getDay } from '@/db/repositories/program';
@@ -18,27 +19,35 @@ import {
   getSession,
   getSessionPlan,
   getSessionSets,
+  getWarmupState,
   insertSet,
   isReadinessDone,
   removeSessionExercise,
   restoreSessionExercise,
   setSessionOrder,
+  setWarmupState,
   skipExercise,
   swapSessionExercise,
   unskipExercise,
   type PlannedExercise,
   type SetRow,
 } from '@/db/repositories/sessions';
-import { useSettings } from '@/db/repositories/settings';
+import { setSetting, useSettings } from '@/db/repositories/settings';
+import { RULE_TEXT } from '@/engine/adjust';
+import { substitutes } from '@/engine/substitute';
+import { sessionWarmup } from '@/engine/warmup';
 import { ExerciseInfoSheet } from '@/features/exercises/ExerciseInfoSheet';
 import { ExercisePicker } from '@/features/exercises/ExercisePicker';
+import { drillKit, toolsOf } from '@/features/profile';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { Elapsed } from '@/features/session/Elapsed';
 import { PlateSheet } from '@/features/session/PlateSheet';
-import { readinessFrom, suggestFor, suggestionContext, VERDICT_LABEL, VERDICT_TONE } from '@/features/session/prescription';
+import { fmtSet, liftOf, rampFor, readinessFrom, suggestFor, suggestionContext, verdictLabel, VERDICT_TONE } from '@/features/session/prescription';
 import { ReadinessPrompt } from '@/features/session/ReadinessPrompt';
 import { RestTimerBar } from '@/features/session/RestTimerBar';
 import { SetControls } from '@/features/session/SetControls';
+import { minutesLabel, MODE_OPTIONS } from '@/features/warmup/labels';
+import { RoutineSheet } from '@/features/warmup/RoutineSheet';
 import { fmtClock, fmtDayLabel } from '@/lib/date';
 import { kg, kgNum } from '@/lib/format';
 import { cancelRest, startRest } from '@/services/restTimer';
@@ -65,6 +74,7 @@ export default function SessionScreen() {
   const plan = useLive(() => getSessionPlan(id), ['session_exercise', 'set_log', 'exercise'], [id]);
   const sets = useLive(() => getSessionSets(id), ['set_log'], [id]);
   const readinessDone = useLive(() => isReadinessDone(id), ['setting'], [id]);
+  const warmupState = useLive(() => getWarmupState(id), ['setting'], [id]);
   const ctx = useMemo(() => suggestionContext(), []);
 
   const [index, setIndex] = useState<number | null>(null);
@@ -74,6 +84,8 @@ export default function SessionScreen() {
   const [editing, setEditing] = useState<SetRow | null>(null);
   const [info, setInfo] = useState<Exercise | null>(null);
   const [showWarmups, setShowWarmups] = useState(false);
+  const [warmupOpen, setWarmupOpen] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -94,6 +106,21 @@ export default function SessionScreen() {
   }, [plan.length]);
   const idx = Math.min(index ?? firstOpen, Math.max(0, plan.length - 1));
   const current = plan[idx];
+
+  // The session's lifts in order (skipped ones don't warm anything up).
+  const active = useMemo(() => plan.filter((p) => !p.skipped), [plan]);
+  const lifts = useMemo(() => active.map((p) => liftOf(p.exercise, p.slot)), [active]);
+  const liftIdx = current ? active.findIndex((p) => p.exerciseId === current.exerciseId) : -1;
+
+  const warmup = useMemo(
+    () =>
+      sessionWarmup(lifts, settings.warmupMode, {
+        level: settings.experience,
+        available: drillKit(settings),
+        avoidImpact: settings.limitations.includes('impact'),
+      }),
+    [lifts, settings],
+  );
 
   const readiness = useMemo(
     () => readinessFrom(session),
@@ -129,7 +156,7 @@ export default function SessionScreen() {
     } else if (suggestion.verdict === 'CALIBRATE') {
       const prevTop = last?.sets.filter((s) => s.isWarmup === 0).reduce((m, s) => Math.max(m, s.weight), 0) ?? 0;
       setWeight(current.slot?.startWeight ?? (prevTop || (current.exercise.loadType === 'barbell' ? 20 : 0)));
-      setReps(suggestion.repTarget[1]);
+      setReps(suggestion.repTarget[suggestion.measure === 'time' ? 0 : 1]);
     } else {
       setWeight(suggestion.weight);
       setReps(suggestion.repTarget[0]);
@@ -139,6 +166,7 @@ export default function SessionScreen() {
   };
 
   useEffect(prefill, [current?.exerciseId, suggestion]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setWhyOpen(false), [current?.exerciseId]);
 
   if (!session || session.endedAt) {
     return (
@@ -157,6 +185,18 @@ export default function SessionScreen() {
   const currentState = current ? stateOf(current) : 'todo';
   const next = plan.slice(idx + 1).find((p) => stateOf(p) !== 'done' && stateOf(p) !== 'skipped');
   const nextIdx = next ? plan.indexOf(next) : -1;
+
+  const entry = current ? CATALOG_BY_ID.get(current.exerciseId) : undefined;
+  const measure = suggestion?.measure ?? 'reps';
+  const loadType = current?.exercise.loadType ?? 'barbell';
+  const repHi = current?.slot?.repHi ?? suggestion?.repTarget[1] ?? 12;
+  const unit: 'reps' | 'sec' | 'min' = measure === 'time' ? (repHi >= 180 ? 'min' : 'sec') : 'reps';
+  const cardio = entry?.pattern === 'conditioning';
+  const weightLabel = cardio ? null : loadType === 'band' ? 'band' : loadType === 'bodyweight' ? '+kg' : 'kg';
+  const setText = (w: number, r: number) => fmtSet(measure, w, r, loadType);
+
+  const workKg = suggestion ? (suggestion.verdict === 'CALIBRATE' ? (current?.slot?.startWeight ?? 0) : suggestion.weight) : 0;
+  const ramp = current && liftIdx >= 0 ? rampFor(lifts, liftIdx, workKg, step, warmupState !== 'skipped') : [];
 
   const goTo = (i: number) => {
     setIndex(Math.max(0, Math.min(i, plan.length - 1)));
@@ -178,11 +218,12 @@ export default function SessionScreen() {
       restTakenSeconds: prev ? Math.round((Date.now() - Date.parse(prev.loggedAt)) / 1000) : undefined,
     });
     setIndex(idx); // stay here, even once the target is reached
+    if (warmupState === 'pending' && !asWarmup) setWarmupState(id, 'skipped');
     if (settings.hapticsEnabled) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPain(false);
     if (asWarmup) return;
-    if (settings.restTimerAutoStart) void startRest(id, restSeconds, current.exercise.name);
-    toast(`Set ${exWork.length + 1} logged · ${kgNum(w)} kg × ${r}`, {
+    if (settings.restTimerAutoStart && !cardio) void startRest(id, restSeconds, current.exercise.name);
+    toast(`Set ${exWork.length + 1} logged · ${setText(w, r)}`, {
       label: 'Undo',
       onPress: () => {
         deleteSet(row.id);
@@ -245,11 +286,29 @@ export default function SessionScreen() {
     });
   };
 
+  const swapSuggestions =
+    picker?.mode === 'swap'
+      ? (() => {
+          const from = CATALOG_BY_ID.get(picker.from.exerciseId);
+          return from
+            ? substitutes(from, CATALOG, {
+                available: toolsOf(settings),
+                disliked: new Set(settings.disliked),
+                limitations: new Set(settings.limitations as Stress[]),
+                exclude: new Set(plan.map((p) => p.exerciseId)),
+              }, 4)
+            : [];
+        })()
+      : [];
+
   const meta = current
     ? [
-        current.slot ? `${current.slot.targetSets} × ${current.slot.repLo}–${current.slot.repHi}` : suggestion ? `${suggestion.sets} × ${suggestion.repTarget[0]}–${suggestion.repTarget[1]}` : '',
-        `RIR ${current.slot?.targetRir ?? suggestion?.targetRIR ?? 2}`,
-        `rest ${fmtClock(restSeconds)}`,
+        current.slot
+          ? `${current.slot.targetSets} × ${current.slot.repLo}–${current.slot.repHi}${unit === 'reps' ? '' : unit === 'sec' ? ' s' : ''}`
+          : suggestion
+            ? `${suggestion.sets} × ${suggestion.repTarget[0]}–${suggestion.repTarget[1]}`
+            : '',
+        cardio ? '' : `rest ${fmtClock(restSeconds)}`,
         current.slot?.supersetGroup ? `superset ${current.slot.supersetGroup}` : '',
         current.adHoc ? 'added today' : '',
       ]
@@ -258,15 +317,31 @@ export default function SessionScreen() {
     : '';
   const calibrating = suggestion?.verdict === 'CALIBRATE';
   const differs = suggestion && !calibrating && (Math.abs(weight - suggestion.weight) > 1e-6 || reps < suggestion.repTarget[0]);
+  const heroText = !suggestion
+    ? ''
+    : unit !== 'reps'
+      ? `${unit === 'min' ? `${Math.round(suggestion.repTarget[0] / 60)}–${Math.round(suggestion.repTarget[1] / 60)} min` : `${suggestion.repTarget[0]}–${suggestion.repTarget[1]} s`}`
+      : calibrating
+        ? current?.slot?.startWeight
+          ? kg(current.slot.startWeight)
+          : 'Your pick'
+        : loadType === 'band'
+          ? suggestion.weight > 0
+            ? `Band ${kgNum(suggestion.weight)}`
+            : 'Pick a band'
+          : loadType === 'bodyweight' && suggestion.weight === 0
+            ? 'Bodyweight'
+            : kg(suggestion.weight);
+  const heroSub = !suggestion
+    ? ''
+    : unit !== 'reps'
+      ? `${suggestion.sets} ${suggestion.sets === 1 ? 'round' : 'sets'}${suggestion.weight > 0 ? ` · ${kg(suggestion.weight)}` : ''}`
+      : `${suggestion.sets} sets · ${suggestion.repTarget[0]}–${suggestion.repTarget[1]} reps · RIR ${suggestion.targetRIR}`;
 
   return (
     <View style={[styles.flex, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <IconButton
-          icon="close"
-          accessibilityLabel="Leave the workout open and go back"
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
-        />
+        <IconButton icon="close" accessibilityLabel="Leave the workout open and go back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
         <View style={styles.headerText}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {day?.label ?? 'Workout'}
@@ -292,6 +367,26 @@ export default function SessionScreen() {
       </View>
 
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
+        {warmupState === 'pending' && totalWork === 0 && warmup.items.length ? (
+          <Card>
+            <View style={styles.rowStart}>
+              <Icon name="flame" size={20} color={color.accent} />
+              <View style={styles.flex1}>
+                <Text style={styles.cardTitle}>Warm-up · {minutesLabel(warmup.seconds)}</Text>
+                <Text style={styles.caption} numberOfLines={2}>
+                  {warmup.items.map((i) => i.drill.name).join(' · ')}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.gapTop}>
+              <ChipRow options={MODE_OPTIONS} value={settings.warmupMode} onChange={(m) => setSetting('warmupMode', m)} />
+            </View>
+            <View style={[styles.row, styles.gapTop]}>
+              <PrimaryButton label="Start warm-up" style={styles.flex1} onPress={() => setWarmupOpen(true)} />
+              <PrimaryButton label="Skip" tone="ghost" onPress={() => setWarmupState(id, 'skipped')} />
+            </View>
+          </Card>
+        ) : null}
         {!readinessDone && sets.length === 0 ? <ReadinessPrompt sessionId={id} /> : null}
 
         {!current ? (
@@ -323,32 +418,52 @@ export default function SessionScreen() {
               <Card tone={suggestion.verdict === 'BACKOFF' || suggestion.verdict === 'RESET' ? 'warning' : 'default'}>
                 <View style={styles.rowBetween}>
                   <View style={styles.flex1}>
-                    <Text style={styles.hero}>{calibrating ? (current.slot?.startWeight ? kg(current.slot.startWeight) : 'Your pick') : kg(suggestion.weight)}</Text>
-                    <Text style={styles.heroSub}>
-                      {suggestion.sets} sets · {suggestion.repTarget[0]}–{suggestion.repTarget[1]} reps
+                    <Text style={styles.hero} numberOfLines={1} adjustsFontSizeToFit>
+                      {heroText}
                     </Text>
+                    <Text style={styles.heroSub}>{heroSub}</Text>
                   </View>
-                  <Pill label={VERDICT_LABEL[suggestion.verdict]} tone={VERDICT_TONE[suggestion.verdict]} />
+                  <Pill label={verdictLabel(suggestion)} tone={VERDICT_TONE[suggestion.verdict]} />
                 </View>
                 <ReasonLine text={suggestion.reason} />
+                <Pressable onPress={() => setWhyOpen(!whyOpen)} style={styles.why} accessibilityRole="button">
+                  <Text style={styles.whyText}>{whyOpen ? 'Hide' : 'Why this?'}</Text>
+                  <Icon name={whyOpen ? 'chevronUp' : 'chevronDown'} size={14} color={color.textMuted} />
+                </Pressable>
+                {whyOpen ? (
+                  <View style={styles.whyBox}>
+                    <Text style={styles.caption}>{RULE_TEXT[suggestion.verdict]}</Text>
+                    {last ? (
+                      <Text style={styles.caption}>
+                        Last time ({fmtDayLabel(last.date)}
+                        {suggestion.daysSinceLast !== null && suggestion.daysSinceLast > 7 ? `, ${suggestion.daysSinceLast} days ago` : ''}):{' '}
+                        {last.sets
+                          .filter((s) => s.isWarmup === 0)
+                          .map((s) => `${setText(s.weight, s.reps)} @ RIR ${s.rir}`)
+                          .join(', ')}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
                 <View style={styles.chips}>
                   {differs ? <PrimaryButton label="Use target" tone="neutral" onPress={prefill} /> : null}
-                  {suggestion.warmups.length ? (
+                  {ramp.length ? (
                     <PrimaryButton
-                      label={showWarmups ? 'Hide warm-ups' : `Warm-ups · ${exWarm.length}/${suggestion.warmups.length}`}
+                      label={showWarmups ? 'Hide warm-up sets' : `Warm-up sets · ${Math.min(exWarm.length, ramp.length)}/${ramp.length}`}
                       tone="ghost"
                       onPress={() => setShowWarmups(!showWarmups)}
                     />
                   ) : null}
-                  {current.exercise.loadType === 'barbell' ? <PrimaryButton label="Plates" tone="ghost" onPress={() => setPlates(true)} /> : null}
+                  {loadType === 'barbell' ? <PrimaryButton label="Plates" tone="ghost" onPress={() => setPlates(true)} /> : null}
                 </View>
                 {showWarmups
-                  ? suggestion.warmups.map((w, i) => {
+                  ? ramp.map((w, i) => {
                       const done = exWarm.length > i;
                       return (
-                        <Pressable key={i} disabled={done} onPress={() => logSet(true, w.weight, w.reps)} style={styles.warm}>
+                        <Pressable key={i} disabled={done} onPress={() => logSet(true, w.kg, w.reps)} style={styles.warm}>
                           <Text style={[styles.body, done && styles.mutedText]}>
-                            {kgNum(w.weight)} kg × {w.reps}
+                            {kgNum(w.kg)} kg × {w.reps}
+                            <Text style={styles.caption}>  {w.pct}%</Text>
                           </Text>
                           {done ? <Icon name="check" size={18} color={color.positive} /> : <Text style={styles.caption}>tap when done</Text>}
                         </Pressable>
@@ -367,13 +482,11 @@ export default function SessionScreen() {
                       <Pressable
                         key={s.id}
                         onPress={() => setEditing(s)}
-                        accessibilityLabel={`Set ${i + 1}: ${kgNum(s.weight)} kilos for ${s.reps}. Tap to edit.`}
+                        accessibilityLabel={`Set ${i + 1}: ${setText(s.weight, s.reps)}. Tap to edit.`}
                         style={({ pressed }) => [styles.setTile, styles.setDone, pressed && styles.pressed]}
                       >
-                        <Text style={styles.setVal}>
-                          {kgNum(s.weight)}×{s.reps}
-                        </Text>
-                        <Text style={styles.setSub}>{s.painFlag ? 'pain' : `RIR ${s.rir}`}</Text>
+                        <Text style={styles.setVal}>{setText(s.weight, s.reps)}</Text>
+                        <Text style={styles.setSub}>{s.painFlag ? 'pain' : cardio ? '' : `RIR ${s.rir}`}</Text>
                       </Pressable>
                     );
                   }
@@ -391,7 +504,7 @@ export default function SessionScreen() {
               {last
                 ? last.sets
                     .filter((s) => s.isWarmup === 0)
-                    .map((s) => `${kgNum(s.weight)}×${s.reps}`)
+                    .map((s) => setText(s.weight, s.reps))
                     .join('   ')
                 : 'First time on this exercise.'}
             </Text>
@@ -436,7 +549,10 @@ export default function SessionScreen() {
             reps={reps}
             rir={rir}
             pain={pain}
-            step={step}
+            step={loadType === 'band' ? 1 : step}
+            unit={unit}
+            weightLabel={weightLabel}
+            showEffort={!cardio}
             logLabel={`Log set ${exWork.length + 1}`}
             onWeight={setWeight}
             onReps={setReps}
@@ -483,6 +599,18 @@ export default function SessionScreen() {
             setPicker({ mode: 'add' });
           }}
         />
+        {warmup.items.length ? (
+          <PrimaryButton
+            label={warmupState === 'done' ? 'Warm-up done — open again' : 'Warm-up'}
+            tone="ghost"
+            icon={<Icon name="flame" size={16} />}
+            style={styles.gapTop}
+            onPress={() => {
+              setMenuOpen(false);
+              setWarmupOpen(true);
+            }}
+          />
+        ) : null}
         <View style={styles.menuEnd}>
           <PrimaryButton label="Finish workout" size="gym" icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={finish} />
           <PrimaryButton label="Cancel workout" tone="ghost" onPress={cancel} />
@@ -495,6 +623,7 @@ export default function SessionScreen() {
         <ExercisePicker
           excludeIds={plan.map((p) => p.exerciseId)}
           initialMuscle={picker?.mode === 'swap' ? picker.from.exercise.primaryMuscles[0] : undefined}
+          suggestions={swapSuggestions}
           onPick={(ex) => {
             if (picker?.mode === 'swap') {
               const from = picker.from;
@@ -509,6 +638,23 @@ export default function SessionScreen() {
         />
       </Sheet>
 
+      <RoutineSheet
+        visible={warmupOpen}
+        title="Warm-up"
+        routine={warmup}
+        available={drillKit(settings)}
+        onClose={() => setWarmupOpen(false)}
+        modes={{ options: MODE_OPTIONS, value: settings.warmupMode, onChange: (m) => setSetting('warmupMode', m) }}
+        doneLabel="Done — start lifting"
+        onDone={() => {
+          setWarmupState(id, 'done');
+          setWarmupOpen(false);
+        }}
+        onSkip={() => {
+          setWarmupState(id, 'skipped');
+          setWarmupOpen(false);
+        }}
+      />
       <PlateSheet visible={plates} weight={weight} onClose={() => setPlates(false)} />
       <EditSetSheet set={editing} step={step} onClose={() => setEditing(null)} />
       <ExerciseInfoSheet exercise={info} onClose={() => setInfo(null)} />
@@ -527,6 +673,10 @@ const styles = StyleSheet.create({
   strip: { flexDirection: 'row', gap: 3, paddingHorizontal: layout.screenPadding, paddingBottom: space.sm },
   stripSeg: { flex: 1, height: 4, borderRadius: radius.pill },
   stripOn: { height: 6, marginTop: -1, borderWidth: 1, borderColor: color.text },
+  row: { flexDirection: 'row', gap: space.sm },
+  rowStart: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
+  gapTop: { marginTop: space.md },
+  cardTitle: { ...font.body, color: color.text, fontWeight: '700' },
   exHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   exTitle: { flex: 1, alignItems: 'center', paddingVertical: space.xs },
   exNameRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
@@ -535,7 +685,10 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
   hero: { ...font.display, ...font.numeric, fontSize: 44, color: color.text },
   heroSub: { ...font.label, color: color.textMuted },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
+  why: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start', minHeight: hit.default },
+  whyText: { ...font.label, color: color.textMuted, textDecorationLine: 'underline' },
+  whyBox: { gap: space.sm, backgroundColor: color.bg, borderRadius: radius.md, padding: space.md },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
   warm: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
   sets: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   setTile: {
@@ -581,6 +734,5 @@ const styles = StyleSheet.create({
     borderBottomColor: color.border,
   },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  gapTop: { marginTop: space.md },
   menuEnd: { gap: space.sm, marginTop: space.xl, paddingBottom: space.md },
 });

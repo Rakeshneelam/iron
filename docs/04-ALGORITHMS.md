@@ -95,6 +95,54 @@ is the feature — fixed-schedule reminders get muted within a week.
 
 ---
 
+## Session preparation — `warmup.ts`
+
+One warm-up for the whole session, built from today's movement patterns (not one
+per lift). Phases: general (light cardio) → dynamic mobility (greedy cover of the
+most-demanded regions) → activation (only when relevant) → movement prep (the
+first time each loaded compound pattern appears). Budgets ≈ 4 / 8 / 13 minutes;
+the short version keeps the highest-PRIORITY items, it does not truncate the long
+one. Static stretching never appears before lifting (≥60 s per muscle reduces
+strength — Behm 2016).
+
+Warm-up sets (`rampSets`): few, low-rep, never at or above the working weight.
+Heavy (≤6 reps) compounds ramp from the empty bar through ~40/60/75/87%; moderate
+ones ~50/70/85%. A lift whose pattern is already warm gets 1–2 sets; isolation
+after its muscle is warm gets none; skipping the session warm-up adds one light set.
+
+## After training and rest days — `recovery.ts`
+
+Optional cooldown from what was actually trained (easy cardio, 2–4 static
+stretches, breathing), and a gentle rest-day mobility routine. Every item can be
+removed or replaced (`alternativesFor`).
+
+## Substitution and planning — `substitute.ts`, `planner.ts`
+
+`substitutes()` ranks alternatives by movement pattern, shared primary muscles,
+equipment availability, limitations and dislikes — each with its reasons.
+`recommendTemplates()` ranks plans for a profile (goal, level, days, minutes,
+equipment); `adaptTemplate()` swaps what the equipment/limitations rule out and
+lists every swap; `fitSession()` shortens a session: accessory sets → accessories →
+later compound sets → later compounds. Rest is never shortened.
+
+## Real-life adjustments — `adjust.ts`
+
+On top of prescribe(): 11–20 days since an exercise → hold the old weight before
+adding; 21–41 days → ~10% lighter; 42+ → ~20% lighter (strength drops after 3–4
+weeks of detraining and returns quickly). Timed sets and bands can't "add 2.5 kg",
+so the advice becomes "longer / harder variation" or "stronger band". `RULE_TEXT`
+is the "Why this?" explanation for every verdict.
+
+## Records, weekly insights, reminders
+
+`records.ts` detects heaviest weight, most reps at a weight, best e1RM and session
+volume (never on a first session). `insights.ts` turns the week into at most three
+data-backed sentences. `reminders.ts` plans workout / missed-workout / weigh-in /
+measurement / weekly / evening check-in / rest-day reminders: each switchable,
+never in quiet hours, only when something is left to do, max three a day.
+`recommend.ts` proposes plan changes (sets, swaps, frequency, recovery) that are
+only applied on approval.
+
 ## Replay (phase 7, high value)
 
 Because the engine is pure, you can run the whole set-log history through a modified

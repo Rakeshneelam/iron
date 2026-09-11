@@ -1,25 +1,32 @@
 /**
- * Local notifications only (docs/06). The complete list: rest timer, debt-based
- * hydration, morning weigh-in, weekly review. Adding more is an anti-feature.
- * Scheduling is idempotent — cancel by tag, then schedule — and is re-derived on
- * every app start and after every water log.
+ * Local notifications only (docs/06). What to send comes from the pure reminder
+ * planner (engine/reminders) and the debt-based water plan; this file only turns
+ * them into OS notifications. Scheduling is idempotent — cancel by tag, then
+ * schedule — and is re-derived on start, when the app goes to the background,
+ * and after water logs, so reminders always reflect what was actually logged.
  */
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Linking, Platform } from 'react-native';
 
-import { getWeighIn } from '@/db/repositories/body';
-import { listSessions } from '@/db/repositories/sessions';
-import { getRaw, getSettings, setRaw } from '@/db/repositories/settings';
+import { getWeighIn, listMeasurements } from '@/db/repositories/body';
+import { getDayTotals, intakeBetween } from '@/db/repositories/food';
+import { getActiveRoutine, resolveNextDay } from '@/db/repositories/program';
+import { getActiveSession, listSessions } from '@/db/repositories/sessions';
+import { getRaw, getSettings, setRaw, type AppSettings } from '@/db/repositories/settings';
 import { logWater } from '@/db/repositories/water';
-import { addDays, parseISODate, todayISO } from '@/lib/date';
+import { planReminders, type ReminderState } from '@/engine/reminders';
+import { addDays, daysBetweenISO, minutesSinceMidnight, parseISODate, todayISO } from '@/lib/date';
 
 import { hydrationPlan } from './hydration';
 
 export const CHANNELS = { rest: 'rest-timer', hydration: 'hydration', daily: 'daily' } as const;
-const TAGS = { hydration: 'hydration', weighIn: 'weigh-in', review: 'weekly-review' } as const;
+const TAGS = { hydration: 'hydration', reminder: 'reminder' } as const;
+/** Tags used by earlier versions; cancelled so an upgrade never leaves stale repeats behind. */
+const LEGACY_TAGS = ['weigh-in', 'weekly-review'] as const;
 export const WATER_CATEGORY = 'water-log';
+const REMINDER_CATEGORY = 'reminder';
 const WATER_ACTIONS = [250, 500] as const;
 
 Notifications.setNotificationHandler({
@@ -45,7 +52,7 @@ export async function ensureChannels(): Promise<void> {
     sound: null,
   });
   await Notifications.setNotificationChannelAsync(CHANNELS.daily, {
-    name: 'Weigh-in & weekly review',
+    name: 'Reminders',
     importance: Notifications.AndroidImportance.DEFAULT,
   });
 }
@@ -83,6 +90,7 @@ async function scheduleAt(when: Date, content: Notifications.NotificationContent
 /** Debt-based, waking hours only, silent when ahead — see hydrationPlan(). */
 export async function scheduleHydration(): Promise<void> {
   await cancelTagged(TAGS.hydration);
+  if (!getSettings().reminders.water.on) return;
   const plan = hydrationPlan();
   const today = todayISO();
   for (const slot of plan.slots) {
@@ -94,44 +102,47 @@ export async function scheduleHydration(): Promise<void> {
   }
 }
 
-/** Once, at wake time, on the weekdays he has actually trained in the last 4 weeks. */
-export async function scheduleMorningWeighIn(): Promise<void> {
-  await cancelTagged(TAGS.weighIn);
+/** What the reminder planner needs to know about today. */
+function reminderState(s: AppSettings): ReminderState {
+  const now = new Date();
+  const today = todayISO();
+  const yesterday = addDays(today, -1);
+  const weekday = now.getDay();
+  const recent = listSessions(20, ['completed', 'partial', 'cancelled', 'skipped']);
+  const lastMeasurement = listMeasurements()[0]?.date;
+  const water = hydrationPlan(now);
+  const routine = getActiveRoutine();
+  return {
+    weekday,
+    nowMinutes: minutesSinceMidnight(now),
+    wake: s.wakeMinutes,
+    sleep: s.sleepMinutes,
+    trainingDays: s.trainingDays,
+    trainedToday: recent.some((x) => x.date === today && x.status !== 'skipped'),
+    activeWorkout: getActiveSession() !== undefined,
+    // A deliberately skipped day was handled — only a silent miss counts.
+    missedYesterday: s.trainingDays.includes((weekday + 6) % 7) && !recent.some((x) => x.date === yesterday),
+    weighedToday: getWeighIn(today) !== undefined,
+    daysSinceMeasurement: lastMeasurement ? daysBetweenISO(lastMeasurement, today) : null,
+    waterBehind: s.reminders.water.on && !water.ahead && water.consumedMl < water.targetMl,
+    usesFood: intakeBetween(addDays(today, -6), today).length > 0,
+    foodLoggedToday: getDayTotals(today).kcal > 0,
+    nextDayLabel: (routine ? resolveNextDay(routine.id) : undefined)?.label ?? null,
+  };
+}
+
+export async function scheduleReminders(): Promise<void> {
+  await cancelTagged(TAGS.reminder);
+  for (const t of LEGACY_TAGS) await cancelTagged(t);
   const s = getSettings();
   const today = todayISO();
-  const since = addDays(today, -28);
-  const trainingWeekdays = new Set(
-    listSessions(60)
-      .filter((x) => x.date >= since)
-      .map((x) => parseISODate(x.date).getDay()),
-  );
-  if (trainingWeekdays.size === 0) return;
-  for (let i = 0; i < 7; i++) {
-    const date = addDays(today, i);
-    if (!trainingWeekdays.has(parseISODate(date).getDay()) || getWeighIn(date)) continue;
+  for (const r of planReminders(s.reminders, reminderState(s))) {
     await scheduleAt(
-      atLocal(date, s.wakeMinutes),
-      { title: 'Morning weigh-in', body: 'Before breakfast. One number — the trend does the rest.', data: { tag: TAGS.weighIn, url: '/body' } },
+      atLocal(addDays(today, r.dayOffset), r.minutes),
+      { title: r.title, body: r.body, data: { tag: TAGS.reminder, url: r.url, type: r.type }, categoryIdentifier: REMINDER_CATEGORY },
       CHANNELS.daily,
     );
   }
-}
-
-/** Sunday evening, never after bedtime. */
-export async function scheduleWeeklyReview(): Promise<void> {
-  await cancelTagged(TAGS.review);
-  const s = getSettings();
-  const at = Math.max(s.wakeMinutes, Math.min(19 * 60, s.sleepMinutes - 60));
-  await Notifications.scheduleNotificationAsync({
-    content: { title: 'Weekly review', body: 'What progressed, what stalled — thirty seconds.', data: { tag: TAGS.review, url: '/review' } },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-      weekday: 1,
-      hour: Math.floor(at / 60),
-      minute: at % 60,
-      channelId: CHANNELS.daily,
-    },
-  });
 }
 
 let chain: Promise<void> = Promise.resolve();
@@ -142,34 +153,52 @@ export function rescheduleAll(): Promise<void> {
     .then(async () => {
       await ensureChannels();
       await scheduleHydration();
-      await scheduleMorningWeighIn();
-      await scheduleWeeklyReview();
+      await scheduleReminders();
     })
     .catch(() => undefined);
   return chain;
 }
 
-/**
- * Water quick-log actions. They open the app briefly to write the row: logging
- * fully in the background needs expo-task-manager, which is not installed.
- */
+/** Quick actions. They open the app briefly to write the row (no background task installed). */
 export async function registerCategories(): Promise<void> {
-  await Notifications.setNotificationCategoryAsync(
-    WATER_CATEGORY,
-    WATER_ACTIONS.map((ml) => ({ identifier: `water-${ml}`, buttonTitle: `+${ml} ml`, options: { opensAppToForeground: true } })),
-  );
+  await Notifications.setNotificationCategoryAsync(WATER_CATEGORY, [
+    ...WATER_ACTIONS.map((ml) => ({ identifier: `water-${ml}`, buttonTitle: `+${ml} ml`, options: { opensAppToForeground: true } })),
+    { identifier: 'water-later', buttonTitle: 'Later', options: { opensAppToForeground: true } },
+  ]);
+  await Notifications.setNotificationCategoryAsync(REMINDER_CATEGORY, [
+    { identifier: 'later', buttonTitle: 'In an hour', options: { opensAppToForeground: true } },
+  ]);
+}
+
+async function snooze(r: Notifications.NotificationResponse, minutes: number, channelId: string): Promise<void> {
+  const c = r.notification.request.content;
+  await Notifications.scheduleNotificationAsync({
+    content: { title: c.title ?? 'Reminder', body: c.body ?? '', data: c.data ?? {}, categoryIdentifier: c.categoryIdentifier ?? undefined },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: Date.now() + minutes * 60_000, channelId },
+  });
 }
 
 function handleResponse(r: Notifications.NotificationResponse): void {
   const key = `${r.notification.request.identifier}:${r.actionIdentifier}`;
   if (getRaw('notif:lastHandled') === key) return;
   setRaw('notif:lastHandled', key);
+  const dismiss = () => void Notifications.dismissNotificationAsync(r.notification.request.identifier).catch(() => undefined);
 
   const water = /^water-(\d+)$/.exec(r.actionIdentifier);
   if (water?.[1]) {
     logWater(Number(water[1]));
-    void Notifications.dismissNotificationAsync(r.notification.request.identifier).catch(() => undefined);
+    dismiss();
     void rescheduleAll();
+    return;
+  }
+  if (r.actionIdentifier === 'water-later') {
+    dismiss();
+    void snooze(r, 30, CHANNELS.hydration);
+    return;
+  }
+  if (r.actionIdentifier === 'later') {
+    dismiss();
+    void snooze(r, 60, CHANNELS.daily);
     return;
   }
   const url = (r.notification.request.content.data as Record<string, unknown> | null)?.url;

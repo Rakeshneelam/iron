@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -84,6 +84,10 @@ function AppServices() {
         /* reminders are optional */
       }
     })();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'background' || s === 'active') void rescheduleAll();
+    });
+    return () => sub.remove();
   }, []);
   return null;
 }

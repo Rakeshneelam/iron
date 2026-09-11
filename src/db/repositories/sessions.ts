@@ -18,7 +18,7 @@ import { newId } from '@/lib/ids';
 import { getExercise, getLinkedSources, type Exercise } from './exercises';
 import { groupBy, parseIdList, toEngineSet } from './mappers';
 import { getSlots, type Targets } from './program';
-import { deleteRaw, getRaw } from './settings';
+import { deleteRaw, getRaw, setRaw } from './settings';
 import { writeSessionStats } from './stats';
 
 export type Session = typeof schema.session.$inferSelect;
@@ -65,8 +65,12 @@ function planRows(sessionId: string, routineDayId: string): SessionExerciseRow[]
   return out;
 }
 
-/** Never two open sessions: an unfinished one is resumed rather than duplicated. */
-export function startSession(routineDayId: string | null): Session {
+/**
+ * Never two open sessions: an unfinished one is resumed rather than duplicated.
+ * `fit` (from a shortened workout) sets the sets per exercise; planned exercises
+ * left out of it are kept on the list as skipped, so history shows what was cut.
+ */
+export function startSession(routineDayId: string | null, opts: { fit?: readonly { exerciseId: string; sets: number }[] } = {}): Session {
   const open = getActiveSession();
   if (open) return open;
   const row: Session = {
@@ -86,6 +90,14 @@ export function startSession(routineDayId: string | null): Session {
   db.transaction(() => {
     db.insert(schema.session).values(row).run();
     const rows = routineDayId ? planRows(row.id, routineDayId) : [];
+    if (opts.fit) {
+      const sets = new Map(opts.fit.map((f) => [f.exerciseId, f.sets]));
+      for (const r of rows) {
+        const n = sets.get(r.exerciseId);
+        if (n === undefined) r.skipped = 1;
+        else r.targetSets = n;
+      }
+    }
     if (rows.length) db.insert(schema.sessionExercise).values(rows).run();
   });
   return row;
@@ -101,7 +113,20 @@ export function skipDay(routineDayId: string): string {
   return id;
 }
 
-const rawKeys = (id: string) => [`session:${id}:adhoc`, `session:${id}:skipped`, `session:${id}:order`, `session:${id}:readinessDone`];
+const rawKeys = (id: string) => [`session:${id}:adhoc`, `session:${id}:skipped`, `session:${id}:order`, `session:${id}:readinessDone`, `session:${id}:warmup`];
+
+export type WarmupState = 'pending' | 'done' | 'skipped';
+
+/** Whether the session warm-up was done — the first big lift gets an extra ramp set if not. */
+export function getWarmupState(sessionId: string): WarmupState {
+  const v = getRaw(`session:${sessionId}:warmup`);
+  return v === 'done' || v === 'skipped' ? v : 'pending';
+}
+
+export function setWarmupState(sessionId: string, state: WarmupState): void {
+  if (state === 'pending') deleteRaw(`session:${sessionId}:warmup`);
+  else setRaw(`session:${sessionId}:warmup`, state);
+}
 
 function workingSetCount(sessionId: string): number {
   const row = db

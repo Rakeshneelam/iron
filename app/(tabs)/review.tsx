@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast, TrendChart } from '@/components';
 import { useLive } from '@/db/live';
 import { getSlot, updateSlot } from '@/db/repositories/program';
-import { activeRecommendations, dismissRecommendation, recentWorkouts, undismissRecommendation, weekSummary } from '@/db/repositories/progress';
+import { activeRecommendations, dismissRecommendation, recentWorkouts, undismissRecommendation, weekInsights, weekSummary } from '@/db/repositories/progress';
 import { getRaw, setRaw, setSetting, useSettings } from '@/db/repositories/settings';
 import { buildDeloadInput, e1rmSeries, weeklySetsPerMuscle } from '@/db/repositories/stats';
 import { shouldDeload } from '@/engine/progression';
@@ -43,6 +43,11 @@ export default function ProgressScreen() {
     [isThisWeek],
   );
   const deload = useLive(() => shouldDeload(buildDeloadInput()), ['exercise_session_stat', 'session', 'setting']);
+  const insights = useLive(
+    () => weekInsights(weekStart, hydrationTarget().ml),
+    ['session', 'set_log', 'exercise_session_stat', 'weigh_in', 'water_log', 'setting'],
+    [weekStart],
+  );
   const workouts = useLive(() => recentWorkouts(8), ['session', 'set_log']);
 
   const dismissKey = `review:deloadDismissed:${weekStart}`;
@@ -93,6 +98,17 @@ export default function ProgressScreen() {
         </View>
       }
     >
+      {insights.length ? (
+        <Card>
+          {insights.map((t) => (
+            <View key={t} style={styles.insight}>
+              <View style={styles.insightDot} />
+              <Text style={[styles.body, styles.flex1]}>{t}</Text>
+            </View>
+          ))}
+        </Card>
+      ) : null}
+
       {deloadRunning && deloadSince ? (
         <Card tone="positive">
           <Text style={styles.cardTitle}>Deload week in progress</Text>
@@ -255,4 +271,6 @@ const styles = StyleSheet.create({
   delta: { ...font.label, ...font.numeric, minWidth: 64, textAlign: 'right' },
   kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, gap: space.md },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  insight: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start', paddingVertical: space.xs },
+  insightDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.accent, marginTop: 8 },
 });

@@ -16,6 +16,12 @@ export interface SetControlsProps {
   pain: boolean;
   step: number;
   logLabel: string;
+  /** What the reps field counts: reps, seconds, or minutes (stored as seconds). */
+  unit?: 'reps' | 'sec' | 'min';
+  /** Label for the load field; null hides it (cardio). */
+  weightLabel?: string | null;
+  /** Hide the effort chips (cardio). */
+  showEffort?: boolean;
   onWeight: (v: number) => void;
   onReps: (v: number) => void;
   onRir: (v: number) => void;
@@ -25,14 +31,26 @@ export interface SetControlsProps {
 
 /** Bottom third, one right thumb, no scrolling mid-set. Every target is >= 56dp. */
 export function SetControls(p: SetControlsProps) {
+  const unit = p.unit ?? 'reps';
+  const weightLabel = p.weightLabel === undefined ? 'kg' : p.weightLabel;
   return (
     <View style={styles.wrap}>
       <View style={styles.pair}>
-        <Stepper label="kg" value={p.weight} step={p.step} min={0} max={500} size="gym" onChange={p.onWeight} />
-        <Stepper label="reps" value={p.reps} step={1} min={0} max={100} size="gym" onChange={p.onReps} />
+        {weightLabel !== null ? (
+          <Stepper label={weightLabel} value={p.weight} step={p.step} min={0} max={500} size="gym" onChange={p.onWeight} />
+        ) : null}
+        {unit === 'min' ? (
+          <Stepper label="min" value={Math.round(p.reps / 60)} step={1} min={1} max={180} size="gym" onChange={(v) => p.onReps(v * 60)} />
+        ) : (
+          <Stepper label={unit === 'sec' ? 'sec' : 'reps'} value={p.reps} step={unit === 'sec' ? 5 : 1} min={0} max={unit === 'sec' ? 600 : 100} size="gym" onChange={p.onReps} />
+        )}
       </View>
-      <Text style={styles.caption}>Reps left in the tank</Text>
-      <ChipRow options={RIR_CHIPS} value={p.rir} onChange={p.onRir} size="gym" />
+      {p.showEffort === false ? null : (
+        <>
+          <Text style={styles.caption}>{unit === 'reps' ? 'Reps left in the tank' : 'How much more could you have done?'}</Text>
+          <ChipRow options={RIR_CHIPS} value={p.rir} onChange={p.onRir} size="gym" />
+        </>
+      )}
       <View style={styles.pair}>
         <PrimaryButton
           label="Pain"

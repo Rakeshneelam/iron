@@ -5,10 +5,14 @@
  */
 import { eq } from 'drizzle-orm';
 
+import type { Level } from '@/data/catalog';
+import type { EquipmentPreset, Goal } from '@/data/templates';
 import { db } from '@/db/client';
 import { useLive } from '@/db/live';
 import * as schema from '@/db/schema';
 import type { Phase, Sex } from '@/engine/metabolic';
+import { DEFAULT_REMINDERS, type ReminderPrefs } from '@/engine/reminders';
+import type { WarmupMode } from '@/engine/warmup';
 
 export interface AppSettings {
   /** Shown on Today. Optional — the app works nameless. */
@@ -30,6 +34,20 @@ export interface AppSettings {
   lastDeloadDate: string | null;
   restTimerAutoStart: boolean;
   hapticsEnabled: boolean;
+  /* ---- training profile (only what changes recommendations) ---- */
+  experience: Level;
+  goalFocus: Goal;
+  /** Weekdays you plan to train, 0 = Sunday. Drives reminders and "planned this week". */
+  trainingDays: number[];
+  equipmentPreset: EquipmentPreset;
+  /** Explicit equipment list; empty = derived from the preset. */
+  tools: string[];
+  /** Exercise ids you'd rather not do — swapped out of new plans and never suggested. */
+  disliked: string[];
+  /** Voluntarily flagged areas ('knees', 'lowerBack', 'shoulders', 'wrists', 'impact'). */
+  limitations: string[];
+  warmupMode: WarmupMode;
+  reminders: ReminderPrefs;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -50,6 +68,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lastDeloadDate: null,
   restTimerAutoStart: true,
   hapticsEnabled: true,
+  experience: 'intermediate',
+  goalFocus: 'hypertrophy',
+  trainingDays: [1, 2, 4, 5],
+  equipmentPreset: 'gym',
+  tools: [],
+  disliked: [],
+  limitations: [],
+  warmupMode: 'standard',
+  reminders: DEFAULT_REMINDERS,
 };
 
 export const PHASES: readonly Phase[] = ['cut', 'recomp', 'maintain', 'bulk'];
@@ -60,6 +87,24 @@ const NULLABLE: Partial<Record<keyof AppSettings, 'number' | 'string'>> = {
   hydrationOverrideMl: 'number',
   lastDeloadDate: 'string',
 };
+const ENUMS: Partial<Record<keyof AppSettings, readonly string[]>> = {
+  phase: PHASES,
+  sex: ['male', 'female'],
+  experience: ['beginner', 'intermediate', 'advanced'],
+  goalFocus: ['strength', 'hypertrophy', 'general'],
+  equipmentPreset: ['gym', 'home', 'dumbbells', 'bands', 'bodyweight'],
+  warmupMode: ['quick', 'standard', 'full'],
+};
+
+/** Stored reminder prefs merged over the defaults, so new reminder types appear with sane values. */
+function mergeReminders(v: Record<string, unknown>): ReminderPrefs {
+  const out: Record<string, unknown> = {};
+  for (const [k, def] of Object.entries(DEFAULT_REMINDERS)) {
+    const stored = v[k];
+    out[k] = stored && typeof stored === 'object' ? { ...def, ...(stored as object) } : def;
+  }
+  return out as unknown as ReminderPrefs;
+}
 
 function parseValue(key: keyof AppSettings, text: string): unknown {
   let v: unknown;
@@ -68,8 +113,10 @@ function parseValue(key: keyof AppSettings, text: string): unknown {
   } catch {
     return undefined;
   }
-  if (key === 'phase') return PHASES.includes(v as Phase) ? v : undefined;
-  if (key === 'sex') return v === 'male' || v === 'female' ? v : undefined;
+  const allowed = ENUMS[key];
+  if (allowed) return typeof v === 'string' && allowed.includes(v) ? v : undefined;
+  if (Array.isArray(DEFAULT_SETTINGS[key])) return Array.isArray(v) ? v : undefined;
+  if (key === 'reminders') return v && typeof v === 'object' && !Array.isArray(v) ? mergeReminders(v as Record<string, unknown>) : undefined;
   const nullable = NULLABLE[key];
   if (nullable) return v === null || typeof v === nullable ? v : undefined;
   if (typeof v === 'number' && !Number.isFinite(v)) return undefined;

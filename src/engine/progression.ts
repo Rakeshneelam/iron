@@ -12,7 +12,7 @@
 
 /* ============================== Types ==================================== */
 
-export type LoadType = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight';
+export type LoadType = 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight' | 'kettlebell' | 'band' | 'smith';
 export type Goal = 'strength' | 'hypertrophy' | 'endurance';
 
 export interface SetLog {
@@ -155,7 +155,7 @@ export function buildWarmups(
   workWeight: number,
   cfg: ExerciseConfig
 ): { weight: number; reps: number }[] {
-  if (cfg.loadType === 'bodyweight' || workWeight <= 20) return [];
+  if (cfg.loadType === 'bodyweight' || cfg.loadType === 'band' || workWeight <= 20) return [];
   const heavy = cfg.primaryMuscles.length > 1 || cfg.loadType === 'barbell';
   const ramp: [number, number][] = heavy
     ? [[0.4, 8], [0.6, 5], [0.8, 3], [0.9, 1]]

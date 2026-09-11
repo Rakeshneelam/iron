@@ -9,17 +9,18 @@ import { asc, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
 import { weightTrend } from '@/engine/metabolic';
+import { CATALOG_BY_ID, categoryOf } from '@/data/catalog';
 import { siteDef } from '@/features/body/sites';
 import { fmtClockOfDay } from '@/features/settings/time';
 import { addDays, todayISO, weekStartISO } from '@/lib/date';
 
 import { intakeBetween } from './food';
 import { groupBy } from './mappers';
-import { weekSummary } from './progress';
+import { sessionRecords, weekSummary } from './progress';
 import { getSettings } from './settings';
 
 export const EXPORT_SCHEMA = 'iron.export';
-export const EXPORT_SCHEMA_VERSION = 2;
+export const EXPORT_SCHEMA_VERSION = 3;
 const MAX_WEEKS = 26;
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -37,6 +38,8 @@ const README = {
     'bodyweight[].trendKg is an exponentially smoothed trend — use it, not single days, to judge change.',
     'hydration.days[] are compared against the CURRENT target; the target moves with bodyweight and training.',
     'Workouts recorded before schema v2 default to status completed.',
+    'Timed exercises (measure: "time") store seconds in the reps field. Band exercises store the band level in weightKg.',
+    'workouts[].records lists personal records set in that workout (weight, reps at a weight, estimated 1RM, session volume).',
   ],
 };
 
@@ -113,6 +116,7 @@ export function buildAIExport(opts: { appVersion: string; hydrationTargetMl: num
       readiness: { bodyweightKg: s.bodyweightKg, sleepHours: s.sleepHours, soreness1to5: s.soreness, stress1to5: s.stress },
       sessionRpe: s.sessionRpe,
       notes: s.notes,
+      records: s.status === 'skipped' ? [] : sessionRecords(s.id).flatMap((r) => r.events.map((e) => ({ exerciseId: r.exerciseId, kind: e.kind, value: e.value, previous: e.previous }))),
       totals: { workingSets: work.length, reps: sum(work.map((x) => x.reps)), volumeKg: Math.round(sum(work.map((x) => x.weight * x.reps))) },
       exercises: ids.map((exerciseId, i) => {
         const row = rows.find((r) => r.exerciseId === exerciseId);
@@ -233,8 +237,21 @@ export function buildAIExport(opts: { appVersion: string; hydrationTargetMl: num
       currentHydrationTargetMl: opts.hydrationTargetMl,
       calorieCycling: settings.calorieCycling,
       lastDeloadDate: settings.lastDeloadDate,
+      training: {
+        goal: settings.goalFocus,
+        experience: settings.experience,
+        trainingDays: settings.trainingDays.map((d) => ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][d]),
+        sessionMinutes: settings.trainingMinutes,
+        equipmentPreset: settings.equipmentPreset,
+        equipment: settings.tools,
+        limitations: settings.limitations,
+        dislikedExercises: settings.disliked,
+        warmupMode: settings.warmupMode,
+      },
     },
-    exercises: exercises.map((e) => ({
+    exercises: exercises.map((e) => {
+      const c = CATALOG_BY_ID.get(e.id);
+      return {
       id: e.id,
       name: e.name,
       equipment: e.loadType,
@@ -244,7 +261,9 @@ export function buildAIExport(opts: { appVersion: string; hydrationTargetMl: num
       unilateral: e.isUnilateral === 1,
       custom: e.isCustom === 1,
       archived: e.archivedAt !== null,
-    })),
+      ...(c ? { category: categoryOf(c), pattern: c.pattern, compound: c.compound, level: c.level, measure: c.measure ?? 'reps' } : {}),
+      };
+    }),
     exerciseSwaps: db
       .select()
       .from(schema.exerciseLink)

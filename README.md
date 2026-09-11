@@ -5,7 +5,8 @@ backup to your own Google Drive. No server, no account, no subscription.
 
 | | |
 |---|---|
-| Workouts | Routine builder (4-day Upper/Lower seeded), set-by-set logging, RIR-based progression suggestions |
+| Workouts | Multiple plans from ~19 evidence-informed templates or custom, set-by-set logging, RIR-based progression with reasons, warm-ups and warm-up sets generated from the session, short-workout mode, swaps for your equipment |
+| Library | ~90 exercises and ~45 warm-up/mobility/stretch drills with cues, mistakes, animated demos and an anatomy muscle map |
 | Body | Morning bodyweight, smoothed trend, phase tracking |
 | Food | Calories/macros, one-tap meal repeats, adaptive TDEE |
 | Water | Debt-based reminders that stay quiet when you're ahead |

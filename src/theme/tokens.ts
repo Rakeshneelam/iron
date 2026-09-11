@@ -15,6 +15,7 @@ export const color = {
 
   accent: '#E8552E',      // the primary action. Log set. Quick add.
   accentPressed: '#C4441F',
+  accentSoft: 'rgba(232,85,46,0.55)', // secondary muscles in demos and maps
   onAccent: '#FFFFFF',
 
   positive: '#3FBF7F',    // progression, a new e1RM high
