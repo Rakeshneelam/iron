@@ -46,9 +46,15 @@ export function ChipRow<T extends string | number>({
           pressed && !selected && styles.pressed,
         ]}
       >
-        {/* Two lines, not an ellipsis: "General fitness" truncated to "General fit…" is
-            the option becoming unreadable, which is worse than a taller chip. */}
-        <Text style={[size === 'gym' ? styles.textGym : styles.text, selected && styles.textSelected]} numberOfLines={2}>
+        {/* Two lines rather than an ellipsis, because "General fitness" cut to
+            "General fit…" makes the option unreadable. And on equal-width chips the
+            text shrinks to fit: "Maintain" breaking to "Maintai / n" looks broken. */}
+        <Text
+          style={[size === 'gym' ? styles.textGym : styles.text, selected && styles.textSelected]}
+          numberOfLines={2}
+          adjustsFontSizeToFit={fill}
+          minimumFontScale={0.8}
+        >
           {o.label}
         </Text>
       </Pressable>

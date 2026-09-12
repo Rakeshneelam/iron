@@ -33,6 +33,18 @@ export function formatPhrase(raw: string): string {
   return groups.join('-');
 }
 
+/**
+ * For display. A non-breaking hyphen (U+2011) keeps each group whole, and a normal
+ * space between groups lets the line wrap only between them — wrapping inside a
+ * group changes the characters someone writes down.
+ */
+export function displayPhrase(raw: string): string {
+  const s = normalisePhrase(raw);
+  const groups: string[] = [];
+  for (let i = 0; i < s.length; i += GROUP) groups.push(s.slice(i, i + GROUP));
+  return groups.join('\u2011 ');
+}
+
 export function encodePhrase(bytes: Uint8Array): string {
   if (bytes.length !== BYTES) throw new Error(`a phrase is ${BYTES} bytes, got ${bytes.length}`);
   let bits = 0;

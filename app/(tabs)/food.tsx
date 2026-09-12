@@ -89,8 +89,7 @@ export default function FoodScreen() {
         <StatTile label="Fat" value={`${Math.round(day.totals.fat)} / ${t.fatG} g`} tone="muted" />
       </View>
       <Text style={styles.note}>
-        {t.manual ? 'Yours · ' : t.basis === 'estimated' ? 'Estimate · ' : 'Measured · '}
-        {confidenceLabel(t)} · {t.note}
+        {t.manual ? 'Your own targets' : t.basis === 'estimated' ? `Estimate · ${confidenceLabel(t)}` : `Measured · ${confidenceLabel(t)}`}
       </Text>
 
       {prev.entries.length > 0 && day.entries.length === 0 ? (

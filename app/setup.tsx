@@ -134,19 +134,41 @@ export default function Setup() {
       <Screen title={TITLES[step]} subtitle={`Step ${step + 1} of ${STEPS.length} · ${SUBS[step]}`}>
         {step === 0 ? (
           <>
-            <Text style={styles.lead}>
-              An account lets you sign in on another phone. It stores your name, email, occupation, age and sex — never
-              your workouts, weights or food, which stay on this phone whatever you choose.
-            </Text>
-            {isAccountsConfigured() ? (
-              <>
-                <PrimaryButton label="Continue with Google" size="gym" style={styles.gapLg} onPress={() => router.push('/account')} />
-                <PrimaryButton label="Sign up with email" tone="neutral" style={styles.gapSm} onPress={() => router.push('/account')} />
-              </>
-            ) : null}
-            <PrimaryButton label="Continue without an account" tone="ghost" style={styles.gapSm} onPress={() => setStep(1)} />
-            <Text style={styles.hint}>You can create one later in Settings. Nothing is lost either way.</Text>
-            <PrimaryButton label="Already using Iron? Restore a backup" tone="ghost" style={styles.gapLg} onPress={() => router.push('/settings/restore')} />
+            {/* Three short promises instead of a paragraph. Someone deciding whether
+                to hand over an email reads a list; they skim prose. */}
+            <View style={styles.promises}>
+              {[
+                'Your workouts, weight and food never leave this phone.',
+                'No account needed — Iron works fully without one.',
+                'An account only saves your name and email, so you can sign in elsewhere.',
+              ].map((line) => (
+                <View key={line} style={styles.promise}>
+                  <Icon name="check" size={16} color={color.accent} />
+                  <Text style={styles.promiseText}>{line}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* One primary action. Everything else is visibly secondary, so the screen
+                reads as a decision rather than a menu of four equal buttons. */}
+            <View style={styles.choices}>
+              {isAccountsConfigured() ? (
+                <PrimaryButton label="Continue with Google" size="gym" onPress={() => router.push('/account')} />
+              ) : null}
+              <PrimaryButton
+                label={isAccountsConfigured() ? 'Set up without an account' : 'Get started'}
+                tone={isAccountsConfigured() ? 'neutral' : 'accent'}
+                size="gym"
+                onPress={() => setStep(1)}
+              />
+            </View>
+
+            <View style={styles.quiet}>
+              {isAccountsConfigured() ? (
+                <PrimaryButton label="Sign up with email" tone="ghost" onPress={() => router.push('/account')} />
+              ) : null}
+              <PrimaryButton label="Restore a backup" tone="ghost" onPress={() => router.push('/settings/restore')} />
+            </View>
           </>
         ) : null}
 
@@ -276,6 +298,11 @@ const styles = StyleSheet.create({
   gapLg: { marginTop: space.lg },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   orLabel: { ...font.caption, color: color.textMuted, letterSpacing: 1, marginTop: space.lg, marginBottom: space.sm },
+  promises: { gap: space.md, marginTop: space.md, marginBottom: space.xl },
+  promise: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
+  promiseText: { ...font.body, color: color.text, flex: 1 },
+  choices: { gap: space.sm },
+  quiet: { marginTop: space.xl, gap: space.xs },
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   input: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.gym },

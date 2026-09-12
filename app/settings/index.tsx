@@ -396,7 +396,7 @@ export default function SettingsScreen() {
       {/* This sentence has to stay true. Accounts exist now, so it can no longer say
           "no account, no server" — but the training data claim still holds, and that
           is the one people actually care about. */}
-      <Text style={styles.footer}>
+      <Text style={[styles.footer, styles.footerRoom]}>
         Iron {Constants.expoConfig?.version ?? ''} ·{' '}
         {isAccountsConfigured()
           ? 'Your workouts, body, food and water stay on this phone. An account, if you make one, stores only your name, email, occupation, age and sex.'
@@ -428,7 +428,8 @@ const styles = StyleSheet.create({
   bodyStrong: { ...font.body, color: color.text, fontWeight: '600' },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   gap: { marginTop: space.md },
+  footerRoom: { marginBottom: space.xl },
   dislike: { flexDirection: 'row', alignItems: 'center', minHeight: hit.default },
-  phrase: { ...font.title, ...font.numeric, color: color.accent, marginTop: space.md, letterSpacing: 1 },
+  phrase: { ...font.body, ...font.numeric, color: color.accent, marginTop: space.md, fontWeight: '700' },
   footer: { ...font.caption, color: color.textFaint, textAlign: 'center', marginTop: space.lg },
 });

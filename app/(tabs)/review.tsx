@@ -19,6 +19,9 @@ import { kgNum, ml, signed } from '@/lib/format';
 import { hydrationTarget } from '@/services/hydration';
 import { color, font, hit, space } from '@/theme/tokens';
 
+/** Suggestions shown before the "All N" toggle. */
+const SHOWN_RECS = 3;
+
 const volume = (kgTotal: number) => (kgTotal >= 1000 ? `${(kgTotal / 1000).toFixed(1)}k kg` : `${Math.round(kgTotal)} kg`);
 const change = (now: number, before: number) => (before > 0 ? `${signed(((now - before) / before) * 100, 0)}% vs last wk` : undefined);
 
@@ -57,6 +60,9 @@ export default function ProgressScreen() {
   const deloadRunning = deloadSince !== null && daysBetweenISO(deloadSince, today) < 7;
 
   const [selected, setSelected] = useState<string | null>(null);
+  // Three at a time: ten stacked cards of identical shape push everything below them
+  // off the screen and stop reading as advice.
+  const [allRecs, setAllRecs] = useState(false);
   const [showMuscles, setShowMuscles] = useState(false);
   const { week, prev } = data;
   const sel = week.lifts.some((l) => l.exerciseId === selected) ? selected : (week.lifts[0]?.exerciseId ?? null);
@@ -68,7 +74,12 @@ export default function ProgressScreen() {
   });
 
   const done = week.completed + week.partial;
-  const bw = week.bodyweight.start !== null && week.bodyweight.end !== null ? week.bodyweight.end - week.bodyweight.start : null;
+  // One weigh-in makes start === end, and "+0.0 kg" reads as a measured result
+  // rather than as "not enough readings to say".
+  const bw =
+    week.bodyweight.start !== null && week.bodyweight.end !== null && week.bodyweight.start !== week.bodyweight.end
+      ? week.bodyweight.end - week.bodyweight.start
+      : null;
   const empty = done + week.cancelled === 0 && week.skipped === 0;
 
   const apply = (r: Recommendation) => {
@@ -145,8 +156,19 @@ export default function ProgressScreen() {
 
       {recs.length ? (
         <>
-          <SectionHeader title="Suggestions" />
-          {recs.map((r) => (
+          <SectionHeader
+            title="Suggestions"
+            right={
+              recs.length > SHOWN_RECS ? (
+                <PrimaryButton
+                  label={allRecs ? 'Show fewer' : `All ${recs.length}`}
+                  tone="ghost"
+                  onPress={() => setAllRecs(!allRecs)}
+                />
+              ) : undefined
+            }
+          />
+          {(allRecs ? recs : recs.slice(0, SHOWN_RECS)).map((r) => (
             <Card key={r.id} tone={r.kind === 'keep_going' ? 'positive' : 'default'}>
               <View style={styles.recHead}>
                 <Icon name={r.kind === 'keep_going' ? 'check' : 'spark'} size={18} color={r.kind === 'keep_going' ? color.positive : color.accent} />
