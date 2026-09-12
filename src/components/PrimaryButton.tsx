@@ -4,6 +4,18 @@ import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } fro
 
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
+/**
+ * Three weights, and they have to look like three weights.
+ *
+ *   accent  — the one thing to do here. Filled.
+ *   neutral — a real alternative. Filled, quieter.
+ *   ghost   — dismiss, go back, show more. Text only.
+ *
+ * Ghost used to carry a 1px border, which on a near-black background made it read
+ * as another filled button: a screen with one accent and three outlined buttons has
+ * no hierarchy, it has a menu. Dropping the border is what separates "the other
+ * option" from "never mind". The tap target is unchanged.
+ */
 export type ButtonTone = 'accent' | 'neutral' | 'danger' | 'ghost';
 
 export interface PrimaryButtonProps {
@@ -56,6 +68,7 @@ export function PrimaryButton({
         styles.base,
         { minHeight: hit[size], backgroundColor: BG[tone] },
         tone === 'ghost' && styles.ghost,
+        tone === 'neutral' && styles.neutral,
         pressed && (tone === 'accent' ? { backgroundColor: color.accentPressed } : styles.pressed),
         disabled && styles.disabled,
         style,
@@ -78,7 +91,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ghost: { borderWidth: 1, borderColor: color.border },
+  ghost: { paddingHorizontal: space.sm },
+  // A hairline, not a frame: enough to read as tappable, not enough to compete.
+  neutral: { borderWidth: 1, borderColor: color.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   label: { ...font.label },
   labelGym: { ...font.heading },
