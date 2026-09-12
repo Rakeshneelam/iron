@@ -152,9 +152,15 @@ export default function SettingsScreen() {
         <Row label="Calorie cycling" hint="+8% on training days, −8% on rest days.">{bool('calorieCycling')}</Row>
       </Card>
 
-      <SectionHeader title="Your data" hint="Account, backup, export and your recovery phrase." />
+      <SectionHeader title="Account and data" />
+      <Card onPress={() => router.push('/settings/account')}>
+        <LinkRow title="Account" hint="Sign in on another phone, email preferences, delete your account." />
+      </Card>
+      <Card onPress={() => router.push('/settings/backup')}>
+        <LinkRow title="Backup and restore" hint="Google Drive, your recovery phrase, and putting a backup back." />
+      </Card>
       <Card onPress={() => router.push('/settings/data')}>
-        <LinkRow title="Data, account and backup" hint="Everything about where your data lives and how to get it back." />
+        <LinkRow title="Your data" hint="Export for a coach or a spreadsheet, privacy, delete everything." />
       </Card>
 
     </Screen>
