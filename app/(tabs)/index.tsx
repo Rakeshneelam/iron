@@ -50,7 +50,7 @@ export default function Today() {
         week: listSessions(20, WEEK_STATUSES),
       };
     },
-    ['session', 'set_log', 'session_exercise', 'routine', 'routine_day', 'weigh_in', 'water_log', 'setting'],
+    ['session', 'set_log', 'session_exercise', 'exercise', 'routine', 'routine_day', 'weigh_in', 'water_log', 'setting'],
     [today],
   );
 
@@ -65,7 +65,7 @@ export default function Today() {
       const ctx = suggestionContext();
       return getSlots(day.id).map((s) => ({ slot: s, suggestion: suggestFor(s.exercise, s, undefined, ctx) }));
     },
-    ['routine_slot', 'exercise', 'exercise_session_stat', 'exercise_link', 'equipment', 'session'],
+    ['routine', 'routine_day', 'routine_slot', 'exercise', 'exercise_session_stat', 'exercise_link', 'equipment', 'session', 'set_log', 'setting'],
     [day?.id],
   );
   const kit = drillKit(settings);
@@ -136,7 +136,7 @@ export default function Today() {
             <Text style={styles.cardTitle}>{state.activeDay?.label ?? 'Workout'}</Text>
             <View style={styles.stats}>
               <Stat value={String(state.activeSets)} label="sets" />
-              {p && p.planned > 0 ? <Stat value={`${p.done}/${p.planned}`} label="exercises" /> : null}
+              {p && p.planned > 0 ? <Stat value={`${p.done + p.skipped}/${p.planned}`} label="exercises" /> : null}
               <Stat value={<Elapsed since={a.startedAt} />} label="elapsed" />
             </View>
           </Card>

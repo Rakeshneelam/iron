@@ -24,7 +24,7 @@ export default function PlansScreen() {
         const days = getDays(r.id);
         return { routine: r, days: days.map((d) => d.label), exercises: days.reduce((n, d) => n + getSlots(d.id).length, 0) };
       }),
-    ['routine', 'routine_day', 'routine_slot'],
+    ['routine', 'routine_day', 'routine_slot', 'exercise'],
   );
   const archived = useLive(() => listRoutines({ archived: true }), ['routine']);
   const [creating, setCreating] = useState(false);

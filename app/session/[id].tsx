@@ -77,7 +77,7 @@ export default function SessionScreen() {
   // Plan notes are read live, not snapshotted: editing a cue should show up next workout.
   const notes = useLive(
     () => new Map((session?.routineDayId ? getSlots(session.routineDayId) : []).map((s) => [s.exerciseId, s.notes])),
-    ['routine_slot'],
+    ['routine_slot', 'exercise'],
     [session?.routineDayId],
   );
   const warmupState = useLive(() => getWarmupState(id), ['setting'], [id]);

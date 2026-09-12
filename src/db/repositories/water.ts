@@ -8,6 +8,9 @@ import { newId } from '@/lib/ids';
 
 export type WaterEntry = typeof schema.waterLog.$inferSelect;
 
+/** Insertion order, so two drinks logged in the same millisecond still undo newest-first. */
+const ROWID = sql`rowid`;
+
 export function logWater(ml: number, dateISO: string = todayISO()): WaterEntry | undefined {
   const amount = Math.round(ml);
   if (!(amount > 0)) return undefined;
@@ -36,7 +39,7 @@ export function getDayTotal(dateISO: string): number {
 }
 
 export function getDayEntries(dateISO: string): WaterEntry[] {
-  return db.select().from(schema.waterLog).where(eq(schema.waterLog.date, dateISO)).orderBy(desc(schema.waterLog.loggedAt)).all();
+  return db.select().from(schema.waterLog).where(eq(schema.waterLog.date, dateISO)).orderBy(desc(schema.waterLog.loggedAt), desc(ROWID)).all();
 }
 
 export function undoLast(dateISO: string): void {
@@ -44,7 +47,7 @@ export function undoLast(dateISO: string): void {
     .select({ id: schema.waterLog.id })
     .from(schema.waterLog)
     .where(eq(schema.waterLog.date, dateISO))
-    .orderBy(desc(schema.waterLog.loggedAt))
+    .orderBy(desc(schema.waterLog.loggedAt), desc(ROWID))
     .limit(1)
     .get();
   if (last) deleteEntry(last.id);

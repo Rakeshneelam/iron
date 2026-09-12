@@ -130,7 +130,8 @@ export function buildCSVs(data: AIExport): { name: string; csv: string }[] {
     { name: 'measurements', csv: toCSV(data.measurements) },
     { name: 'water_daily', csv: toCSV(data.hydration.days) },
     { name: 'weekly_summary', csv: toCSV(weekly) },
-  ];
+    // A table with no rows has no columns either, so it would be a zero-byte file.
+  ].filter((f) => f.csv.length > 0);
 }
 
 async function pickFolder(): Promise<Directory | null> {

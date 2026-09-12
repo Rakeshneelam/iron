@@ -19,7 +19,7 @@ export default function FoodScreen() {
   const yesterday = addDays(date, -1);
   const day = useLive(() => getDay(date), ['meal_log', 'food', 'recipe', 'recipe_item'], [date]);
   const prev = useLive(() => getDay(yesterday), ['meal_log', 'food', 'recipe', 'recipe_item'], [yesterday]);
-  const t = useLive(() => computeTargets(date), ['meal_log', 'weigh_in', 'setting', 'session'], [date]);
+  const t = useLive(() => computeTargets(date), ['meal_log', 'food', 'recipe', 'recipe_item', 'weigh_in', 'setting', 'session'], [date]);
 
   const [adding, setAdding] = useState<MealSlot | null>(null);
   const [editing, setEditing] = useState<DayEntry | null>(null);

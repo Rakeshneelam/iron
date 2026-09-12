@@ -36,8 +36,8 @@ export default function SummaryScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = String(params.id);
   const settings = useSettings();
-  const summary = useLive(() => getSessionSummary(id), ['session', 'set_log', 'exercise_session_stat'], [id]);
-  const records = useLive(() => sessionRecords(id), ['set_log', 'session'], [id]);
+  const summary = useLive(() => getSessionSummary(id), ['session', 'session_exercise', 'set_log', 'exercise', 'exercise_session_stat'], [id]);
+  const records = useLive(() => sessionRecords(id), ['set_log', 'session', 'exercise'], [id]);
   const milestone = useLive(
     () => (recentWorkouts(1)[0]?.session.id === id ? workoutMilestone(countFinishedWorkouts()) : null),
     ['session'],

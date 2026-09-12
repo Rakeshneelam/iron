@@ -35,18 +35,18 @@ export default function ProgressScreen() {
       const target = hydrationTarget().ml;
       return { week: weekSummary(weekStart, target), prev: weekSummary(addDays(weekStart, -7), target), muscles: weeklySetsPerMuscle(weekStart) };
     },
-    ['session', 'set_log', 'exercise_session_stat', 'weigh_in', 'measurement', 'water_log', 'routine', 'setting'],
+    ['session', 'set_log', 'exercise_session_stat', 'exercise', 'weigh_in', 'measurement', 'water_log', 'routine', 'setting'],
     [weekStart],
   );
   const recs = useLive(
     () => (isThisWeek ? activeRecommendations() : []),
-    ['routine', 'routine_slot', 'session', 'session_exercise', 'exercise_session_stat', 'setting'],
+    ['routine', 'routine_day', 'routine_slot', 'exercise', 'session', 'session_exercise', 'set_log', 'exercise_session_stat', 'setting'],
     [isThisWeek],
   );
-  const deload = useLive(() => shouldDeload(buildDeloadInput()), ['exercise_session_stat', 'session', 'setting']);
+  const deload = useLive(() => shouldDeload(buildDeloadInput()), ['exercise_session_stat', 'set_log', 'session', 'setting']);
   const insights = useLive(
     () => weekInsights(weekStart, hydrationTarget().ml, computeTargets(today).proteinG),
-    ['session', 'set_log', 'exercise_session_stat', 'weigh_in', 'water_log', 'meal_log', 'setting'],
+    ['session', 'set_log', 'exercise_session_stat', 'exercise', 'routine', 'routine_day', 'weigh_in', 'measurement', 'water_log', 'meal_log', 'food', 'recipe', 'setting'],
     [weekStart, today],
   );
   const workouts = useLive(() => recentWorkouts(8), ['session', 'set_log']);

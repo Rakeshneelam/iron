@@ -157,7 +157,9 @@ export function finishSession(sessionId: string): { discarded: boolean; status: 
     return { discarded: true, status: null };
   }
   const p = planProgress(sessionId);
-  const status: SessionStatus = p.done === p.planned ? 'completed' : 'partial';
+  // Skipping an exercise on purpose is a decision, not unfinished work: the workout
+  // screen already counts it as dealt with, so the record must agree.
+  const status: SessionStatus = p.done + p.skipped === p.planned ? 'completed' : 'partial';
   close(sessionId, status);
   return { discarded: false, status };
 }
@@ -293,7 +295,8 @@ export function deleteSet(id: string): void {
 }
 
 export function getSessionSets(sessionId: string): SetRow[] {
-  return db.select().from(schema.setLog).where(eq(schema.setLog.sessionId, sessionId)).orderBy(asc(schema.setLog.loggedAt)).all();
+  // rowid breaks ties: two sets can share a millisecond, and insertion order is the truth.
+  return db.select().from(schema.setLog).where(eq(schema.setLog.sessionId, sessionId)).orderBy(asc(schema.setLog.loggedAt), asc(sql`rowid`)).all();
 }
 
 export function getSetsFor(sessionId: string, exerciseId: string): SetRow[] {
