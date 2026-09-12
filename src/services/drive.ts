@@ -12,7 +12,9 @@
  */
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
-export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+import { configureGoogleSignin, DRIVE_SCOPE, isGoogleConfigured } from './googleSignin';
+
+export { DRIVE_SCOPE };
 const API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 
@@ -25,19 +27,11 @@ export interface DriveFile {
 
 /** Missing only if the build was made without the client ID in .env. */
 export function isConfigured(): boolean {
-  return Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
+  return isGoogleConfigured();
 }
 
-let configured = false;
-
-function configure(): void {
-  if (configured) return;
-  GoogleSignin.configure({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-    scopes: [DRIVE_SCOPE],
-  });
-  configured = true;
-}
+/** Drive needs its scope; the shared helper keeps the client ID in one place. */
+const configure = () => configureGoogleSignin([DRIVE_SCOPE]);
 
 /** The signed-in address, or null. Never triggers a sign-in prompt. */
 export async function currentAccount(): Promise<string | null> {

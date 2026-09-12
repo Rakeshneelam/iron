@@ -24,6 +24,7 @@ import {
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 import { firebaseAuth, firestore, isAccountsConfigured } from './firebase';
+import { configureGoogleSignin } from './googleSignin';
 
 export type Sex = 'male' | 'female';
 
@@ -120,6 +121,10 @@ export async function resetPassword(email: string): Promise<void> {
  * Google provider, or the token's audience is rejected.
  */
 export async function signInWithGoogle(): Promise<{ isNew: boolean; name: string; email: string } | null> {
+  // Without this the picker opens and the handshake dies with DEVELOPER_ERROR:
+  // configure() used to live inside drive.ts, so this path ran unconfigured.
+  // No Drive scope here — making an account should not ask for someone's Drive.
+  configureGoogleSignin();
   await GoogleSignin.hasPlayServices();
   const res = await GoogleSignin.signIn();
   if (res.type !== 'success') return null;
