@@ -241,16 +241,13 @@ warn "If that value changed, Drive backup needs the new client ID to have the Dr
 warn "API enabled — it will, since both now live in the Iron project."
 
 # ── 5 ─────────────────────────────────────────────────────────────────────
-stage "Create Firestore and Storage"
-say "Firestore holds one small profile document per user. Storage holds the"
-say "encrypted backup blob, which nobody but the user can read."
+stage "Create Firestore"
+say "One small document per user: name, email, occupation, age, sex. Nothing else."
+note "No Storage bucket is needed — backups go to the user's own Google Drive, not to us."
 open_url "https://console.firebase.google.com/project/_/firestore"
 step "Create database -> Production mode (locked). We ship real rules, not test mode."
 step "Location: asia-south1 (Mumbai) if your users are in India — it cannot be changed later."
 pause "Press Enter once Firestore exists."
-open_url "https://console.firebase.google.com/project/_/storage"
-step "Get started -> Production mode -> same location as Firestore."
-pause "Press Enter once Storage exists."
 
 # ── 6 ─────────────────────────────────────────────────────────────────────
 stage "Done — what happens next"
