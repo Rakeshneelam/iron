@@ -64,7 +64,7 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
                 <Icon name="spark" size={16} color={color.accent} />
                 <View style={styles.flex}>
                   <Text style={styles.name}>{e.name}</Text>
-                  <Text style={styles.meta}>{s.reasons.join(' · ')}</Text>
+                  <Text style={styles.meta}>{s.reasons.join(', ')}</Text>
                 </View>
               </View>
             </Pressable>

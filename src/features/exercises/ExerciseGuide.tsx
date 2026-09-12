@@ -85,7 +85,7 @@ export function ExerciseGuide({ exercise, compact = false, onOpen }: { exercise:
           {subs.length ? (
             <Block title="Can’t do it today? Try">
               {subs.map((s) => (
-                <LinkRow key={s.id} title={CATALOG_BY_ID.get(s.id)?.name ?? s.id} hint={s.reasons.join(' · ')} onPress={() => open(s.id)} />
+                <LinkRow key={s.id} title={CATALOG_BY_ID.get(s.id)?.name ?? s.id} hint={s.reasons.join(', ')} onPress={() => open(s.id)} />
               ))}
             </Block>
           ) : null}

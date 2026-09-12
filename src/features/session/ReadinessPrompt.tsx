@@ -38,7 +38,7 @@ export function ReadinessPrompt({ sessionId }: { sessionId: string }) {
         <View style={styles.row}>
           <View style={styles.flex}>
             <Text style={styles.title}>How do you feel?</Text>
-            <Text style={styles.hint}>Optional · tunes today's targets</Text>
+            <Text style={styles.hint}>Optional. Tunes today's targets.</Text>
           </View>
           <PrimaryButton label="Check in" tone="neutral" onPress={() => setOpen(true)} />
           <IconButton icon="close" accessibilityLabel="Skip check-in" onPress={() => markReadinessDone(sessionId)} />
@@ -52,9 +52,9 @@ export function ReadinessPrompt({ sessionId }: { sessionId: string }) {
       <Stepper label="Morning weight" suffix="kg" value={weight} step={0.1} min={30} max={250} onChange={setWeight} />
       <Text style={styles.label}>Sleep</Text>
       <ChipRow options={SLEEP} value={sleep} onChange={setSleep} />
-      <Text style={styles.label}>Soreness · 1 fresh, 5 wrecked</Text>
+      <Text style={styles.label}>Soreness: 1 fresh, 5 wrecked</Text>
       <ChipRow options={SCALE} value={soreness} onChange={setSoreness} />
-      <Text style={styles.label}>Stress · 1 calm, 5 fried</Text>
+      <Text style={styles.label}>Stress: 1 calm, 5 fried</Text>
       <ChipRow options={SCALE} value={stress} onChange={setStress} />
       <View style={[styles.row, styles.actions]}>
         <PrimaryButton

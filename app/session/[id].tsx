@@ -435,7 +435,7 @@ export default function SessionScreen() {
         {!readinessDone && sets.length === 0 ? <ReadinessPrompt sessionId={id} /> : null}
 
         {!current ? (
-          <EmptyState message="No exercises yet. Add one to start logging." actionLabel="Add exercise" onAction={() => setPicker({ mode: 'add' })} />
+          <EmptyState message="No exercises yet." hint="Add one and you can start logging sets." actionLabel="Add exercise" onAction={() => setPicker({ mode: 'add' })} />
         ) : (
           <>
             <View style={styles.exHead}>

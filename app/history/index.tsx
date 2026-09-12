@@ -56,6 +56,7 @@ export default function HistoryScreen() {
       {rows.length === 0 ? (
         <EmptyState
           message={searching ? `Nothing logged for "${text.trim()}" in this period.` : 'No finished workouts yet.'}
+          hint={searching ? undefined : 'Finish a workout and it appears here.'}
           actionLabel={searching || days > 0 ? 'Clear filters' : undefined}
           onAction={searching || days > 0 ? () => { setText(''); setDays(0); } : undefined}
         />

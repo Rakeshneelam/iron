@@ -143,7 +143,12 @@ export default function BodyScreen() {
         right={hasMeasurements ? <PrimaryButton label="Log" tone="neutral" icon={<Icon name="ruler" size={16} />} onPress={() => setMeasuring(true)} /> : undefined}
       />
       {measured.length === 0 ? (
-        <EmptyState message="Measure every 2–4 weeks — waist and arms show changes the scale hides." actionLabel="Log measurements" onAction={() => setMeasuring(true)} />
+        <EmptyState
+          message="Measure every 2–4 weeks."
+          hint="Waist and arms show changes the scale hides."
+          actionLabel="Log measurements"
+          onAction={() => setMeasuring(true)}
+        />
       ) : (
         <>
           {whtr !== null ? (

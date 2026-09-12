@@ -79,7 +79,7 @@ export default function SummaryScreen() {
     });
 
   return (
-    <Screen title={s.status === 'skipped' ? 'Skipped day' : 'Workout saved'} subtitle={`${fmtDayLabel(s.date)} · ${summary.durationMin} min`}>
+    <Screen title={s.status === 'skipped' ? 'Skipped day' : 'Workout saved'} subtitle={`${fmtDayLabel(s.date)}, ${summary.durationMin} minutes`}>
       <View style={styles.pills}>
         <Pill label={STATUS_LABEL[s.status]} tone={STATUS_TONE[s.status]} />
         {milestone ? <Pill label={milestone} tone="muted" /> : null}
@@ -109,7 +109,7 @@ export default function SummaryScreen() {
                     <Icon name="star" size={16} color={color.positive} />
                     <View style={styles.flex1}>
                       <Text style={styles.name}>{r.name}</Text>
-                      <Text style={styles.muted}>{r.events.map((e) => e.label).join(' · ')}</Text>
+                      <Text style={styles.muted}>{r.events.map((e) => e.label).join(', ')}</Text>
                     </View>
                   </View>
                 ))}
@@ -151,7 +151,7 @@ export default function SummaryScreen() {
                       {e.name}
                     </Text>
                     <Text style={styles.muted}>
-                      {e.sets} sets · best {e.topSet}
+                      {e.sets} {e.sets === 1 ? 'set' : 'sets'}, best {e.topSet}
                     </Text>
                   </View>
                   <Text style={[styles.delta, { color: delta !== null && delta > 0.05 ? color.positive : color.textMuted }]}>
