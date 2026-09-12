@@ -11,6 +11,7 @@ import { fmtDayLabel, minutesSinceMidnight, parseISODate, todayISO } from '@/lib
 import { ml } from '@/lib/format';
 import { hydrationPlan } from '@/services/hydration';
 import { rescheduleAll } from '@/services/notifications';
+import { WaterTargetSheet } from '@/features/water/TargetSheet';
 import { color, font, hit, space } from '@/theme/tokens';
 
 const QUICK = [250, 500, 750, 1000] as const;
@@ -22,6 +23,7 @@ type AmountSheet = { mode: 'add' } | { mode: 'edit'; entry: WaterEntry };
 export default function WaterScreen() {
   const today = todayISO();
   const [viewDate, setViewDate] = useState(today);
+  const [targetSheet, setTargetSheet] = useState(false);
   const entries = useLive(() => getDayEntries(viewDate), ['water_log'], [viewDate]);
   const plan = useLive(() => hydrationPlan(), ['water_log', 'setting', 'weigh_in', 'session']);
   const history = useLive(() => historyMl(14), ['water_log']);
@@ -58,7 +60,18 @@ export default function WaterScreen() {
   const dayTotal = entries.reduce((a, e) => a + e.ml, 0);
 
   return (
-    <Screen title="Water" subtitle={`Target ${ml(plan.targetMl)}`}>
+    <Screen
+      title="Water"
+      subtitle={`Target ${ml(plan.targetMl)}`}
+      right={
+        <IconButton
+          icon="edit"
+          tone="neutral"
+          accessibilityLabel="Change your daily water target"
+          onPress={() => setTargetSheet(true)}
+        />
+      }
+    >
       <View style={styles.center}>
         <Ring
           progress={plan.targetMl > 0 ? plan.consumedMl / plan.targetMl : 0}
@@ -110,6 +123,7 @@ export default function WaterScreen() {
       </Card>
 
       <AmountSheet sheet={sheet} onClose={() => setSheet(null)} onAdd={log} viewDate={viewDate} />
+      <WaterTargetSheet visible={targetSheet} onClose={() => setTargetSheet(false)} />
     </Screen>
   );
 }

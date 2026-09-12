@@ -92,36 +92,6 @@ export default function SettingsScreen() {
         <LinkRow title="Battery optimisation" hint="Lets the rest timer and reminders run with the screen off." />
       </Card>
 
-      <SectionHeader title="Water & food" />
-      <Card>
-        <Text style={styles.label}>Water target</Text>
-        <ChipRow
-          options={[
-            { label: 'Auto', value: 0 },
-            { label: '2.5 L', value: 2500 },
-            { label: '3 L', value: 3000 },
-            { label: '3.5 L', value: 3500 },
-            { label: '4 L', value: 4000 },
-          ]}
-          value={s.hydrationOverrideMl ?? 0}
-          onChange={(v) => { setSetting('hydrationOverrideMl', v === 0 ? null : v); void rescheduleAll(); }}
-          fill={false}
-        />
-        <Text style={styles.hint}>Auto = 33 ml per kg, plus training and heat.</Text>
-        <Text style={styles.label}>Hot weather</Text>
-        <ChipRow
-          options={[
-            { label: 'Off', value: 0 },
-            { label: '32°', value: 32 },
-            { label: '36°', value: 36 },
-            { label: '40°', value: 40 },
-          ]}
-          value={s.ambientTempC ?? 0}
-          onChange={(v) => { setSetting('ambientTempC', v === 0 ? null : v); void rescheduleAll(); }}
-        />
-        <Row label="Calorie cycling" hint="+8% on training days, −8% on rest days.">{bool('calorieCycling')}</Row>
-      </Card>
-
       <SectionHeader title="Account and data" />
       <Card onPress={() => router.push('/settings/account')}>
         <LinkRow title="Account" hint="Sign in on another phone, email preferences, delete your account." />

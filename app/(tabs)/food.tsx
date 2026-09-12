@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, PrimaryButton, Screen, SectionHeader, Sheet, StatTile, Stepper } from '@/components';
+import { Card, IconButton, PrimaryButton, Screen, SectionHeader, Sheet, StatTile, Stepper } from '@/components';
 import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
 import {
@@ -20,6 +20,7 @@ import {
   type UsualMeal,
 } from '@/db/repositories/food';
 import { AddFoodSheet } from '@/features/food/AddFoodSheet';
+import { FoodTargetSheet } from '@/features/food/TargetSheet';
 import { computeTargets, confidenceLabel } from '@/features/food/targets';
 import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, hit, space } from '@/theme/tokens';
@@ -66,6 +67,7 @@ export default function FoodScreen() {
 
   const [adding, setAdding] = useState<MealSlot | null>(null);
   const [recipeTab, setRecipeTab] = useState(false);
+  const [targetSheet, setTargetSheet] = useState(false);
   const [editing, setEditing] = useState<DayEntry | null>(null);
   const [servings, setServings] = useState(1);
 
@@ -77,6 +79,12 @@ export default function FoodScreen() {
         <View style={styles.dateNav}>
           <PrimaryButton label="‹" tone="ghost" onPress={() => setDate(addDays(date, -1))} />
           <PrimaryButton label="›" tone="ghost" disabled={date >= todayISO()} onPress={() => setDate(addDays(date, 1))} />
+          <IconButton
+            icon="edit"
+            tone="neutral"
+            accessibilityLabel="Change your calorie and protein targets"
+            onPress={() => setTargetSheet(true)}
+          />
         </View>
       }
     >
@@ -210,6 +218,7 @@ export default function FoodScreen() {
           </View>
         ) : null}
       </Sheet>
+      <FoodTargetSheet visible={targetSheet} onClose={() => setTargetSheet(false)} />
     </Screen>
   );
 }
