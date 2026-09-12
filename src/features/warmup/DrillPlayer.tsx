@@ -110,7 +110,9 @@ const styles = StyleSheet.create({
   dose: { ...font.body, color: color.accent, fontWeight: '600' },
   cue: { ...font.label, color: color.textMuted },
   timer: { alignItems: 'center', gap: space.sm, marginVertical: space.md },
-  clock: { ...font.display, ...font.numeric, fontSize: 48, color: color.text },
+  // fontSize must not exceed the inherited lineHeight or the digits clip: display
+  // carries lineHeight 48, so a 48px clock needs its own.
+  clock: { ...font.display, ...font.numeric, fontSize: 48, lineHeight: 54, color: color.text },
   side: { ...font.label, color: color.textMuted },
   nav: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   flex: { flex: 1 },
