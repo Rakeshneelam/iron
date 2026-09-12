@@ -17,7 +17,7 @@ import { minutesLabel } from '@/features/warmup/labels';
 import { RoutineSheet } from '@/features/warmup/RoutineSheet';
 import { fmtDayLabel } from '@/lib/date';
 import { signed } from '@/lib/format';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { color, font, gap, hit, radius, space } from '@/theme/tokens';
 
 /** Session RPE, in words — easier than a 1–10 scale after a hard session. */
 const EFFORT = [
@@ -162,7 +162,9 @@ export default function SummaryScreen() {
             })}
           </Card>
           <Text style={styles.legend}>Change is in estimated 1-rep max vs last time.</Text>
-          <BatteryCard />
+          <View style={styles.aside}>
+            <BatteryCard />
+          </View>
         </>
       )}
 
@@ -213,6 +215,7 @@ const styles = StyleSheet.create({
   muted: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: 2 },
   delta: { ...font.label, ...font.numeric },
   legend: { ...font.caption, color: color.textFaint, marginTop: space.sm },
+  aside: { marginTop: gap.section },
   gapTop: { marginTop: space.xl },
   secondary: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
 });

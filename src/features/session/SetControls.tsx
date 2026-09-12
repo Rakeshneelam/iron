@@ -16,6 +16,14 @@ export interface SetControlsProps {
   pain: boolean;
   step: number;
   logLabel: string;
+  /**
+   * Set once the target sets are done. The big orange button then advances, and
+   * logging another set becomes the quieter option — because with three of three
+   * sets logged, "Log set 4" was the loudest thing on screen while a card directly
+   * above it said "All 3 sets done", so tapping the obvious button logged a set
+   * nobody wanted and took two taps to get to the next exercise.
+   */
+  advance?: { label: string; onPress: () => void };
   /** What the reps field counts: reps, seconds, or minutes (stored as seconds). */
   unit?: 'reps' | 'sec' | 'min';
   /** Label for the load field; null hides it (cardio). */
@@ -60,8 +68,20 @@ export function SetControls(p: SetControlsProps) {
           size="gym"
           onPress={() => p.onPain(!p.pain)}
         />
-        <PrimaryButton label={p.logLabel} size="gym" style={styles.log} icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={p.onLog} />
+        {p.advance ? (
+          <PrimaryButton
+            label={p.advance.label}
+            size="gym"
+            style={styles.log}
+            icon={<Icon name="chevronRight" size={20} color={color.onAccent} />}
+            onPress={p.advance.onPress}
+          />
+        ) : (
+          <PrimaryButton label={p.logLabel} size="gym" style={styles.log} icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={p.onLog} />
+        )}
       </View>
+      {/* Still reachable, just no longer the thing you hit by reflex. */}
+      {p.advance ? <PrimaryButton label={p.logLabel} tone="neutral" onPress={p.onLog} /> : null}
     </View>
   );
 }

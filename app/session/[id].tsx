@@ -606,6 +606,13 @@ export default function SessionScreen() {
             weightLabel={weightLabel}
             showEffort={!cardio}
             logLabel={`Log set ${exWork.length + 1}`}
+            advance={
+              currentState !== 'done'
+                ? undefined
+                : next
+                  ? { label: next.exercise.name, onPress: () => goTo(nextIdx) }
+                  : { label: 'Finish workout', onPress: finish }
+            }
             onWeight={setWeight}
             onReps={setReps}
             onRir={setRir}
