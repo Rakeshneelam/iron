@@ -16,10 +16,11 @@ import { getActiveRoutine, resolveNextDay } from '@/db/repositories/program';
 import { getActiveSession, listSessions } from '@/db/repositories/sessions';
 import { getRaw, getSettings, setRaw, type AppSettings } from '@/db/repositories/settings';
 import { logWater } from '@/db/repositories/water';
+import type { ReminderSlot } from '@/engine/metabolic';
 import { planReminders, type ReminderState } from '@/engine/reminders';
 import { addDays, daysBetweenISO, minutesSinceMidnight, parseISODate, todayISO } from '@/lib/date';
 
-import { hydrationPlan } from './hydration';
+import { hydrationPlan, tomorrowHydrationSlots } from './hydration';
 
 export const CHANNELS = { rest: 'rest-timer', hydration: 'hydration', daily: 'daily' } as const;
 const TAGS = { hydration: 'hydration', reminder: 'reminder' } as const;
@@ -91,14 +92,21 @@ async function scheduleAt(when: Date, content: Notifications.NotificationContent
 export async function scheduleHydration(): Promise<void> {
   await cancelTagged(TAGS.hydration);
   if (!getSettings().reminders.water.on) return;
-  const plan = hydrationPlan();
   const today = todayISO();
-  for (const slot of plan.slots) {
-    await scheduleAt(
-      atLocal(today, slot.atMinutes),
-      { title: 'Water', body: slot.label, data: { tag: TAGS.hydration }, categoryIdentifier: WATER_CATEGORY },
-      CHANNELS.hydration,
-    );
+  const tomorrow = addDays(today, 1);
+  const days: [string, ReminderSlot[]][] = [
+    [today, hydrationPlan().slots],
+    // A day the app is never opened would otherwise be silent.
+    [tomorrow, tomorrowHydrationSlots()],
+  ];
+  for (const [date, slots] of days) {
+    for (const slot of slots) {
+      await scheduleAt(
+        atLocal(date, slot.atMinutes),
+        { title: 'Water', body: slot.label, data: { tag: TAGS.hydration }, categoryIdentifier: WATER_CATEGORY },
+        CHANNELS.hydration,
+      );
+    }
   }
 }
 

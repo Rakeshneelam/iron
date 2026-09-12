@@ -36,6 +36,33 @@ export function hydrationTarget(): { ml: number; breakdown: string } {
   return { ml, breakdown: parts.join(' ') };
 }
 
+/**
+ * Tomorrow's slots, planned from scratch. Reminders are only ever scheduled while
+ * the app is open; without this, a day you never open the app gets no water
+ * reminders at all — which is exactly the day you needed them.
+ */
+export function tomorrowHydrationSlots(): ReminderSlot[] {
+  const s = getSettings();
+  const targetMl =
+    s.hydrationOverrideMl !== null && s.hydrationOverrideMl > 0
+      ? s.hydrationOverrideMl
+      : hydrationTargetMl({
+          weightKg: getLatestWeight() ?? DEFAULT_WEIGHT_KG,
+          // Whether tomorrow is a training day is unknown, so plan the base target.
+          trainingToday: false,
+          trainingMinutes: s.trainingMinutes,
+          ambientTempC: s.ambientTempC ?? undefined,
+        });
+  return scheduleHydration({
+    targetMl,
+    consumedMl: 0,
+    nowMinutes: s.wakeMinutes,
+    wakeMinutes: s.wakeMinutes,
+    sleepMinutes: s.sleepMinutes,
+    minGapMinutes: s.reminders.water.minGapMinutes,
+  });
+}
+
 export interface HydrationPlan {
   targetMl: number;
   consumedMl: number;

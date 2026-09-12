@@ -385,6 +385,11 @@ export function weekInsights(weekStart: string, waterTargetMl: number, proteinTa
     .leftJoin(schema.routineDay, eq(schema.session.routineDayId, schema.routineDay.id))
     .where(and(gte(schema.session.date, weekStart), lte(schema.session.date, end), isNotNull(schema.session.endedAt)))
     .all();
+  // A week in which the app recorded nothing has nothing to say about it — the screen
+  // shows its own "nothing here yet" line, and a fresh install must not be lectured.
+  const used =
+    weekSessions.length > 0 || week.water.daysLogged > 0 || week.measurements.length > 0 || week.bodyweight.end !== null;
+  if (!used) return [];
   const records = weekSessions.filter((w) => w.session.status !== 'skipped').reduce((n, w) => n + sessionRecords(w.session.id).length, 0);
   const facts: WeekFacts = {
     planned: week.plannedDays,
@@ -400,7 +405,7 @@ export function weekInsights(weekStart: string, waterTargetMl: number, proteinTa
     records,
     bodyweightChange: week.bodyweight.start !== null && week.bodyweight.end !== null ? week.bodyweight.end - week.bodyweight.start : null,
     goal: getSettings().phase,
-    water: { hit: week.water.daysHit, days: week.water.days },
+    water: { hit: week.water.daysHit, days: week.water.days, logged: week.water.daysLogged },
     skippedLabels: weekSessions.filter((w) => w.session.status === 'skipped').map((w) => w.label ?? 'a workout'),
     nutrition: nutritionWeek(weekStart, end, proteinTargetG),
   };

@@ -18,7 +18,8 @@ export interface WeekFacts {
   /** Change in smoothed bodyweight across the week, kg. */
   bodyweightChange: number | null;
   goal: GoalPhase;
-  water: { hit: number; days: number };
+  /** `logged` is days with any water entry: someone who never logs water is not judged on it. */
+  water: { hit: number; days: number; logged: number };
   /** Day labels of plan days skipped this week. */
   skippedLabels: readonly string[];
   /** Food logging for the week; null when the user doesn't track food at all. */
@@ -92,7 +93,9 @@ export function weeklyInsights(f: WeekFacts): string[] {
     out.push({ text: `Food logged on ${n.daysLogged} of ${n.days} days — a few more and the calorie estimate starts working.`, weight: 1 });
   }
 
-  if (f.water.days >= 3) {
+  // Only a water user gets water advice; nagging someone who never opened that tab
+  // is the complaint every hydration app collects (AGENTS §6).
+  if (f.water.days >= 3 && f.water.logged >= 3) {
     const ratio = f.water.hit / f.water.days;
     if (ratio < 0.5) out.push({ text: `Water target hit on ${f.water.hit} of ${f.water.days} days — the easiest win this week.`, weight: 2 });
   }

@@ -100,7 +100,7 @@ describe('records', () => {
 describe('weekly insights', () => {
   const base: WeekFacts = {
     planned: 4, done: 4, skipped: 0, sets: { upper: 30, lower: 24 }, prevSets: { upper: 30, lower: 24 },
-    lifts: [], records: 0, bodyweightChange: null, goal: 'cut', water: { hit: 6, days: 7 }, skippedLabels: [], nutrition: null,
+    lifts: [], records: 0, bodyweightChange: null, goal: 'cut', water: { hit: 6, days: 7, logged: 7 }, skippedLabels: [], nutrition: null,
   };
 
   test('says what improved and explains a volume drop with the skipped day', () => {
@@ -114,7 +114,7 @@ describe('weekly insights', () => {
   });
 
   test('flags weight moving against the goal, and poor water', () => {
-    const out = weeklyInsights({ ...base, bodyweightChange: 0.6, water: { hit: 1, days: 7 } });
+    const out = weeklyInsights({ ...base, bodyweightChange: 0.6, water: { hit: 1, days: 7, logged: 7 } });
     assert.ok(out.some((s) => /against your fat-loss goal/.test(s)));
     assert.ok(out.some((s) => /Water target hit on 1 of 7/.test(s)));
   });
@@ -128,6 +128,11 @@ describe('weekly insights', () => {
     const thin = weeklyInsights({ ...base, nutrition: { daysLogged: 2, days: 7, avgProteinG: 60, targetProteinG: 150 } });
     assert.ok(thin.some((s) => /Food logged on 2 of 7 days/.test(s)));
     assert.ok(!thin.some((s) => /Protein averaged/.test(s)));
+  });
+
+  test('someone who never logs water is never told about water', () => {
+    const out = weeklyInsights({ ...base, water: { hit: 0, days: 7, logged: 0 } });
+    assert.ok(!out.some((s) => /Water/.test(s)));
   });
 
   test('a missed week gets a no-guilt message first', () => {
