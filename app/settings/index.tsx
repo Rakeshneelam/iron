@@ -1,11 +1,10 @@
 import { router } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, TextField, ToggleChips } from '@/components';
+import { Card, ChipRow, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, ToggleChips } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
-import { PHASES, setSetting, useSettings } from '@/db/repositories/settings';
+import { setSetting, useSettings } from '@/db/repositories/settings';
 import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle, toolsOf, TOOL_OPTIONS, WEEKDAYS } from '@/features/profile';
-import { GOALS } from '@/features/settings/goals';
 import { Row, TimeAdjuster } from '@/features/settings/Row';
 import { MODE_OPTIONS } from '@/features/warmup/labels';
 import { openBatteryOptimisationSettings, rescheduleAll } from '@/services/notifications';
@@ -33,35 +32,6 @@ export default function SettingsScreen() {
 
   return (
     <Screen title="Settings" right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
-      <SectionHeader title="Profile" />
-      <Card>
-        <TextField
-          value={s.name}
-          onCommit={(v) => setSetting('name', v)}
-          placeholder="Your name"
-          style={styles.input}
-          autoCapitalize="words"
-          accessibilityLabel="Your name"
-        />
-        <View style={styles.pair}>
-          <Stepper label="Height" suffix="cm" value={s.heightCm} step={1} min={120} max={230} onChange={(v) => setSetting('heightCm', v)} />
-          <Stepper label="Age" value={s.age} step={1} min={14} max={99} onChange={(v) => setSetting('age', v)} />
-        </View>
-        <Row label="Sex" hint="Calorie estimate and body diagrams.">
-          <ChipRow
-            options={[
-              { label: 'Male', value: 'male' },
-              { label: 'Female', value: 'female' },
-            ]}
-            value={s.sex}
-            onChange={(v) => setSetting('sex', v)}
-            fill={false}
-          />
-        </Row>
-        <Text style={styles.label}>Body-weight goal</Text>
-        <ChipRow options={GOALS.filter((g) => PHASES.includes(g.value))} value={s.phase} onChange={(v) => setSetting('phase', v)} />
-      </Card>
-
       <SectionHeader title="Training" />
       <Card>
         <Text style={styles.label}>Main goal</Text>

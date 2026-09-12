@@ -4,10 +4,12 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card, ChipRow, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, TrendChart } from '@/components';
 import { useLive } from '@/db/live';
 import { getLatestWeight, listMeasurements, listWeighIns, type Measurement } from '@/db/repositories/body';
-import { useSettings } from '@/db/repositories/settings';
+import { PHASES, setSetting, useSettings } from '@/db/repositories/settings';
 import { phaseCheck, weeklyRateKg, weightTrend } from '@/engine/metabolic';
+import { DetailsSheet } from '@/features/body/DetailsSheet';
 import { MeasureSheet, readingBefore, SiteSheet, WeighInSheet, type WeighEntry } from '@/features/body/sheets';
 import { SITES } from '@/features/body/sites';
+import { GOALS } from '@/features/settings/goals';
 import { addDays, daysBetweenISO, fmtDayLabel, todayISO } from '@/lib/date';
 import { kg, kgNum, signed } from '@/lib/format';
 import { DEFAULT_WEIGHT_KG } from '@/services/hydration';
@@ -32,6 +34,7 @@ export default function BodyScreen() {
   const [measuring, setMeasuring] = useState(false);
   const [site, setSite] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [details, setDetails] = useState(false);
 
   const todays = weighIns.find((w) => w.date === today);
   const trend = useMemo(() => weightTrend(weighIns), [weighIns]);
@@ -61,7 +64,17 @@ export default function BodyScreen() {
   const hasTrend = trend.length >= 2;
 
   return (
-    <Screen title="Body">
+    <Screen
+      title="Body"
+      right={
+        <IconButton
+          icon="edit"
+          tone="neutral"
+          accessibilityLabel="Edit your name, sex, age and height"
+          onPress={() => setDetails(true)}
+        />
+      }
+    >
       <Card>
         <View style={styles.rowBetween}>
           <Text style={styles.hero}>
@@ -112,11 +125,24 @@ export default function BodyScreen() {
         />
       ) : null}
 
-      {check ? (
-        <Card tone={check.onTrack ? 'positive' : 'warning'} style={styles.gapTop}>
-          <Text style={styles.body}>{check.message}</Text>
-        </Card>
-      ) : null}
+      <SectionHeader title="Goal" hint="Sets your calorie and water targets." />
+      <Card>
+        <ChipRow
+          options={GOALS.filter((g) => PHASES.includes(g.value))}
+          value={settings.phase}
+          onChange={(v) => setSetting('phase', v)}
+          fill={false}
+        />
+        {check ? (
+          <Text style={[styles.body, styles.checkNote, check.onTrack ? styles.onTrack : styles.offTrack]}>{check.message}</Text>
+        ) : (
+          <Text style={styles.hint}>
+            {trend.length >= 7
+              ? 'Weigh in a few more mornings and Iron will tell you whether this is working.'
+              : `A weekly check against this goal starts once you have seven weigh-ins. ${trend.length} so far.`}
+          </Text>
+        )}
+      </Card>
 
       {recent.length > 1 ? (
         <>
@@ -184,12 +210,16 @@ export default function BodyScreen() {
 
       <WeighInSheet entry={weigh} onClose={() => setWeigh(null)} />
       <MeasureSheet visible={measuring} latest={latestBySite} onClose={() => setMeasuring(false)} />
+      <DetailsSheet visible={details} onClose={() => setDetails(false)} />
       <SiteSheet site={site} rows={site ? (bySite.get(site) ?? []) : []} onClose={() => setSite(null)} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  checkNote: { marginTop: space.md },
+  onTrack: { color: color.positive },
+  offTrack: { color: color.warning },
   todayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: hit.default },
   trendNote: { ...font.caption, color: color.textMuted },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
