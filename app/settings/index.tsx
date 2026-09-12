@@ -6,6 +6,15 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Card, ChipRow, confirm, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, TextField, ToggleChips } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { recoveryPhrase } from '@/db/client';
+import {
+  deleteAccount,
+  isAccountsConfigured,
+  loadProfile,
+  saveProfile,
+  signOutAccount,
+  watchAccount,
+  type Profile,
+} from '@/services/account';
 import { autoBackupOn, backupNow, lastBackupAt, setAutoBackup } from '@/services/backup';
 import { connect, currentAccount, disconnect, isConfigured } from '@/services/drive';
 import { wipeAllData } from '@/db/repositories/admin';
@@ -47,6 +56,39 @@ export default function SettingsScreen() {
   // Read once per mount: it never changes, and it must be here to be written down
   // while the phone still works, not revealed once at a moment nobody remembers.
   const [phrase] = useState(recoveryPhrase);
+
+  const [signedIn, setSignedIn] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [accountMsg, setAccountMsg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isAccountsConfigured()) return;
+    return watchAccount((u) => {
+      setSignedIn(u?.email ?? null);
+      if (u) void loadProfile().then(setProfile);
+      else setProfile(null);
+    });
+  }, []);
+
+  const removeAccount = () =>
+    confirm({
+      title: 'Delete your account?',
+      message: 'Your name, email, occupation, age and sex are erased from the server. Your workouts and everything else on this phone are left alone.',
+      confirmLabel: 'Continue',
+      destructive: true,
+      onConfirm: () =>
+        confirm({
+          title: 'Really delete the account?',
+          confirmLabel: 'Delete account',
+          destructive: true,
+          onConfirm: () => {
+            setAccountMsg(null);
+            void deleteAccount().then(
+              () => setAccountMsg('Account deleted.'),
+              (e: unknown) => setAccountMsg(`Could not delete: ${e instanceof Error ? e.message : String(e)}. You may need to sign in again first.`),
+            );
+          },
+        }),
+    });
 
   const [account, setAccount] = useState<string | null>(null);
   const [driveMsg, setDriveMsg] = useState<string | null>(null);
@@ -225,6 +267,45 @@ export default function SettingsScreen() {
         <PrimaryButton label="Delete all my data" tone="ghost" icon={<Icon name="trash" size={16} color={color.danger} />} style={styles.gap} onPress={deleteAll} />
       </Card>
 
+      {isAccountsConfigured() ? (
+        <>
+          <SectionHeader title="Account" />
+          <Card>
+            {signedIn ? (
+              <>
+                <Text style={styles.bodyStrong}>{signedIn}</Text>
+                <Text style={styles.hint}>
+                  Signed in. Only your name, email, occupation, age and sex are stored on the server — never your
+                  workouts, weights, food or measurements.
+                </Text>
+                <Row label="Email me about Iron" hint="Turn this off any time. It never affects your account.">
+                  <ChipRow
+                    options={ON_OFF}
+                    value={profile?.marketingOptIn ? 1 : 0}
+                    onChange={(v) => {
+                      setProfile((p) => (p ? { ...p, marketingOptIn: v === 1 } : p));
+                      void saveProfile({ marketingOptIn: v === 1 });
+                    }}
+                    fill={false}
+                  />
+                </Row>
+                <PrimaryButton label="Sign out" tone="neutral" style={styles.gap} onPress={() => void signOutAccount()} />
+                <PrimaryButton label="Delete account" tone="ghost" style={styles.gap} onPress={removeAccount} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.hint}>
+                  Optional. An account lets you sign in on another phone. Iron works fully without one, and your training
+                  data stays on this phone either way.
+                </Text>
+                <PrimaryButton label="Create an account or sign in" tone="neutral" style={styles.gap} onPress={() => router.push('/account')} />
+              </>
+            )}
+            {accountMsg ? <Text style={styles.hint}>{accountMsg}</Text> : null}
+          </Card>
+        </>
+      ) : null}
+
       <SectionHeader title="Google Drive backup" />
       <Card>
         {!isConfigured() ? (
@@ -312,8 +393,14 @@ export default function SettingsScreen() {
         <LinkRow title="Privacy" hint="What Iron stores, what it sends, and how to delete it." />
       </Card>
 
+      {/* This sentence has to stay true. Accounts exist now, so it can no longer say
+          "no account, no server" — but the training data claim still holds, and that
+          is the one people actually care about. */}
       <Text style={styles.footer}>
-        Iron {Constants.expoConfig?.version ?? ''} · no account, no server. Everything stays on this phone, and nothing is sent anywhere unless you export it.
+        Iron {Constants.expoConfig?.version ?? ''} ·{' '}
+        {isAccountsConfigured()
+          ? 'Your workouts, body, food and water stay on this phone. An account, if you make one, stores only your name, email, occupation, age and sex.'
+          : 'No account, no server. Everything stays on this phone, and nothing is sent anywhere unless you export it.'}
       </Text>
     </Screen>
   );

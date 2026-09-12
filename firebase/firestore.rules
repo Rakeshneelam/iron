@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// Iron — Firestore rules.
+//
+// These, not the secrecy of the config values, are what protect user data. The
+// apiKey and projectId ship inside the APK; anyone can read them out of it. What
+// stops one user reading another's profile is exactly this file.
+//
+// Deploy with:  npx firebase-tools deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // One document per user, reachable only by that user. No listing: a signed-in
+    // user must not be able to enumerate the userbase.
+    match /users/{uid} {
+      function isOwner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      // Exactly the fields the app is allowed to store. Anything else is rejected
+      // rather than silently accepted — this is the enforcement behind the promise
+      // that no health data leaves the device, and it holds even if a future build
+      // starts sending more than it should.
+      function allowedFields() {
+        return request.resource.data.keys().hasOnly([
+          'name', 'email', 'occupation', 'age', 'sex',
+          'marketingOptIn', 'marketingOptInAt', 'updatedAt'
+        ]);
+      }
+
+      function wellFormed() {
+        let d = request.resource.data;
+        return (!('name' in d) || (d.name is string && d.name.size() <= 100))
+          && (!('email' in d) || (d.email is string && d.email.size() <= 320))
+          && (!('occupation' in d) || (d.occupation is string && d.occupation.size() <= 100))
+          && (!('age' in d) || (d.age is int && d.age >= 13 && d.age <= 120))
+          && (!('sex' in d) || d.sex in ['male', 'female'])
+          && (!('marketingOptIn' in d) || d.marketingOptIn is bool);
+      }
+
+      allow get: if isOwner();
+      allow create, update: if isOwner() && allowedFields() && wellFormed();
+      allow delete: if isOwner();
+    }
+
+    // Everything else is closed. Training data has no home here on purpose.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

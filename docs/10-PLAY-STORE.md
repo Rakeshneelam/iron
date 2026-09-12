@@ -1,9 +1,9 @@
 # 10 — Play Store readiness
 
-What Google will ask for, what Iron currently answers, and what changes if a
-backend is ever added. Written against the app as it stands: no accounts, no
-server, all data on the device, one optional network call to the user's own
-Google Drive.
+What Google will ask for and what Iron currently answers. The app is local-first:
+all training data lives on the device. Two things optionally leave it — a five-field
+profile, if the user makes an account, and an encrypted database copy, if the user
+connects their own Google Drive.
 
 **This is engineering groundwork, not legal advice.** The privacy policy below is
 a draft that describes the code accurately. Have it reviewed before publishing.
@@ -55,7 +55,26 @@ rather than a store one.
 Play asks what is collected and what is shared. "Collected" means transmitted off
 the device.
 
-**With no Drive connection, nothing leaves the device**, so every answer is no.
+**Accounts are live as of this change.** Firebase Auth holds an email and password;
+one Firestore document per user holds exactly five fields. Training data is not sent
+there and `firebase/firestore.rules` rejects any attempt to, so the health category
+stays out of this form.
+
+| Question | Answer |
+|---|---|
+| Data type | Personal info — name, email address, **age**, **gender**, and occupation as "other info" |
+| Collected or shared? | Collected by the developer. **Never shared or sold.** |
+| Is it optional? | Yes — the app is fully functional with no account |
+| Purposes | App functionality, Analytics (understanding the userbase), and **Marketing — only for users who opted in** |
+| Encrypted in transit? | Yes |
+| Can users request deletion? | Yes — Delete account in Settings, plus the web URL below |
+
+Marketing is a *separate* purpose and must be ticked as one. It applies only to users
+who ticked the unticked box at signup; `marketingOptInAt` records when, because both
+GDPR and DPDP require a controller to be able to demonstrate consent.
+
+**With no account and no Drive connection, nothing leaves the device**, so every
+other answer is no.
 
 **Once the user connects Drive**, the encrypted database is uploaded to *their own*
 `appDataFolder`. Declare it rather than argue it is not collection:
@@ -94,11 +113,21 @@ Play Console *and* in Settings.
 > **What Iron stores.** Your workouts, plans, bodyweight, measurements, food, water
 > and settings are saved in a database on your device. That database is encrypted.
 >
-> **What Iron sends.** Nothing, unless you turn on Google Drive backup.
+> **What Iron sends.** Nothing, unless you create an account or turn on Google Drive
+> backup.
 >
-> Iron has no account system, no server, and no analytics. It does not contain ads.
-> It does not use an advertising identifier. It does not send crash reports. Nobody,
-> including the developer, can see your data.
+> **If you create an account.** An account is optional and Iron works fully without
+> one. If you make one, five things are stored on our server: your name, email
+> address, occupation, age and sex. Your workouts, bodyweight, measurements, food,
+> water and any areas you flagged to go easy on are never sent there — they stay on
+> your phone. We email you about Iron only if you ticked the box asking us to; that
+> box is never ticked for you, is never required, and can be turned off in Settings
+> at any time. *Delete account* in Settings erases those five fields from our server.
+>
+> Iron has no analytics SDK. It does not contain ads. It does not use an advertising
+> identifier. It does not send crash reports. Beyond the five account fields above,
+> nobody — including the developer — can see your data: your training, body, food and
+> water are never transmitted to us at all.
 >
 > **If you turn on Google Drive backup.** Iron uploads an encrypted copy of its
 > database to a private folder inside *your* Google Drive, called the app data
@@ -111,8 +140,10 @@ Play Console *and* in Settings.
 > your device and are used only to show you which account is connected.
 >
 > **Deleting your data.** *Delete all my data* in Settings erases everything on the
-> phone. *Disconnect* stops backups; existing backups can be deleted from your Google
-> account at any time. Uninstalling removes everything local.
+> phone. *Delete account*, also in Settings, erases your name, email, occupation, age
+> and sex from our server; you can also do this at <account deletion URL> without
+> installing the app. *Disconnect* stops Drive backups; existing backups can be
+> deleted from your Google account at any time. Uninstalling removes everything local.
 >
 > **Children.** Iron is not directed at children under 13.
 >
@@ -130,8 +161,10 @@ Play Console *and* in Settings.
   audience, news (no), data safety (above), government app (no).
 - **`android.permission.RECEIVE_BOOT_COMPLETED`** — used to restore a running rest
   timer after a reboot. No declaration form, but expect to explain it if asked.
-- **Account deletion** — **not applicable today**, because Iron has no accounts.
-  It becomes mandatory the moment it does. See below.
+- **Account deletion** — **now mandatory**, because Iron has accounts. Play requires
+  both an in-app path (built: Settings -> Account -> Delete account) **and** a public
+  web URL where an account can be deleted without installing the app. The web URL is
+  still outstanding and a reviewer will check it.
 - **Screenshots, feature graphic, description** — Play will not accept a listing
   without them.
 
