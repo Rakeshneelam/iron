@@ -72,7 +72,7 @@ export function RoutineSheet<M extends string>(p: RoutineSheetProps<M>) {
             const demo = drillDemo(it.drill.demo);
             return (
               <View key={it.drill.id}>
-                {header ? <Text style={styles.phase}>{PHASE_LABEL[it.phase].toUpperCase()}</Text> : null}
+                {header ? <Text style={styles.phase}>{PHASE_LABEL[it.phase]}</Text> : null}
                 <View style={styles.row}>
                   <Pressable style={styles.flex} onPress={() => setOpen(open === it.drill.id ? null : it.drill.id)} accessibilityHint="Shows how to do it">
                     <Text style={styles.name}>{it.drill.name}</Text>
@@ -113,7 +113,7 @@ export function RoutineSheet<M extends string>(p: RoutineSheetProps<M>) {
 const styles = StyleSheet.create({
   stack: { gap: space.xs, paddingBottom: space.lg },
   flex: { flex: 1 },
-  phase: { ...font.caption, color: color.textMuted, letterSpacing: 1, marginTop: space.md, marginBottom: space.xs },
+  phase: { ...font.label, color: color.textMuted, marginTop: space.lg, marginBottom: space.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.xs, minHeight: hit.gym },
   name: { ...font.body, color: color.text, fontWeight: '600' },
   muted: { ...font.caption, color: color.textMuted, marginTop: 2 },

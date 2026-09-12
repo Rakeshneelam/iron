@@ -381,7 +381,7 @@ export default function SessionScreen() {
     ? ''
     : unit !== 'reps'
       ? `${suggestion.sets} ${suggestion.sets === 1 ? 'round' : 'sets'}${suggestion.weight > 0 ? ` · ${kg(suggestion.weight)}` : ''}`
-      : `${suggestion.sets} sets · ${suggestion.repTarget[0]}–${suggestion.repTarget[1]} reps · RIR ${suggestion.targetRIR}`;
+      : `${suggestion.sets} × ${suggestion.repTarget[0]}–${suggestion.repTarget[1]}, leaving ${suggestion.targetRIR} in reserve`;
 
   return (
     <View style={[styles.flex, { paddingTop: insets.top }]}>
@@ -419,7 +419,7 @@ export default function SessionScreen() {
               <View style={styles.flex1}>
                 <Text style={styles.cardTitle}>Warm-up · {minutesLabel(warmup.seconds)}</Text>
                 <Text style={styles.caption} numberOfLines={2}>
-                  {warmup.items.map((i) => i.drill.name).join(' · ')}
+                  {warmup.items.map((i) => i.drill.name).join(', ')}
                 </Text>
               </View>
             </View>
@@ -552,7 +552,7 @@ export default function SessionScreen() {
             ) : null}
 
             <Text style={styles.last}>
-              <Text style={styles.lastLabel}>{last ? `Last · ${fmtDayLabel(last.date)}   ` : ''}</Text>
+              <Text style={styles.lastLabel}>{last ? `Last time, ${fmtDayLabel(last.date)}   ` : ''}</Text>
               {last
                 ? last.sets
                     .filter((s) => s.isWarmup === 0)

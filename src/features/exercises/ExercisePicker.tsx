@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   input: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.default },
   gap: { marginVertical: space.md },
   suggested: { marginBottom: space.md },
-  section: { ...font.caption, color: color.textMuted, letterSpacing: 1, marginBottom: space.xs },
+  section: { ...font.label, color: color.textMuted, marginBottom: space.xs },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.default },
   item: { paddingVertical: space.md, borderBottomWidth: 1, borderBottomColor: color.border, minHeight: hit.default },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

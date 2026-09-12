@@ -58,7 +58,7 @@ export function VolumeList({ weekly }: { weekly: Record<string, number> }) {
 
       {fine.length > 0 ? (
         <View style={styles.group}>
-          <Text style={styles.groupLabel}>ON TRACK</Text>
+          <Text style={styles.groupLabel}>On track</Text>
           <View style={styles.chips}>
             {fine.map((r) => (
               <View key={r.muscle} style={styles.chip}>
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
   count: { ...font.label, ...font.numeric, color: color.text, fontWeight: '700' },
   meta: { ...font.caption, color: color.textMuted, fontWeight: '400' },
   group: { gap: space.sm },
-  groupLabel: { ...font.caption, color: color.textMuted, letterSpacing: 1 },
+  groupLabel: { ...font.label, color: color.textMuted },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   chip: {
     paddingHorizontal: space.sm,

@@ -1,121 +1,35 @@
-import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, confirm, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, TextField, ToggleChips } from '@/components';
+import { Card, ChipRow, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, TextField, ToggleChips } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
-import { recoveryPhrase } from '@/db/client';
-import {
-  deleteAccount,
-  isAccountsConfigured,
-  loadProfile,
-  saveProfile,
-  signOutAccount,
-  watchAccount,
-  type Profile,
-} from '@/services/account';
-import { autoBackupOn, backupNow, lastBackupAt, setAutoBackup } from '@/services/backup';
-import { connect, currentAccount, disconnect, isConfigured } from '@/services/drive';
-import { wipeAllData } from '@/db/repositories/admin';
 import { PHASES, setSetting, useSettings } from '@/db/repositories/settings';
 import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle, toolsOf, TOOL_OPTIONS, WEEKDAYS } from '@/features/profile';
 import { GOALS } from '@/features/settings/goals';
 import { Row, TimeAdjuster } from '@/features/settings/Row';
 import { MODE_OPTIONS } from '@/features/warmup/labels';
-import { exportAll } from '@/services/export';
 import { openBatteryOptimisationSettings, rescheduleAll } from '@/services/notifications';
 import { color, font, hit, radius, space } from '@/theme/tokens';
-
-/** "2 hours ago" beats a timestamp for something the user only wants reassurance about. */
-function fmtWhen(iso: string): string {
-  const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
-  if (mins < 2) return 'just now';
-  if (mins < 60) return `${mins} minutes ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-  const days = Math.round(hours / 24);
-  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
-}
 
 const ON_OFF = [
   { label: 'On', value: 1 },
   { label: 'Off', value: 0 },
 ] as const;
 
+/**
+ * Settings: the things people change.
+ *
+ * Everything about where data lives — account, backup, export, recovery phrase,
+ * privacy, deletion — moved to settings/data. Twelve sections in one scroll meant
+ * the training days someone edits weekly sat below six sections they touch once.
+ */
 export default function SettingsScreen() {
   const s = useSettings();
-  const [exportMsg, setExportMsg] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
   const tools = toolsOf(s);
 
   const bool = (key: 'calorieCycling' | 'hapticsEnabled' | 'restTimerAutoStart') => (
     <ChipRow options={ON_OFF} value={s[key] ? 1 : 0} onChange={(v) => setSetting(key, v === 1)} fill={false} />
   );
-
-  // Read once per mount: it never changes, and it must be here to be written down
-  // while the phone still works, not revealed once at a moment nobody remembers.
-  const [phrase] = useState(recoveryPhrase);
-
-  const [signedIn, setSignedIn] = useState<string | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [accountMsg, setAccountMsg] = useState<string | null>(null);
-  useEffect(() => {
-    if (!isAccountsConfigured()) return;
-    return watchAccount((u) => {
-      setSignedIn(u?.email ?? null);
-      if (u) void loadProfile().then(setProfile);
-      else setProfile(null);
-    });
-  }, []);
-
-  const removeAccount = () =>
-    confirm({
-      title: 'Delete your account?',
-      message: 'Your name, email, occupation, age and sex are erased from the server. Your workouts and everything else on this phone are left alone.',
-      confirmLabel: 'Continue',
-      destructive: true,
-      onConfirm: () =>
-        confirm({
-          title: 'Really delete the account?',
-          confirmLabel: 'Delete account',
-          destructive: true,
-          onConfirm: () => {
-            setAccountMsg(null);
-            void deleteAccount().then(
-              () => setAccountMsg('Account deleted.'),
-              (e: unknown) => setAccountMsg(`Could not delete: ${e instanceof Error ? e.message : String(e)}. You may need to sign in again first.`),
-            );
-          },
-        }),
-    });
-
-  const [account, setAccount] = useState<string | null>(null);
-  const [driveMsg, setDriveMsg] = useState<string | null>(null);
-  const [backingUp, setBackingUp] = useState(false);
-  const [auto, setAuto] = useState(autoBackupOn);
-  const [lastAt, setLastAt] = useState(lastBackupAt);
-  useEffect(() => {
-    void currentAccount().then(setAccount);
-  }, []);
-
-  const deleteAll = () =>
-    confirm({
-      title: 'Delete all your data?',
-      message: 'Workouts, plans, body measurements, water, food and settings are removed from this phone. Export first if you want a copy. This cannot be undone.',
-      confirmLabel: 'Continue',
-      destructive: true,
-      onConfirm: () =>
-        confirm({
-          title: 'Really delete everything?',
-          confirmLabel: 'Delete everything',
-          destructive: true,
-          onConfirm: () => {
-            wipeAllData();
-            router.replace('/setup');
-          },
-        }),
-    });
 
   return (
     <Screen title="Settings" right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
@@ -238,170 +152,11 @@ export default function SettingsScreen() {
         <Row label="Calorie cycling" hint="+8% on training days, −8% on rest days.">{bool('calorieCycling')}</Row>
       </Card>
 
-      <SectionHeader title="Your data" />
-      <Card>
-        <Text style={styles.bodyStrong}>Export everything</Text>
-        <Text style={styles.hint}>
-          A structured JSON file for a coach or an AI assistant (profile, plans, every workout with planned vs done, records, body, water, weekly summaries), CSVs for
-          spreadsheets, and a full backup.
-        </Text>
-        <PrimaryButton
-          label={exporting ? 'Exporting…' : 'Export to a folder'}
-          tone="neutral"
-          disabled={exporting}
-          icon={<Icon name="export" size={18} />}
-          style={styles.gap}
-          onPress={() => {
-            setExportMsg(null);
-            setExporting(true);
-            exportAll()
-              .then(
-                (n) => setExportMsg(n === null ? null : `Saved ${n} files.`),
-                (e: unknown) => setExportMsg(`Export failed: ${e instanceof Error ? e.message : String(e)}`),
-              )
-              .finally(() => setExporting(false));
-          }}
-        />
-        {exportMsg ? <Text style={styles.hint}>{exportMsg}</Text> : null}
-        <Text style={styles.hint}>These files are not encrypted — anything that can read the folder can read them.</Text>
-        <PrimaryButton label="Delete all my data" tone="ghost" icon={<Icon name="trash" size={16} color={color.danger} />} style={styles.gap} onPress={deleteAll} />
+      <SectionHeader title="Your data" hint="Account, backup, export and your recovery phrase." />
+      <Card onPress={() => router.push('/settings/data')}>
+        <LinkRow title="Data, account and backup" hint="Everything about where your data lives and how to get it back." />
       </Card>
 
-      {isAccountsConfigured() ? (
-        <>
-          <SectionHeader title="Account" />
-          <Card>
-            {signedIn ? (
-              <>
-                <Text style={styles.bodyStrong}>{signedIn}</Text>
-                <Text style={styles.hint}>
-                  Signed in. Only your name, email, occupation, age and sex are stored on the server — never your
-                  workouts, weights, food or measurements.
-                </Text>
-                <Row label="Email me about Iron" hint="Turn this off any time. It never affects your account.">
-                  <ChipRow
-                    options={ON_OFF}
-                    value={profile?.marketingOptIn ? 1 : 0}
-                    onChange={(v) => {
-                      setProfile((p) => (p ? { ...p, marketingOptIn: v === 1 } : p));
-                      void saveProfile({ marketingOptIn: v === 1 });
-                    }}
-                    fill={false}
-                  />
-                </Row>
-                <PrimaryButton label="Sign out" tone="neutral" style={styles.gap} onPress={() => void signOutAccount()} />
-                <PrimaryButton label="Delete account" tone="ghost" style={styles.gap} onPress={removeAccount} />
-              </>
-            ) : (
-              <>
-                <Text style={styles.hint}>
-                  Optional. An account lets you sign in on another phone. Iron works fully without one, and your training
-                  data stays on this phone either way.
-                </Text>
-                <PrimaryButton label="Create an account or sign in" tone="neutral" style={styles.gap} onPress={() => router.push('/account')} />
-              </>
-            )}
-            {accountMsg ? <Text style={styles.hint}>{accountMsg}</Text> : null}
-          </Card>
-        </>
-      ) : null}
-
-      <SectionHeader title="Google Drive backup" />
-      <Card>
-        {!isConfigured() ? (
-          <Text style={styles.hint}>
-            This build has no Google client ID, so Drive backup is unavailable. See scripts/setup-google-drive.sh.
-          </Text>
-        ) : account ? (
-          <>
-            <Text style={styles.bodyStrong}>{account}</Text>
-            <Text style={styles.hint}>
-              {lastAt ? `Last backed up ${fmtWhen(lastAt)}.` : 'Not backed up yet.'} Only Iron can read this folder, and the
-              file is encrypted with your recovery phrase.
-            </Text>
-            <Row label="Back up daily" hint="On Wi-Fi, in the background. Never interrupts a workout.">
-              <ChipRow options={ON_OFF} value={auto ? 1 : 0} onChange={(v) => { setAutoBackup(v === 1); setAuto(v === 1); }} fill={false} />
-            </Row>
-            <PrimaryButton
-              label={backingUp ? 'Backing up…' : 'Back up now'}
-              tone="neutral"
-              disabled={backingUp}
-              style={styles.gap}
-              onPress={() => {
-                setDriveMsg(null);
-                setBackingUp(true);
-                backupNow()
-                  .then(
-                    () => { setLastAt(lastBackupAt()); setDriveMsg('Backed up.'); },
-                    (e: unknown) => setDriveMsg(`Backup failed: ${e instanceof Error ? e.message : String(e)}`),
-                  )
-                  .finally(() => setBackingUp(false));
-              }}
-            />
-            <PrimaryButton
-              label="Disconnect"
-              tone="ghost"
-              style={styles.gap}
-              onPress={() =>
-                confirm({
-                  title: 'Disconnect Google Drive?',
-                  message: 'Iron stops backing up. Backups already in Drive are left alone.',
-                  confirmLabel: 'Disconnect',
-                  onConfirm: () => void disconnect().then(() => { setAccount(null); setAutoBackup(false); setAuto(false); }),
-                })
-              }
-            />
-          </>
-        ) : (
-          <>
-            <Text style={styles.hint}>
-              Backs up to a private folder only Iron can see. You need your recovery phrase to read it on a new phone.
-            </Text>
-            <PrimaryButton
-              label="Connect Google Drive"
-              tone="neutral"
-              style={styles.gap}
-              onPress={() => {
-                setDriveMsg(null);
-                void connect().then(
-                  (email) => { if (email) { setAccount(email); setAutoBackup(true); setAuto(true); } },
-                  (e: unknown) => setDriveMsg(`Could not connect: ${e instanceof Error ? e.message : String(e)}`),
-                );
-              }}
-            />
-          </>
-        )}
-        {driveMsg ? <Text style={styles.hint}>{driveMsg}</Text> : null}
-      </Card>
-
-      <Card onPress={() => router.push('/settings/restore')}>
-        <LinkRow title="Restore from backup" hint="Replaces everything on this phone with a backup file." />
-      </Card>
-
-      <Card>
-        <Text style={styles.bodyStrong}>Recovery phrase</Text>
-        <Text style={styles.hint}>Needed to read a backup on a new phone. Write it down somewhere you will still have it if this phone is lost.</Text>
-        {phrase ? (
-          <Text selectable style={styles.phrase} accessibilityLabel={`Recovery phrase: ${phrase.split('').join(' ')}`}>
-            {phrase}
-          </Text>
-        ) : (
-          <Text style={styles.hint}>Unavailable — this device has no keystore, so the database is not encrypted.</Text>
-        )}
-      </Card>
-      <Card onPress={() => router.push('/settings/privacy')}>
-        <LinkRow title="Privacy" hint="What Iron stores, what it sends, and how to delete it." />
-      </Card>
-
-      {/* This sentence has to stay true. Accounts exist now, so it can no longer say
-          "no account, no server" — but the training data claim still holds, and that
-          is the one people actually care about. */}
-      <Text style={[styles.footer, styles.footerRoom]}>
-        Iron {Constants.expoConfig?.version ?? ''} ·{' '}
-        {isAccountsConfigured()
-          ? 'Your workouts, body, food and water stay on this phone. An account, if you make one, stores only your name, email, occupation, age and sex.'
-          : 'No account, no server. Everything stays on this phone, and nothing is sent anywhere unless you export it.'}
-      </Text>
     </Screen>
   );
 }

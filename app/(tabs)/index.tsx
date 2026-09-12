@@ -193,11 +193,11 @@ export default function Today() {
       <Screen title={title} subtitle={subtitle} right={gear}>
         {restDay && !state.trainedToday ? recoveryCard : null}
         <Text style={styles.eyebrow}>
-          {day.id === state.next?.id ? 'UP NEXT' : 'CHOSEN'} · {state.routine.name.toUpperCase()}
+          {day.id === state.next?.id ? 'Up next in' : 'Chosen from'} {state.routine.name}
         </Text>
         <Text style={styles.dayTitle}>{day.label}</Text>
         <Text style={styles.muted}>
-          {preview.length} exercises · about {fit ? fit.minutes : fullMinutes} min
+          {preview.length} {preview.length === 1 ? 'exercise' : 'exercises'}, about {fit ? fit.minutes : fullMinutes} minutes
         </Text>
 
         {state.days.length > 1 ? (
@@ -221,7 +221,7 @@ export default function Today() {
                   </Text>
                   <Text style={styles.exMeta}>
                     {cut ? 'left out today' : `${sets} × ${slot.repLo}–${slot.repHi}${measure === 'time' ? ' s' : ''}`}
-                    {!cut && slot.supersetGroup ? `  ·  superset ${slot.supersetGroup}` : ''}
+                    {!cut && slot.supersetGroup ? <Text style={styles.exAside}>{`   with ${slot.supersetGroup}`}</Text> : null}
                   </Text>
                 </View>
                 {!cut ? (
@@ -361,7 +361,8 @@ const styles = StyleSheet.create({
   gapTop: { marginTop: space.lg },
   rowCenter: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   rowTitle: { ...font.body, color: color.text, fontWeight: '600' },
-  eyebrow: { ...font.caption, color: color.textMuted, letterSpacing: 1, fontWeight: '600' },
+  eyebrow: { ...font.caption, color: color.textMuted },
+  exAside: { color: color.textFaint },
   dayTitle: { ...font.title, color: color.text, marginTop: space.xs },
   cardTitle: { ...font.heading, color: color.text, marginTop: space.xs },
   muted: { ...font.label, color: color.textMuted, marginTop: space.xs },

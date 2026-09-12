@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   stack: { gap: space.md, paddingBottom: space.lg },
   hint: { ...font.caption, color: color.textMuted },
   center: { textAlign: 'center', marginTop: space.xs },
-  group: { ...font.caption, color: color.textMuted, letterSpacing: 1, marginTop: space.lg, marginBottom: space.sm, textTransform: 'uppercase' },
+  group: { ...font.label, color: color.textMuted, marginTop: space.xl, marginBottom: space.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
   cell: { width: '47%' },
   save: { marginTop: space.xl, marginBottom: space.md },

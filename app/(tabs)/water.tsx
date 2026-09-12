@@ -62,13 +62,15 @@ export default function WaterScreen() {
       <View style={styles.center}>
         <Ring
           progress={plan.targetMl > 0 ? plan.consumedMl / plan.targetMl : 0}
-          size={200}
+          size={148}
           label={ml(plan.consumedMl)}
           sublabel={reached ? 'done' : `${ml(Math.max(0, plan.targetMl - plan.consumedMl))} to go`}
           tone={reached ? 'positive' : 'accent'}
         />
       </View>
-      <Text style={styles.status}>{status}</Text>
+      {/* Only when there is something to say. "No more reminders today" under an
+          empty ring is noise standing between the user and the log buttons. */}
+      {status ? <Text style={styles.status}>{status}</Text> : null}
 
       <View style={styles.grid}>
         {QUICK.map((q) => (
@@ -95,7 +97,7 @@ export default function WaterScreen() {
         ) : null}
       </Card>
 
-      <SectionHeader title="Last 14 days" />
+      <SectionHeader title="Last 14 days" hint={plan.breakdown} />
       <Card>
         <MiniBars
           data={history.map((d) => ({ label: WEEKDAY[parseISODate(d.date).getDay()] ?? '', value: d.ml }))}

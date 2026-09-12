@@ -235,7 +235,7 @@ export default function Setup() {
               selected={choice === OWN}
               onPress={() => setPicked(OWN)}
             />
-            <Text style={styles.orLabel}>OR PICK A READY-MADE PLAN</Text>
+            <Text style={styles.orLabel}>Or pick a ready-made plan</Text>
             {shown.map((m, i) => (
               <Choice
                 key={m.template.id}
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
   gapSm: { marginTop: space.sm },
   gapLg: { marginTop: space.lg },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  orLabel: { ...font.caption, color: color.textMuted, letterSpacing: 1, marginTop: space.lg, marginBottom: space.sm },
+  orLabel: { ...font.label, color: color.textMuted, marginTop: space.xl, marginBottom: space.sm },
   promises: { gap: space.md, marginTop: space.md, marginBottom: space.xl },
   promise: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
   promiseText: { ...font.body, color: color.text, flex: 1 },

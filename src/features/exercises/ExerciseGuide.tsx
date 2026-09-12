@@ -100,7 +100,7 @@ export function ExerciseGuide({ exercise, compact = false, onOpen }: { exercise:
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.block}>
-      <Text style={styles.blockTitle}>{title.toUpperCase()}</Text>
+      <Text style={styles.blockTitle}>{title}</Text>
       {children}
     </View>
   );
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   legendText: { ...font.label, color: color.text },
   meta: { ...font.caption, color: color.textMuted, textAlign: 'center' },
   block: { gap: space.xs },
-  blockTitle: { ...font.caption, color: color.textMuted, letterSpacing: 1 },
+  blockTitle: { ...font.label, color: color.textMuted },
   line: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
   num: { ...font.label, ...font.numeric, color: color.accent, width: 14 },
   body: { ...font.body, color: color.text, flex: 1 },
