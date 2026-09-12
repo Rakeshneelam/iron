@@ -58,7 +58,7 @@ export default function WaterScreen() {
   const dayTotal = entries.reduce((a, e) => a + e.ml, 0);
 
   return (
-    <Screen title="Water" subtitle={`Target ${ml(plan.targetMl)} · ${plan.breakdown}`}>
+    <Screen title="Water" subtitle={`Target ${ml(plan.targetMl)}`}>
       <View style={styles.center}>
         <Ring
           progress={plan.targetMl > 0 ? plan.consumedMl / plan.targetMl : 0}

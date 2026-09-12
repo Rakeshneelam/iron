@@ -171,7 +171,10 @@ const styles = StyleSheet.create({
   btnText: { ...font.title, color: color.text },
   valueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0 },
   value: { ...font.heading, ...font.numeric, color: color.text, textAlign: 'center' },
-  valueGym: { ...font.title, fontSize: font.display.fontSize * 0.6, ...font.numeric, color: color.text, textAlign: 'center' },
+  // Pinned, not derived. This was font.display.fontSize * 0.6, so shrinking the
+  // display token quietly shrank the weight and rep controls on the logging screen —
+  // the one place AGENTS.md §7 requires a number stay readable at arm's length.
+  valueGym: { ...font.title, fontSize: 34, lineHeight: 40, ...font.numeric, color: color.text, textAlign: 'center' },
   suffix: { ...font.caption, color: color.textMuted },
   input: {
     flex: 1,

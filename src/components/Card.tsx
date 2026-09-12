@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { color, radius, space } from '@/theme/tokens';
+import { color, gap, radius, space } from '@/theme/tokens';
 
 export type CardTone = 'default' | 'accent' | 'positive' | 'warning' | 'danger';
 
@@ -42,7 +42,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     padding: space.lg,
-    marginBottom: space.md,
+    // Siblings sit further apart than the rows inside them, so a card reads as one
+    // thing rather than as more of the column above it.
+    marginBottom: gap.between,
   },
   pressed: { backgroundColor: color.surfaceHigh },
 });

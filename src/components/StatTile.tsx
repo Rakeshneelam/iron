@@ -20,14 +20,22 @@ const TONE: Record<StatTone, string> = {
   muted: color.textMuted,
 };
 
+/**
+ * A number and what it is.
+ *
+ * The value leads and the label follows it. Before, the label sat on top in muted
+ * grey and the number came second at heading size — which reads the wrong way round,
+ * because the number is the thing being looked for and the label is only there to
+ * say which number it is.
+ */
 export function StatTile({ label, value, hint, tone = 'default' }: StatTileProps) {
   return (
     <View style={styles.tile}>
+      <Text style={[styles.value, { color: TONE[tone] }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+        {value}
+      </Text>
       <Text style={styles.label} numberOfLines={1}>
         {label}
-      </Text>
-      <Text style={[styles.value, { color: TONE[tone] }]} numberOfLines={1} adjustsFontSizeToFit>
-        {value}
       </Text>
       {hint ? (
         <Text style={styles.hint} numberOfLines={2}>
@@ -48,7 +56,7 @@ const styles = StyleSheet.create({
     borderColor: color.border,
     padding: space.md,
   },
-  label: { ...font.caption, color: color.textMuted },
-  value: { ...font.heading, ...font.numeric, marginTop: space.xs },
+  value: { ...font.heading, ...font.numeric, fontWeight: '700' },
+  label: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   hint: { ...font.caption, color: color.textFaint, marginTop: space.xs },
 });

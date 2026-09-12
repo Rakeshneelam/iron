@@ -106,7 +106,11 @@ export function AddFoodSheet({
           <Pressable key={f.id} style={styles.item} onPress={() => { setFood(f); setServings(1); }}>
             <Text style={styles.name}>{f.name}</Text>
             <Text style={styles.muted}>
-              {f.servingLabel ?? `${f.servingG} g`} · {Math.round(f.kcal)} kcal · {Math.round(f.protein)} g protein
+              <Text style={styles.strong}>{Math.round(f.kcal)} kcal</Text>
+              {'   '}
+              {Math.round(f.protein)} g protein
+              {'   '}
+              {f.servingLabel ?? `${f.servingG} g`}
             </Text>
           </Pressable>
         ))}
@@ -246,6 +250,7 @@ const styles = StyleSheet.create({
   },
   item: { paddingVertical: space.md, borderBottomWidth: 1, borderBottomColor: color.border, minHeight: hit.default },
   name: { ...font.body, color: color.text },
+  strong: { color: color.text, fontWeight: '600' },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   macro: { ...font.label, ...font.numeric, color: color.textMuted, marginVertical: space.lg },
   gap: { marginTop: space.md },

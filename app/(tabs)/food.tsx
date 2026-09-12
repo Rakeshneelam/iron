@@ -111,7 +111,8 @@ export default function FoodScreen() {
         return (
           <View key={slot}>
             <SectionHeader
-              title={`${slot}${entries.length ? ` · ${Math.round(kcal)} kcal` : ''}`}
+              title={cap(slot)}
+              hint={entries.length ? `${Math.round(kcal)} kcal logged` : undefined}
               right={
                 prevSlot.length > 0 && entries.length === 0 ? (
                   <PrimaryButton
@@ -141,7 +142,8 @@ export default function FoodScreen() {
                     {fmtServings(e.servings)} × {unit(e.servingLabel)} · {e.label}
                   </Text>
                   <Text style={styles.entryMacro}>
-                    {Math.round(e.macros.protein)} g P · {Math.round(e.macros.kcal)}
+                    {Math.round(e.macros.kcal)} kcal
+                    <Text style={styles.entryProtein}>  {Math.round(e.macros.protein)} g protein</Text>
                   </Text>
                 </Pressable>
               ))}
@@ -158,7 +160,7 @@ export default function FoodScreen() {
                   ))}
                 </View>
               ) : null}
-              <PrimaryButton label={`Add to ${slot}`} tone="neutral" onPress={() => setAdding(slot)} />
+              <PrimaryButton label="Add food" tone="neutral" onPress={() => setAdding(slot)} />
             </Card>
           </View>
         );
@@ -213,6 +215,7 @@ export default function FoodScreen() {
 }
 
 const styles = StyleSheet.create({
+  entryProtein: { color: color.textMuted },
   usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
   dateNav: { flexDirection: 'row', gap: space.xs },
   tiles: { flexDirection: 'row', gap: space.sm },

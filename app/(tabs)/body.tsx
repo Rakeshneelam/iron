@@ -63,7 +63,6 @@ export default function BodyScreen() {
   return (
     <Screen title="Body">
       <Card>
-        <Text style={styles.eyebrow}>{hasTrend ? 'WEIGHT TREND' : 'WEIGHT'}</Text>
         <View style={styles.rowBetween}>
           <Text style={styles.hero}>
             {lastTrend === null ? '—' : kgNum(Math.round(lastTrend * 10) / 10)}
@@ -187,7 +186,7 @@ export default function BodyScreen() {
 
 const styles = StyleSheet.create({
   todayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: hit.default },
-  eyebrow: { ...font.caption, color: color.textMuted, letterSpacing: 1, fontWeight: '600' },
+  trendNote: { ...font.caption, color: color.textMuted },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
   hero: { ...font.display, ...font.numeric, fontSize: 44, color: color.text },
   unit: { ...font.heading, color: color.textMuted },
