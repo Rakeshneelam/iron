@@ -123,11 +123,12 @@ export default function AccountScreen() {
       <SectionHeader title={signingUp ? 'Your details' : 'Sign in'} />
       <Card>
         {signingUp ? (
-          <TextField value={name} onCommit={setName} placeholder="Name" style={styles.input} autoCapitalize="words" accessibilityLabel="Name" />
+          <TextField value={name} onCommit={setName} onType={setName} placeholder="Name" style={styles.input} autoCapitalize="words" accessibilityLabel="Name" />
         ) : null}
         <TextField
           value={email}
           onCommit={setEmail}
+          onType={setEmail}
           placeholder="Email"
           style={styles.input}
           autoCapitalize="none"
@@ -137,6 +138,8 @@ export default function AccountScreen() {
         <TextField
           value={password}
           onCommit={setPassword}
+          onType={setPassword}
+          trim={false}
           placeholder={signingUp ? 'Password — at least 8 characters' : 'Password'}
           style={styles.input}
           secureTextEntry
@@ -149,6 +152,7 @@ export default function AccountScreen() {
             <TextField
               value={occupation}
               onCommit={setOccupation}
+              onType={setOccupation}
               placeholder="Occupation (optional)"
               style={styles.input}
               autoCapitalize="words"

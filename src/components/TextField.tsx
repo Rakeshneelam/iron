@@ -8,19 +8,25 @@
  * that changes while you are not typing in it.
  */
 import { useEffect, useRef, useState } from 'react';
-import { TextInput, type TextInputProps } from 'react-native';
+import { StyleSheet, TextInput, type TextInputProps } from 'react-native';
 
-import { color } from '@/theme/tokens';
+import { color, font, hit, radius, space } from '@/theme/tokens';
 
 export interface TextFieldProps extends Omit<TextInputProps, 'value' | 'onChangeText'> {
   /** The stored value. The field follows it except while you are editing. */
   value: string;
   /** Called with the finished text (trimmed unless `trim` is false). */
   onCommit: (text: string) => void;
+  /**
+   * Called on every keystroke. `onCommit` fires on blur, which is right for a
+   * settings field but useless to a form whose submit button depends on the value —
+   * without this the button stays disabled while you type into it.
+   */
+  onType?: (text: string) => void;
   trim?: boolean;
 }
 
-export function TextField({ value, onCommit, trim = true, onFocus, onBlur, ...rest }: TextFieldProps) {
+export function TextField({ value, onCommit, onType, trim = true, onFocus, onBlur, style, ...rest }: TextFieldProps) {
   const [draft, setDraft] = useState(value);
   const editing = useRef(false);
   /** Typed but not yet written; null once written. */
@@ -49,10 +55,14 @@ export function TextField({ value, onCommit, trim = true, onFocus, onBlur, ...re
     <TextInput
       {...rest}
       value={draft}
+      // A default that is legible on this app's dark surfaces. Without it a caller
+      // who passes only spacing gets the platform default — black text on near-black.
+      style={[styles.field, style]}
       placeholderTextColor={rest.placeholderTextColor ?? color.textFaint}
       onChangeText={(t) => {
         setDraft(t);
         pending.current = trim ? t.trim() : t;
+        onType?.(t);
       }}
       onFocus={(e) => {
         editing.current = true;
@@ -70,3 +80,14 @@ export function TextField({ value, onCommit, trim = true, onFocus, onBlur, ...re
     />
   );
 }
+
+const styles = StyleSheet.create({
+  field: {
+    ...font.body,
+    color: color.text,
+    backgroundColor: color.surfaceHigh,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    minHeight: hit.default,
+  },
+});
