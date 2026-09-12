@@ -57,11 +57,13 @@ export default function BodyScreen() {
 
   const recent = [...weighIns].reverse().slice(0, showAll ? 60 : 5);
   const hasMeasurements = measurements.length > 0;
+  /** One point is not a trend. Below this the card shows a weight, not a trend. */
+  const hasTrend = trend.length >= 2;
 
   return (
     <Screen title="Body">
       <Card>
-        <Text style={styles.eyebrow}>WEIGHT TREND</Text>
+        <Text style={styles.eyebrow}>{hasTrend ? 'WEIGHT TREND' : 'WEIGHT'}</Text>
         <View style={styles.rowBetween}>
           <Text style={styles.hero}>
             {lastTrend === null ? '—' : kgNum(Math.round(lastTrend * 10) / 10)}
@@ -70,9 +72,13 @@ export default function BodyScreen() {
           {trend.length >= 7 ? <Pill label={`${signed(rate, 2)} kg/wk · ${signed(pctWk, 2)}%`} /> : null}
         </View>
         {/* Edit sits with the number it edits, and says "edit" rather than "plus" —
-            the header button that used to do this looked like adding a new reading. */}
+            the header button that used to do this looked like adding a new reading.
+            The value itself is only repeated once there is a trend to distinguish
+            it from; with one reading the hero already IS today's weight. */}
         <View style={styles.todayRow}>
-          <Text style={styles.muted}>{todays ? `Today ${kg(todays.kg)}` : 'Not weighed today'}</Text>
+          <Text style={styles.muted}>
+            {!todays ? 'Not weighed today' : hasTrend ? `Today ${kg(todays.kg)}` : 'Weighed today'}
+          </Text>
           {todays ? (
             <IconButton
               icon="edit"
@@ -111,11 +117,9 @@ export default function BodyScreen() {
         <Card tone={check.onTrack ? 'positive' : 'warning'} style={styles.gapTop}>
           <Text style={styles.body}>{check.message}</Text>
         </Card>
-      ) : trend.length > 0 ? (
-        <Text style={styles.hint}>Weekly check-in against your goal starts after 7 weigh-ins ({trend.length} so far).</Text>
       ) : null}
 
-      {recent.length ? (
+      {recent.length > 1 ? (
         <>
           <SectionHeader title="Weigh-ins" />
           <Card style={styles.list}>

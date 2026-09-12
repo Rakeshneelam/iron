@@ -164,7 +164,7 @@ export function recommend(input: RecInput): Recommendation[] {
           id: `under:${muscle}:${smallest.exerciseId}`,
           kind: 'add_set',
           title: `More ${muscle} work`,
-          reason: `${weekly} sets a week is below the usual minimum for growth (${l.mev}). Add a set to ${smallest.name}.`,
+          reason: `Your plan schedules ${weekly} sets a week, below the usual minimum for growth (${l.mev}). Add a set to ${smallest.name}.`,
           exerciseId: smallest.exerciseId,
           slotId: smallest.slotId,
           change: { slotId: smallest.slotId, targetSets: smallest.targetSets + 1 },

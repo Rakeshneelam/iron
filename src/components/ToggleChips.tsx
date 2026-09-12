@@ -5,7 +5,13 @@ import { color, font, hit, radius, space } from '@/theme/tokens';
 
 import type { ChipOption } from './ChipRow';
 
-/** Multi-select chips (training days, limitations). Wraps onto several lines. */
+/**
+ * Multi-select chips (training days, equipment, limitations). Wraps onto lines.
+ *
+ * Selected reads as an outline rather than a solid fill. A single-select row has one
+ * loud answer, but "what you have" can be thirteen yeses at once, and thirteen solid
+ * accent blocks stop being emphasis and become the background.
+ */
 export function ToggleChips<T extends string | number>({
   options,
   values,
@@ -50,8 +56,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  on: { backgroundColor: color.accent, borderColor: color.accent },
+  on: { backgroundColor: color.surfaceHigh, borderColor: color.accent, borderWidth: 2 },
   pressed: { backgroundColor: color.border },
   text: { ...font.label, color: color.text },
-  textOn: { color: color.onAccent },
+  textOn: { color: color.accent, fontWeight: '700' },
 });
