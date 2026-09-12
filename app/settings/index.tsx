@@ -308,6 +308,10 @@ export default function SettingsScreen() {
           <Text style={styles.hint}>Unavailable — this device has no keystore, so the database is not encrypted.</Text>
         )}
       </Card>
+      <Card onPress={() => router.push('/settings/privacy')}>
+        <LinkRow title="Privacy" hint="What Iron stores, what it sends, and how to delete it." />
+      </Card>
+
       <Text style={styles.footer}>
         Iron {Constants.expoConfig?.version ?? ''} · no account, no server. Everything stays on this phone, and nothing is sent anywhere unless you export it.
       </Text>
