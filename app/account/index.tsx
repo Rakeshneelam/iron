@@ -16,6 +16,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, ChipRow, Icon, PrimaryButton, Screen, SectionHeader, Stepper, TextField, toast } from '@/components';
 import { getSettings } from '@/db/repositories/settings';
+import { googleConfigReport } from '@/services/googleSignin';
 import {
   resetPassword,
   signInWithEmail,
@@ -64,6 +65,8 @@ export default function AccountScreen() {
 
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  /** Email fields stay closed until asked for; Google needs none of them. */
+  const [useEmail, setUseEmail] = useState(false);
 
   const signingUp = mode === 'up';
   const ready = signingUp
@@ -113,13 +116,25 @@ export default function AccountScreen() {
       subtitle="Optional. Iron works fully without one."
       right={<PrimaryButton label="Back" tone="ghost" onPress={() => router.back()} />}
     >
-      <Card>
-        <Text style={styles.body}>
-          An account lets you sign in on another phone. Your workouts, weights, food and measurements stay on this phone
-          either way — an account never sends them anywhere.
-        </Text>
-      </Card>
+      <Text style={styles.lead}>
+        An account lets you sign in on another phone. Your workouts, weights, food and measurements stay on this phone
+        either way.
+      </Text>
 
+      <PrimaryButton label="Continue with Google" size="gym" style={styles.gapLg} disabled={busy} onPress={google} />
+      <Text style={styles.hint}>Fastest — nothing else to fill in.</Text>
+
+      {!useEmail ? (
+        <PrimaryButton
+          label={signingUp ? 'Use email instead' : 'Sign in with email'}
+          tone="ghost"
+          style={styles.gapLg}
+          onPress={() => setUseEmail(true)}
+        />
+      ) : null}
+
+      {useEmail ? (
+      <>
       <SectionHeader title={signingUp ? 'Your details' : 'Sign in'} />
       <Card>
         {signingUp ? (
@@ -181,7 +196,8 @@ export default function AccountScreen() {
         style={styles.gap}
         onPress={() => run(() => (signingUp ? signUpWithEmail({ name, email, password, occupation, age, sex, marketingOptIn: optIn }) : signInWithEmail(email, password)))}
       />
-      <PrimaryButton label="Continue with Google" tone="neutral" disabled={busy} style={styles.gap} onPress={google} />
+      </>
+      ) : null}
 
       <PrimaryButton
         label={signingUp ? 'I already have an account' : 'Create an account instead'}
@@ -219,6 +235,10 @@ function message(e: unknown): string {
   if (code.includes('user-not-found')) return 'No account with that email.';
   if (code.includes('too-many-requests')) return 'Too many attempts. Wait a few minutes.';
   if (code.includes('network')) return 'No connection. Nothing was changed.';
+  // Not a user error and not a password problem — the build is misconfigured.
+  if (code.includes('DEVELOPER_ERROR') || code === '10') {
+    return `Google sign-in is not set up for this build. ${googleConfigReport()}`;
+  }
   return e instanceof Error ? e.message : 'Something went wrong. Nothing was changed.';
 }
 
@@ -230,6 +250,8 @@ const styles = StyleSheet.create({
   input: { marginBottom: space.sm },
   pair: { flexDirection: 'row', gap: space.md, marginTop: space.md },
   gap: { marginTop: space.md },
+  gapLg: { marginTop: space.lg },
+  lead: { ...font.body, color: color.text, marginBottom: space.sm },
   optIn: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
   box: {
     width: 24,

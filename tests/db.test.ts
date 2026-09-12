@@ -39,7 +39,7 @@ import {
   restoreSessionExercise,
   unskipExercise,
 } from '../src/db/repositories/sessions.ts';
-import { deleteEntries, getDay, logFood, repeatDay, usualFor } from '../src/db/repositories/food.ts';
+import { createRecipe, deleteEntries, getDay, getRecipeMacros, listRecipes, logFood, logRecipe, repeatDay, usualFor } from '../src/db/repositories/food.ts';
 import { getSettings, setRaw, setSetting } from '../src/db/repositories/settings.ts';
 import { searchWorkouts } from '../src/db/repositories/progress.ts';
 import { wipeAllData } from '../src/db/repositories/admin.ts';
@@ -285,6 +285,45 @@ describe('food', () => {
     deleteEntries(ids);
     assert.equal(getDay('2026-03-02').entries.length, 0, 'undo removes the copy');
     assert.equal(getDay('2026-03-01').entries.length, 1, 'and leaves the original alone');
+  });
+});
+
+describe('recipes', () => {
+  test('a recipe saves its ingredients and reports per-serving macros', () => {
+    db.insert(schema.food)
+      .values([
+        { id: 'rice', name: 'Rice', servingG: 100, kcal: 130, protein: 3, carb: 28, fat: 0 },
+        { id: 'dal', name: 'Dal', servingG: 100, kcal: 120, protein: 9, carb: 20, fat: 1 },
+      ])
+      .run();
+
+    const r = createRecipe('Dal rice', 2, [
+      { foodId: 'rice', grams: 200 },
+      { foodId: 'dal', grams: 100 },
+    ]);
+    assert.equal(r.servings, 2);
+    assert.deepEqual(listRecipes().map((x) => x.name), ['Dal rice']);
+
+    // 260 kcal of rice + 120 of dal over two servings.
+    const per = getRecipeMacros(r.id);
+    assert.equal(Math.round(per.kcal), 190);
+    assert.equal(Math.round(per.protein), 8);
+  });
+
+  test('logging a recipe writes one entry at the right portion', () => {
+    db.insert(schema.food).values({ id: 'rice', name: 'Rice', servingG: 100, kcal: 130, protein: 3, carb: 28, fat: 0 }).run();
+    const r = createRecipe('Plain rice', 2, [{ foodId: 'rice', grams: 300 }]);
+
+    logRecipe({ dateISO: '2026-04-01', mealSlot: 'lunch', recipeId: r.id, servings: 1 });
+    const day = getDay('2026-04-01');
+    assert.equal(day.entries.length, 1);
+    assert.equal(Math.round(day.totals.kcal), 195, 'one of two servings of 300 g');
+  });
+
+  test('a nameless or empty recipe still saves rather than failing silently', () => {
+    const r = createRecipe('  ', 0, []);
+    assert.equal(r.name, 'Recipe');
+    assert.equal(r.servings, 1, 'zero servings would divide by zero');
   });
 });
 

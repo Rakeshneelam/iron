@@ -56,19 +56,10 @@ export default function BodyScreen() {
   const whtr = waist && settings.heightCm > 0 ? waist.cm / settings.heightCm : null;
 
   const recent = [...weighIns].reverse().slice(0, showAll ? 60 : 5);
+  const hasMeasurements = measurements.length > 0;
 
   return (
-    <Screen
-      title="Body"
-      right={
-        <IconButton
-          icon="plus"
-          tone="neutral"
-          accessibilityLabel="Log weight"
-          onPress={() => setWeigh({ date: today, kg: todays?.kg ?? getLatestWeight() ?? DEFAULT_WEIGHT_KG, existing: !!todays })}
-        />
-      }
-    >
+    <Screen title="Body">
       <Card>
         <Text style={styles.eyebrow}>WEIGHT TREND</Text>
         <View style={styles.rowBetween}>
@@ -78,7 +69,19 @@ export default function BodyScreen() {
           </Text>
           {trend.length >= 7 ? <Pill label={`${signed(rate, 2)} kg/wk · ${signed(pctWk, 2)}%`} /> : null}
         </View>
-        <Text style={styles.muted}>{todays ? `Today ${kg(todays.kg)}` : 'Not weighed today'}</Text>
+        {/* Edit sits with the number it edits, and says "edit" rather than "plus" —
+            the header button that used to do this looked like adding a new reading. */}
+        <View style={styles.todayRow}>
+          <Text style={styles.muted}>{todays ? `Today ${kg(todays.kg)}` : 'Not weighed today'}</Text>
+          {todays ? (
+            <IconButton
+              icon="edit"
+              tone="neutral"
+              accessibilityLabel={`Edit today's weight, ${kg(todays.kg)}`}
+              onPress={() => setWeigh({ date: today, kg: todays.kg, existing: true })}
+            />
+          ) : null}
+        </View>
         {trend.length >= 2 ? (
           <View style={styles.chart}>
             <TrendChart
@@ -132,7 +135,10 @@ export default function BodyScreen() {
         </>
       ) : null}
 
-      <SectionHeader title="Measurements" right={<PrimaryButton label="Log" tone="neutral" icon={<Icon name="ruler" size={16} />} onPress={() => setMeasuring(true)} />} />
+      <SectionHeader
+        title="Measurements"
+        right={hasMeasurements ? <PrimaryButton label="Log" tone="neutral" icon={<Icon name="ruler" size={16} />} onPress={() => setMeasuring(true)} /> : undefined}
+      />
       {measured.length === 0 ? (
         <EmptyState message="Measure every 2–4 weeks — waist and arms show changes the scale hides." actionLabel="Log measurements" onAction={() => setMeasuring(true)} />
       ) : (
@@ -176,6 +182,7 @@ export default function BodyScreen() {
 }
 
 const styles = StyleSheet.create({
+  todayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: hit.default },
   eyebrow: { ...font.caption, color: color.textMuted, letterSpacing: 1, fontWeight: '600' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
   hero: { ...font.display, ...font.numeric, fontSize: 44, color: color.text },

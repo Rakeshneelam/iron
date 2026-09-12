@@ -65,6 +65,7 @@ export default function FoodScreen() {
   };
 
   const [adding, setAdding] = useState<MealSlot | null>(null);
+  const [recipeTab, setRecipeTab] = useState(false);
   const [editing, setEditing] = useState<DayEntry | null>(null);
   const [servings, setServings] = useState(1);
 
@@ -164,7 +165,24 @@ export default function FoodScreen() {
         );
       })}
 
-      <AddFoodSheet visible={adding !== null} slot={adding ?? 'breakfast'} dateISO={date} onClose={() => setAdding(null)} />
+      <SectionHeader title="Recipes" />
+      <Card>
+        <Text style={styles.note}>Save a meal you cook often, then log the whole thing in one tap.</Text>
+        <PrimaryButton
+          label="New recipe"
+          size="gym"
+          style={styles.gap}
+          onPress={() => { setRecipeTab(true); setAdding('breakfast'); }}
+        />
+      </Card>
+
+      <AddFoodSheet
+        visible={adding !== null}
+        slot={adding ?? 'breakfast'}
+        dateISO={date}
+        startOnRecipe={recipeTab}
+        onClose={() => { setAdding(null); setRecipeTab(false); }}
+      />
 
       <Sheet visible={editing !== null} onClose={() => setEditing(null)} title={editing?.label}>
         {editing ? (

@@ -19,6 +19,22 @@ export function isGoogleConfigured(): boolean {
   return Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
 }
 
+/**
+ * DEVELOPER_ERROR means Google Play Services would not issue a token. It says
+ * nothing about why, and the causes are all build-time, so report the build's own
+ * configuration rather than making someone guess a third time.
+ *
+ * The usual cause is a missing google-services.json: added as a bare plugin string,
+ * @react-native-google-signin applies the Firebase Gradle plugin and expects that
+ * file, whatever the JS SDK needs. Then the package name and SHA-1 of the signing
+ * key must match an Android OAuth client in the same Cloud project as the web client.
+ */
+export function googleConfigReport(): string {
+  const id = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  if (!id) return 'This build has no Google client ID: it was never injected at build time.';
+  return `Client ID ends …${id.slice(-14)}. Check google-services.json is in the build, and that an Android OAuth client exists for this package and signing key.`;
+}
+
 let currentScopes = '';
 
 /**

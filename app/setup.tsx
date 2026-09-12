@@ -206,6 +206,14 @@ export default function Setup() {
 
         {step === 3 ? (
           <>
+            <Text style={styles.lead}>Start from a plan we suggest, or build your own from scratch.</Text>
+            <Choice
+              title="Build my own"
+              subtitle="Start empty and add your own days and exercises"
+              selected={choice === OWN}
+              onPress={() => setPicked(OWN)}
+            />
+            <Text style={styles.orLabel}>OR PICK A READY-MADE PLAN</Text>
             {shown.map((m, i) => (
               <Choice
                 key={m.template.id}
@@ -217,7 +225,7 @@ export default function Setup() {
               />
             ))}
             {!showAll ? <PrimaryButton label="See all plans" tone="ghost" onPress={() => setShowAll(true)} /> : null}
-            <Choice title="Build my own" subtitle="Start empty and add days and exercises" selected={choice === OWN} onPress={() => setPicked(OWN)} />
+            <Text style={styles.hint}>Every plan is fully editable, and you can keep several and switch any time.</Text>
           </>
         ) : null}
 
@@ -267,6 +275,7 @@ const styles = StyleSheet.create({
   gapSm: { marginTop: space.sm },
   gapLg: { marginTop: space.lg },
   barRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  orLabel: { ...font.caption, color: color.textMuted, letterSpacing: 1, marginTop: space.lg, marginBottom: space.sm },
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   input: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.gym },

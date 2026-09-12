@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
@@ -32,8 +32,26 @@ const TABS: { label: string; value: Tab }[] = [
 
 const unit = (label: string | null) => (label ?? 'serving').replace(/^1\s+/, '');
 
-export function AddFoodSheet({ visible, slot, dateISO, onClose }: { visible: boolean; slot: MealSlot; dateISO: string; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('frequent');
+export function AddFoodSheet({
+  visible,
+  slot,
+  dateISO,
+  startOnRecipe = false,
+  onClose,
+}: {
+  visible: boolean;
+  slot: MealSlot;
+  dateISO: string;
+  /** Opened from the Recipes card rather than "Add to breakfast". */
+  startOnRecipe?: boolean;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<Tab>(startOnRecipe ? 'newRecipe' : 'frequent');
+  // Re-apply on each open: useState only runs once, so opening from the Recipes card
+  // after opening from "Add to breakfast" would otherwise land on the wrong tab.
+  useEffect(() => {
+    if (visible) setTab(startOnRecipe ? 'newRecipe' : 'frequent');
+  }, [visible, startOnRecipe]);
   const [q, setQ] = useState('');
   const [food, setFood] = useState<Food | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
@@ -170,12 +188,19 @@ function NewRecipe({ onCreated }: { onCreated: (r: Recipe) => void }) {
   const [servings, setServings] = useState(1);
   const [q, setQ] = useState('');
   const [items, setItems] = useState<{ food: Food; grams: number }[]>([]);
-  const results = useMemo(() => (q.trim() ? searchFoods(q, 8) : []), [q]);
+  // Something to tap before you have typed anything. Requiring a search first made
+  // the whole screen look broken when the search happened to match nothing.
+  const results = useMemo(() => (q.trim() ? searchFoods(q, 8) : quickAddFoods(6)), [q]);
+  const add = (f: Food) => { setItems((prev) => [...prev, { food: f, grams: f.servingG }]); setQ(''); };
+  const blocker = !name.trim() ? 'Name the recipe to save it.' : items.length === 0 ? 'Add at least one ingredient.' : null;
+
   return (
     <View>
       <Field label="Recipe name" value={name} onChange={setName} numeric={false} />
       <Stepper label="Makes servings" value={servings} step={1} min={1} max={20} onChange={setServings} />
-      <Text style={[styles.muted, styles.gap]}>Ingredients</Text>
+      <Text style={[styles.muted, styles.gap]}>
+        {items.length === 0 ? 'Ingredients — none yet' : `Ingredients · ${items.length}`}
+      </Text>
       {items.map((it, i) => (
         <View key={`${it.food.id}-${i}`} style={styles.pair}>
           <Text style={[styles.name, styles.flex]} numberOfLines={1}>
@@ -186,16 +211,24 @@ function NewRecipe({ onCreated }: { onCreated: (r: Recipe) => void }) {
           </View>
         </View>
       ))}
-      <TextInput value={q} onChangeText={setQ} placeholder="Add an ingredient" placeholderTextColor={color.textFaint} style={styles.input} />
-      {results.map((f) => (
-        <Pressable key={f.id} style={styles.item} onPress={() => { setItems([...items, { food: f, grams: f.servingG }]); setQ(''); }}>
-          <Text style={styles.name}>{f.name}</Text>
-        </Pressable>
-      ))}
+      <TextInput value={q} onChangeText={setQ} placeholder="Search for an ingredient" placeholderTextColor={color.textFaint} style={styles.input} />
+      {results.length === 0 ? (
+        <Text style={[styles.muted, styles.gap]}>Nothing matches "{q.trim()}". Add it under New food first.</Text>
+      ) : (
+        results.map((f) => (
+          <Pressable key={f.id} style={styles.item} onPress={() => add(f)} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}>
+            <Text style={styles.name}>{f.name}</Text>
+            <Text style={styles.muted}>{f.servingLabel ?? `${f.servingG} g`}</Text>
+          </Pressable>
+        ))
+      )}
+      {/* Says what is missing instead of leaving a grey button and no explanation. */}
+      {blocker ? <Text style={[styles.muted, styles.gap]}>{blocker}</Text> : null}
       <PrimaryButton
         label="Save recipe"
+        size="gym"
         style={styles.gap}
-        disabled={!name.trim() || items.length === 0}
+        disabled={blocker !== null}
         onPress={() => onCreated(createRecipe(name, servings, items.map((it) => ({ foodId: it.food.id, grams: it.grams }))))}
       />
     </View>
