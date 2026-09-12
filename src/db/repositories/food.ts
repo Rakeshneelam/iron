@@ -3,15 +3,16 @@
  * repeatDay / repeatMeal / quickAddFoods are the primary paths and search is the
  * fallback. Food macros in the table are PER SERVING (`serving_g` grams).
  */
-import { and, asc, desc, eq, gte, like, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, like, lte, sql } from 'drizzle-orm';
 
-import { db } from '@/db/client';
+import { db, expoDb } from '@/db/client';
 import * as schema from '@/db/schema';
 import type { IntakeDay } from '@/engine/metabolic';
-import { lastNDays, nowISO, todayISO } from '@/lib/date';
+import { addDays, lastNDays, nowISO, todayISO } from '@/lib/date';
 import { newId } from '@/lib/ids';
 
 export type Food = typeof schema.food.$inferSelect;
+export type MealLogRow = typeof schema.mealLog.$inferSelect;
 export type Recipe = typeof schema.recipe.$inferSelect;
 export type MealSlot = 'breakfast' | 'lunch' | 'snack' | 'dinner';
 export const MEAL_SLOTS: readonly MealSlot[] = ['breakfast', 'lunch', 'snack', 'dinner'];
@@ -121,23 +122,26 @@ export function getRecipeMacros(recipeId: string): Macros {
 
 /* =============================== logging ================================ */
 
-export function logFood(input: { dateISO: string; mealSlot: MealSlot; foodId: string; grams: number }): void {
-  if (!(input.grams > 0)) return;
+export function logFood(input: { dateISO: string; mealSlot: MealSlot; foodId: string; grams: number }): string | null {
+  if (!(input.grams > 0)) return null;
+  const id = newId();
   db.transaction((tx) => {
     tx.insert(schema.mealLog)
-      .values({ id: newId(), date: input.dateISO, mealSlot: input.mealSlot, foodId: input.foodId, recipeId: null, grams: input.grams, loggedAt: nowISO() })
+      .values({ id, date: input.dateISO, mealSlot: input.mealSlot, foodId: input.foodId, recipeId: null, grams: input.grams, loggedAt: nowISO() })
       .run();
     tx.update(schema.food).set({ timesUsed: sql`${schema.food.timesUsed} + 1` }).where(eq(schema.food.id, input.foodId)).run();
   });
+  return id;
 }
 
-export function logRecipe(input: { dateISO: string; mealSlot: MealSlot; recipeId: string; servings: number }): void {
+export function logRecipe(input: { dateISO: string; mealSlot: MealSlot; recipeId: string; servings: number }): string | null {
   const info = recipeInfo(input.recipeId);
-  if (!info || !(input.servings > 0)) return;
+  if (!info || !(input.servings > 0)) return null;
+  const id = newId();
   db.transaction((tx) => {
     tx.insert(schema.mealLog)
       .values({
-        id: newId(),
+        id,
         date: input.dateISO,
         mealSlot: input.mealSlot,
         foodId: null,
@@ -148,14 +152,27 @@ export function logRecipe(input: { dateISO: string; mealSlot: MealSlot; recipeId
       .run();
     tx.update(schema.recipe).set({ timesUsed: sql`${schema.recipe.timesUsed} + 1` }).where(eq(schema.recipe.id, input.recipeId)).run();
   });
+  return id;
 }
 
 export function updateEntryGrams(id: string, grams: number): void {
   if (grams > 0) db.update(schema.mealLog).set({ grams }).where(eq(schema.mealLog.id, id)).run();
 }
 
-export function deleteEntry(id: string): void {
+/** Returns the removed row so the caller can offer an Undo. */
+export function deleteEntry(id: string): MealLogRow | undefined {
+  const row = db.select().from(schema.mealLog).where(eq(schema.mealLog.id, id)).get();
   db.delete(schema.mealLog).where(eq(schema.mealLog.id, id)).run();
+  return row;
+}
+
+export function restoreEntry(row: MealLogRow | undefined): void {
+  if (row) db.insert(schema.mealLog).values(row).run();
+}
+
+/** Undo for a repeat: removes exactly the rows that repeat created, nothing else. */
+export function deleteEntries(ids: string[]): void {
+  if (ids.length > 0) db.delete(schema.mealLog).where(inArray(schema.mealLog.id, ids)).run();
 }
 
 type EntryRow = { log: typeof schema.mealLog.$inferSelect; food: Food | null; recipe: Recipe | null };
@@ -211,31 +228,91 @@ export function getDayTotals(dateISO: string): Macros {
   return getDay(dateISO).totals;
 }
 
-function copyEntries(fromISO: string, toISO: string, slot?: MealSlot): number {
+/** Returns the ids of the rows it created, so a repeat can be undone as one action. */
+function copyEntries(fromISO: string, toISO: string, slot?: MealSlot): string[] {
   const src = db
     .select()
     .from(schema.mealLog)
     .where(slot ? and(eq(schema.mealLog.date, fromISO), eq(schema.mealLog.mealSlot, slot)) : eq(schema.mealLog.date, fromISO))
     .orderBy(asc(schema.mealLog.loggedAt))
     .all();
-  if (src.length === 0) return 0;
+  if (src.length === 0) return [];
+  const ids: string[] = [];
   db.transaction((tx) => {
     for (const e of src) {
-      tx.insert(schema.mealLog).values({ ...e, id: newId(), date: toISO, loggedAt: nowISO() }).run();
+      const id = newId();
+      ids.push(id);
+      tx.insert(schema.mealLog).values({ ...e, id, date: toISO, loggedAt: nowISO() }).run();
       if (e.foodId) tx.update(schema.food).set({ timesUsed: sql`${schema.food.timesUsed} + 1` }).where(eq(schema.food.id, e.foodId)).run();
       if (e.recipeId) tx.update(schema.recipe).set({ timesUsed: sql`${schema.recipe.timesUsed} + 1` }).where(eq(schema.recipe.id, e.recipeId)).run();
     }
   });
-  return src.length;
+  return ids;
 }
 
-/** One tap: yesterday's whole day onto today. Returns rows copied. */
-export function repeatDay(fromISO: string, toISO: string): number {
+/** One tap: yesterday's whole day onto today. Returns the new row ids. */
+export function repeatDay(fromISO: string, toISO: string): string[] {
   return copyEntries(fromISO, toISO);
 }
 
-export function repeatMeal(fromISO: string, slot: MealSlot, toISO: string): number {
+export function repeatMeal(fromISO: string, slot: MealSlot, toISO: string): string[] {
   return copyEntries(fromISO, toISO, slot);
+}
+
+/* ============================== usual meals ============================== */
+
+export interface UsualMeal {
+  foodId: string | null;
+  recipeId: string | null;
+  label: string;
+  /** The portion you last had of this, in this meal — not a guessed default. */
+  grams: number;
+  times: number;
+}
+
+/**
+ * What you usually eat for this meal, most often first. Derived from your own log
+ * rather than a global "most used" list, because breakfast and dinner are different
+ * questions — and derived rather than stored, so there is nothing to curate and
+ * nothing to migrate.
+ *
+ * SQLite's bare-column rule does the work: with exactly one max(), the plain columns
+ * come from the row that matched it, so `grams` is the portion from the last time you
+ * actually ate this. The max is over date-then-logged_at as one string, because the
+ * rule allows only one max() and because two meals typed in the same second must
+ * still order by the day they belong to.
+ */
+export function usualFor(slot: MealSlot, limit = 4, days = 60, endISO: string = todayISO()): UsualMeal[] {
+  const rows = expoDb.getAllSync<{ food_id: string | null; recipe_id: string | null; grams: number; times: number }>(
+    `SELECT food_id, recipe_id, grams, count(*) AS times, max(date || ' ' || logged_at) AS last
+       FROM meal_log
+      WHERE meal_slot = ? AND date >= ? AND date <= ?
+      GROUP BY food_id, recipe_id
+      ORDER BY times DESC, last DESC
+      LIMIT ?`,
+    [slot, addDays(endISO, -days), endISO, limit],
+  );
+
+  const out: UsualMeal[] = [];
+  for (const r of rows) {
+    const label = r.food_id
+      ? getFood(r.food_id)?.name
+      : r.recipe_id
+        ? db.select({ name: schema.recipe.name }).from(schema.recipe).where(eq(schema.recipe.id, r.recipe_id)).get()?.name
+        : undefined;
+    // An entry whose food or recipe has since been deleted is simply not offered.
+    if (label) out.push({ foodId: r.food_id, recipeId: r.recipe_id, label, grams: r.grams, times: Number(r.times) });
+  }
+  return out;
+}
+
+/** Logs a usual meal at exactly the portion it remembered. Returns the new row id. */
+export function logUsual(dateISO: string, slot: MealSlot, meal: UsualMeal): string | null {
+  if (meal.foodId) return logFood({ dateISO, mealSlot: slot, foodId: meal.foodId, grams: meal.grams });
+  if (!meal.recipeId) return null;
+  const info = recipeInfo(meal.recipeId);
+  if (!info || !(info.gramsPerServing > 0)) return null;
+  return logRecipe({ dateISO, mealSlot: slot, recipeId: meal.recipeId, servings: meal.grams / info.gramsPerServing });
 }
 
 /* ============================ engine inputs ============================= */

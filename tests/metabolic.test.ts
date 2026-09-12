@@ -35,11 +35,28 @@ describe('weeklyRateKg', () => {
   test('returns 0 rather than guessing from too little data', () => {
     assert.equal(weeklyRateKg(weighIns.slice(0, 3)), 0);
   });
+  test('divides by the calendar span, so sparse weighing is not read as a crash diet', () => {
+    const kgs = [84, 83.65, 83.3, 82.95, 82.6, 82.25, 81.9];
+    const weekly = kgs.map((kg, i) => ({ date: day(i * 7), kg }));
+    const daily = kgs.map((kg, i) => ({ date: day(i), kg }));
+    // The same seven readings, six weeks apart instead of six days: the same
+    // total loss spread over seven times as long is one seventh the weekly rate.
+    assert.ok(Math.abs(weeklyRateKg(weekly) * 7 - weeklyRateKg(daily)) < 0.01);
+    assert.ok(weeklyRateKg(weekly) > -0.2, 'two kilos over six weeks is not 0.7 kg/wk');
+  });
 });
 
 describe('adaptiveTDEE', () => {
   test('returns null until there is enough data to be honest', () => {
     assert.equal(adaptiveTDEE(intake.slice(0, 5), weighIns.slice(0, 5)), null);
+  });
+  test('refuses to mix a food window with weigh-ins from another season', () => {
+    const january: WeighIn[] = Array.from({ length: 28 }, (_, i) => ({
+      date: new Date(Date.parse('2026-01-01') + i * 86_400_000).toISOString().slice(0, 10),
+      kg: 84 - i * 0.03,
+    }));
+    assert.equal(adaptiveTDEE(intake, january), null, 'August food, January weight');
+    assert.equal(adaptiveTDEE(intake.map((d, i) => ({ ...d, date: january[i]!.date })), weighIns), null, 'and the reverse');
   });
   test('lands above intake when weight is falling', () => {
     const r = adaptiveTDEE(intake, weighIns);

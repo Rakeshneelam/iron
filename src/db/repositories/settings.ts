@@ -29,6 +29,9 @@ export interface AppSettings {
   trainingMinutes: number;
   ambientTempC: number | null;
   hydrationOverrideMl: number | null;
+  /** Your own calorie and protein targets. Null = let the engine work them out. */
+  manualKcal: number | null;
+  manualProteinG: number | null;
   calorieCycling: boolean;
   batteryPromptShown: boolean;
   lastDeloadDate: string | null;
@@ -63,6 +66,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   trainingMinutes: 60,
   ambientTempC: null,
   hydrationOverrideMl: null,
+  manualKcal: null,
+  manualProteinG: null,
   calorieCycling: false,
   batteryPromptShown: false,
   lastDeloadDate: null,
@@ -85,6 +90,8 @@ const KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof AppSettings)[];
 const NULLABLE: Partial<Record<keyof AppSettings, 'number' | 'string'>> = {
   ambientTempC: 'number',
   hydrationOverrideMl: 'number',
+  manualKcal: 'number',
+  manualProteinG: 'number',
   lastDeloadDate: 'string',
 };
 const ENUMS: Partial<Record<keyof AppSettings, readonly string[]>> = {

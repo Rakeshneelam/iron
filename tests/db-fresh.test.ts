@@ -15,7 +15,7 @@ import { avgRIRLast7d, buildDeloadInput, dailyTonnage, e1rmSeries, weeklySetsPer
 import { getLatestWeight, listMeasurements, listWeighIns } from '../src/db/repositories/body.ts';
 import { getDayTotal, historyMl } from '../src/db/repositories/water.ts';
 import { getDayTotals, intakeHistory, quickAddFoods } from '../src/db/repositories/food.ts';
-import { getSettings } from '../src/db/repositories/settings.ts';
+import { getSettings, setSetting } from '../src/db/repositories/settings.ts';
 import { computeTargets } from '../src/features/food/targets.ts';
 import { hydrationPlan, hydrationTarget, tomorrowHydrationSlots } from '../src/services/hydration.ts';
 import { buildAIExport } from '../src/db/repositories/export.ts';
@@ -77,6 +77,33 @@ describe('a fresh install', () => {
     assert.ok(quickAddFoods().length >= 0);
     const t = computeTargets(today);
     assert.ok(t.kcal > 0 && t.proteinG > 0, 'targets fall back to an estimate, never zero');
+    assert.equal(t.manual, false);
+  });
+
+  test('your own calorie and protein targets override the estimate, and hand back cleanly', () => {
+    const today = todayISO();
+    const estimated = computeTargets(today);
+
+    setSetting('manualKcal', 2400);
+    setSetting('manualProteinG', 180);
+    const mine = computeTargets(today);
+    assert.equal(mine.kcal, 2400);
+    assert.equal(mine.proteinG, 180);
+    assert.equal(mine.manual, true);
+    // The macros still describe the same day: protein and fat, then carbs take the rest.
+    assert.equal(mine.carbG, Math.max(0, Math.round((2400 - 180 * 4 - mine.fatG * 9) / 4)));
+
+    // One of the two on its own still counts as manual; the other keeps the estimate.
+    setSetting('manualProteinG', null);
+    const half = computeTargets(today);
+    assert.equal(half.kcal, 2400);
+    assert.equal(half.proteinG, estimated.proteinG);
+    assert.equal(half.manual, true);
+
+    setSetting('manualKcal', null);
+    const back = computeTargets(today);
+    assert.equal(back.manual, false);
+    assert.equal(back.kcal, estimated.kcal);
   });
 
   test('the exercise catalogue is there so the library is never empty', () => {

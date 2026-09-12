@@ -48,13 +48,8 @@ export function Stepper({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
 
-  /** Latest typed text, so closing the sheet mid-edit still saves the number. */
-  const pending = useRef<string | null>(null);
-  const commitRef = useRef<(text: string) => void>(() => {});
-
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
-    if (pending.current !== null) commitRef.current(pending.current);
   }, []);
 
   const clampRound = (v: number) => {
@@ -85,17 +80,13 @@ export function Stepper({
     timer.current = null;
   };
 
+  /** Runs on every keystroke: a Save tap steals focus before onBlur can fire. */
   const apply = (text: string) => {
     const parsed = Number(text.replace(',', '.'));
-    if (Number.isFinite(parsed)) onChange(clampRound(parsed));
+    if (text.trim() !== '' && Number.isFinite(parsed)) onChange(clampRound(parsed));
   };
-  commitRef.current = apply;
 
-  const commitDraft = () => {
-    pending.current = null;
-    apply(draft);
-    setEditing(false);
-  };
+  const commitDraft = () => setEditing(false);
 
   const box = hit[size];
   const valueStyle = size === 'gym' ? styles.valueGym : styles.value;
@@ -122,7 +113,7 @@ export function Stepper({
             value={draft}
             onChangeText={(t) => {
               setDraft(t);
-              pending.current = t;
+              apply(t);
             }}
             onSubmitEditing={commitDraft}
             onBlur={commitDraft}
@@ -139,7 +130,6 @@ export function Stepper({
                 return;
               }
               setDraft(value.toFixed(dp));
-              pending.current = null;
               setEditing(true);
             }}
             accessibilityHint="Long-press to type a value"

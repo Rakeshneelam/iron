@@ -1,10 +1,13 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Card, ChipRow, confirm, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, TextField, ToggleChips } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
+import { recoveryPhrase } from '@/db/client';
+import { autoBackupOn, backupNow, lastBackupAt, setAutoBackup } from '@/services/backup';
+import { connect, currentAccount, disconnect, isConfigured } from '@/services/drive';
 import { wipeAllData } from '@/db/repositories/admin';
 import { PHASES, setSetting, useSettings } from '@/db/repositories/settings';
 import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle, toolsOf, TOOL_OPTIONS, WEEKDAYS } from '@/features/profile';
@@ -14,6 +17,17 @@ import { MODE_OPTIONS } from '@/features/warmup/labels';
 import { exportAll } from '@/services/export';
 import { openBatteryOptimisationSettings, rescheduleAll } from '@/services/notifications';
 import { color, font, hit, radius, space } from '@/theme/tokens';
+
+/** "2 hours ago" beats a timestamp for something the user only wants reassurance about. */
+function fmtWhen(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+}
 
 const ON_OFF = [
   { label: 'On', value: 1 },
@@ -29,6 +43,19 @@ export default function SettingsScreen() {
   const bool = (key: 'calorieCycling' | 'hapticsEnabled' | 'restTimerAutoStart') => (
     <ChipRow options={ON_OFF} value={s[key] ? 1 : 0} onChange={(v) => setSetting(key, v === 1)} fill={false} />
   );
+
+  // Read once per mount: it never changes, and it must be here to be written down
+  // while the phone still works, not revealed once at a moment nobody remembers.
+  const [phrase] = useState(recoveryPhrase);
+
+  const [account, setAccount] = useState<string | null>(null);
+  const [driveMsg, setDriveMsg] = useState<string | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
+  const [auto, setAuto] = useState(autoBackupOn);
+  const [lastAt, setLastAt] = useState(lastBackupAt);
+  useEffect(() => {
+    void currentAccount().then(setAccount);
+  }, []);
 
   const deleteAll = () =>
     confirm({
@@ -194,7 +221,92 @@ export default function SettingsScreen() {
           }}
         />
         {exportMsg ? <Text style={styles.hint}>{exportMsg}</Text> : null}
+        <Text style={styles.hint}>These files are not encrypted — anything that can read the folder can read them.</Text>
         <PrimaryButton label="Delete all my data" tone="ghost" icon={<Icon name="trash" size={16} color={color.danger} />} style={styles.gap} onPress={deleteAll} />
+      </Card>
+
+      <SectionHeader title="Google Drive backup" />
+      <Card>
+        {!isConfigured() ? (
+          <Text style={styles.hint}>
+            This build has no Google client ID, so Drive backup is unavailable. See scripts/setup-google-drive.sh.
+          </Text>
+        ) : account ? (
+          <>
+            <Text style={styles.bodyStrong}>{account}</Text>
+            <Text style={styles.hint}>
+              {lastAt ? `Last backed up ${fmtWhen(lastAt)}.` : 'Not backed up yet.'} Only Iron can read this folder, and the
+              file is encrypted with your recovery phrase.
+            </Text>
+            <Row label="Back up daily" hint="On Wi-Fi, in the background. Never interrupts a workout.">
+              <ChipRow options={ON_OFF} value={auto ? 1 : 0} onChange={(v) => { setAutoBackup(v === 1); setAuto(v === 1); }} fill={false} />
+            </Row>
+            <PrimaryButton
+              label={backingUp ? 'Backing up…' : 'Back up now'}
+              tone="neutral"
+              disabled={backingUp}
+              style={styles.gap}
+              onPress={() => {
+                setDriveMsg(null);
+                setBackingUp(true);
+                backupNow()
+                  .then(
+                    () => { setLastAt(lastBackupAt()); setDriveMsg('Backed up.'); },
+                    (e: unknown) => setDriveMsg(`Backup failed: ${e instanceof Error ? e.message : String(e)}`),
+                  )
+                  .finally(() => setBackingUp(false));
+              }}
+            />
+            <PrimaryButton
+              label="Disconnect"
+              tone="ghost"
+              style={styles.gap}
+              onPress={() =>
+                confirm({
+                  title: 'Disconnect Google Drive?',
+                  message: 'Iron stops backing up. Backups already in Drive are left alone.',
+                  confirmLabel: 'Disconnect',
+                  onConfirm: () => void disconnect().then(() => { setAccount(null); setAutoBackup(false); setAuto(false); }),
+                })
+              }
+            />
+          </>
+        ) : (
+          <>
+            <Text style={styles.hint}>
+              Backs up to a private folder only Iron can see. You need your recovery phrase to read it on a new phone.
+            </Text>
+            <PrimaryButton
+              label="Connect Google Drive"
+              tone="neutral"
+              style={styles.gap}
+              onPress={() => {
+                setDriveMsg(null);
+                void connect().then(
+                  (email) => { if (email) { setAccount(email); setAutoBackup(true); setAuto(true); } },
+                  (e: unknown) => setDriveMsg(`Could not connect: ${e instanceof Error ? e.message : String(e)}`),
+                );
+              }}
+            />
+          </>
+        )}
+        {driveMsg ? <Text style={styles.hint}>{driveMsg}</Text> : null}
+      </Card>
+
+      <Card onPress={() => router.push('/settings/restore')}>
+        <LinkRow title="Restore from backup" hint="Replaces everything on this phone with a backup file." />
+      </Card>
+
+      <Card>
+        <Text style={styles.bodyStrong}>Recovery phrase</Text>
+        <Text style={styles.hint}>Needed to read a backup on a new phone. Write it down somewhere you will still have it if this phone is lost.</Text>
+        {phrase ? (
+          <Text selectable style={styles.phrase} accessibilityLabel={`Recovery phrase: ${phrase.split('').join(' ')}`}>
+            {phrase}
+          </Text>
+        ) : (
+          <Text style={styles.hint}>Unavailable — this device has no keystore, so the database is not encrypted.</Text>
+        )}
       </Card>
       <Text style={styles.footer}>
         Iron {Constants.expoConfig?.version ?? ''} · no account, no server. Everything stays on this phone, and nothing is sent anywhere unless you export it.
@@ -226,5 +338,6 @@ const styles = StyleSheet.create({
   hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   gap: { marginTop: space.md },
   dislike: { flexDirection: 'row', alignItems: 'center', minHeight: hit.default },
+  phrase: { ...font.title, ...font.numeric, color: color.accent, marginTop: space.md, letterSpacing: 1 },
   footer: { ...font.caption, color: color.textFaint, textAlign: 'center', marginTop: space.lg },
 });

@@ -11,25 +11,39 @@ import { Directory } from 'expo-file-system';
 
 import { expoDb } from '@/db/client';
 import { buildAIExport, type AIExport } from '@/db/repositories/export';
+import { BACKUP_TABLES } from '@/db/repositories/restore';
 import { nowISO, todayISO } from '@/lib/date';
 
 import { hydrationTarget } from './hydration';
 
-const TABLES = [
-  'exercise', 'exercise_link', 'equipment', 'routine', 'routine_day', 'routine_slot', 'session', 'session_exercise', 'set_log',
-  'exercise_session_stat', 'weigh_in', 'measurement', 'food', 'recipe', 'recipe_item', 'meal_log', 'water_log', 'setting',
-] as const;
-
 type Row = Record<string, unknown>;
+
+/**
+ * Bumped only when a backup written today would stop being restorable. Restore
+ * validates structurally rather than trusting this, so it is a signal and not a gate
+ * — which is what lets backups written before it existed still be restored.
+ */
+const BACKUP_FORMAT_VERSION = 1;
 
 function readTable(name: string): Row[] {
   return expoDb.getAllSync<Row>(`SELECT * FROM "${name}"`);
 }
 
+/** The restorable backup. `iron-backup-<date>.json` — the one Restore asks for. */
 export function buildJSONDump(): string {
   const tables: Record<string, Row[]> = {};
-  for (const t of TABLES) tables[t] = readTable(t);
-  return JSON.stringify({ app: 'iron', exportedAt: nowISO(), tables }, null, 2);
+  for (const t of BACKUP_TABLES) tables[t] = readTable(t);
+  return JSON.stringify(
+    {
+      app: 'iron',
+      schemaVersion: BACKUP_FORMAT_VERSION,
+      appVersion: Constants.expoConfig?.version ?? null,
+      exportedAt: nowISO(),
+      tables,
+    },
+    null,
+    2,
+  );
 }
 
 function cell(v: unknown): string {

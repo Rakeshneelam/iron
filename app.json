@@ -8,6 +8,7 @@
     "userInterfaceStyle": "dark",
     "android": {
       "package": "dev.rakesh.iron",
+      "allowBackup": false,
       "permissions": [
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
@@ -49,7 +50,8 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 160
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true

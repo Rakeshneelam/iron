@@ -24,7 +24,9 @@ import {
   isReadinessDone,
   removeSessionExercise,
   restoreSessionExercise,
+  sessionTargetSets,
   setSessionOrder,
+  setSessionTargetSets,
   setWarmupState,
   skipExercise,
   swapSessionExercise,
@@ -98,7 +100,10 @@ export default function SessionScreen() {
     for (const s of sets) if (s.isWarmup === 0) m.set(s.exerciseId, (m.get(s.exerciseId) ?? 0) + 1);
     return m;
   }, [sets]);
-  const targetOf = (p: PlannedExercise) => p.slot?.targetSets ?? 3;
+  // What the workout is running to today, which a deload or an added set moves off
+  // the plan. One source for the checklist, the counter and the finish status.
+  const targets = useLive(() => sessionTargetSets(id), ['setting'], [id]);
+  const targetOf = (p: PlannedExercise) => targets[p.exerciseId] ?? p.slot?.targetSets ?? 3;
   const stateOf = (p: PlannedExercise): ExState => {
     const n = counts.get(p.exerciseId) ?? 0;
     return p.skipped ? 'skipped' : n >= targetOf(p) ? 'done' : n > 0 ? 'partial' : 'todo';
@@ -172,6 +177,22 @@ export default function SessionScreen() {
   };
 
   useEffect(prefill, [current?.exerciseId, suggestion]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Record the set count the user is actually shown. Planned exercises only: an
+  // added one has no slot, and giving it one would hand it the wrong rest default.
+  useEffect(() => {
+    if (!current?.slot || current.adHoc || !suggestion) return;
+    if (targets[current.exerciseId] === suggestion.sets) return;
+    setSessionTargetSets(id, current.exerciseId, suggestion.sets);
+  }, [current?.exerciseId, suggestion?.sets]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** The suggestion's own numbers. Distinct from prefill, which repeats your last set. */
+  const useSuggestion = () => {
+    if (!suggestion) return;
+    setWeight(suggestion.weight);
+    setReps(suggestion.repTarget[0]);
+    setRir(suggestion.targetRIR);
+  };
   useEffect(() => setWhyOpen(false), [current?.exerciseId]);
 
   if (!session || session.endedAt) {
@@ -477,7 +498,7 @@ export default function SessionScreen() {
                   </View>
                 ) : null}
                 <View style={styles.chips}>
-                  {differs ? <PrimaryButton label="Use target" tone="neutral" onPress={prefill} /> : null}
+                  {differs ? <PrimaryButton label="Use target" tone="neutral" onPress={useSuggestion} /> : null}
                   {ramp.length ? (
                     <PrimaryButton
                       label={showWarmups ? 'Hide warm-up sets' : `Warm-up sets · ${Math.min(exWarm.length, ramp.length)}/${ramp.length}`}
@@ -659,7 +680,10 @@ export default function SessionScreen() {
             if (picker?.mode === 'swap') {
               const from = picker.from;
               swapSessionExercise(id, from.exerciseId, ex.id);
-              toast(`Swapped to ${ex.name} for today`, { label: 'Undo', onPress: () => swapSessionExercise(id, ex.id, from.exerciseId) });
+              toast(`Swapped to ${ex.name} for today`, {
+                label: 'Undo',
+                onPress: () => swapSessionExercise(id, ex.id, from.exerciseId, from.slot?.startWeight ?? null),
+              });
             } else {
               addSessionExercise(id, ex.id);
               setIndex(plan.length); // appended last; clamped if the list is shorter

@@ -79,6 +79,14 @@ export default function Setup() {
   return (
     <View style={styles.flex}>
       <Screen title="Welcome to Iron" subtitle="Two minutes. Everything stays on this phone.">
+        {/* At the top, not the bottom: someone reinstalling is being asked their height
+            while the thing they want is their training history. */}
+        <PrimaryButton
+          label="Already using Iron? Restore a backup"
+          tone="ghost"
+          onPress={() => router.push('/settings/restore')}
+        />
+
         <TextInput value={name} onChangeText={setName} placeholder="Your name (optional)" placeholderTextColor={color.textFaint} style={styles.input} autoCapitalize="words" />
 
         <SectionHeader title="Training" />

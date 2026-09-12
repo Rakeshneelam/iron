@@ -53,8 +53,11 @@ export class TestSqlite {
     }
     this.inner.exec(sql);
   }
-  getAllSync<T>(sql: string): T[] {
-    return this.inner.prepare(sql).all() as T[];
+  getAllSync<T>(sql: string, params: unknown[] = []): T[] {
+    return this.inner.prepare(sql).all(...(params as never[])) as T[];
+  }
+  runSync(sql: string, params: unknown[] = []) {
+    return this.inner.prepare(sql).run(...(params as never[]));
   }
   /** better-sqlite3 shape: returns a callable with .deferred/.immediate/.exclusive. */
   transaction<A extends unknown[], R>(fn: (...args: A) => R) {

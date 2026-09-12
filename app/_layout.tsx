@@ -9,6 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ToastHost } from '@/components/Toast';
 import { initDatabase } from '@/db/client';
+import { backupIfDue } from '@/services/backup';
 import {
   ensureChannels,
   registerCategories,
@@ -83,6 +84,8 @@ function AppServices() {
       } catch {
         /* reminders are optional */
       }
+      // Silent, at most daily, and never awaited by anything the user is doing.
+      void backupIfDue();
     })();
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'background' || s === 'active') void rescheduleAll();

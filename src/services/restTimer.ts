@@ -36,8 +36,25 @@ export function getPersistedEndsAt(): string | null {
   return getTimer()?.endsAt ?? null;
 }
 
-async function arm(endsAtMs: number, label: string): Promise<void> {
+/**
+ * Arming is async, so a cancel can land in the middle of one. Two guards:
+ * `epoch` marks a start as stale the moment anything else happens, and `serial`
+ * keeps the native calls in the order they were asked for — without it a cancel's
+ * NativeTimer.cancel() could run before the start it was meant to undo.
+ * The SQLite write stays outside both: truth is written before any await.
+ */
+let epoch = 0;
+let queue: Promise<unknown> = Promise.resolve();
+
+function serial<T>(fn: () => Promise<T>): Promise<T> {
+  const next = queue.then(fn, fn);
+  queue = next.catch(() => undefined);
+  return next;
+}
+
+async function arm(endsAtMs: number, label: string, gen: number): Promise<void> {
   await Notifications.cancelScheduledNotificationAsync(FALLBACK_ID).catch(() => undefined);
+  if (gen !== epoch) return;
   if (NativeTimer.isNativeRestTimerAvailable) {
     try {
       NativeTimer.start(endsAtMs, label);
@@ -51,6 +68,8 @@ async function arm(endsAtMs: number, label: string): Promise<void> {
     content: { title: 'Rest over', body: `${label} — next set`, data: { tag: 'rest' } },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: endsAtMs, channelId: CHANNELS.rest },
   });
+  // Cancelled while that was in flight: take it back down again.
+  if (gen !== epoch) await Notifications.cancelScheduledNotificationAsync(FALLBACK_ID).catch(() => undefined);
 }
 
 function persist(sessionId: string | null, endsAtMs: number, label: string, totalMs: number): void {
@@ -65,18 +84,22 @@ function persist(sessionId: string | null, endsAtMs: number, label: string, tota
 export async function startRest(sessionId: string | null, seconds: number, label = 'Rest'): Promise<void> {
   const totalMs = Math.max(1, Math.round(seconds)) * 1000;
   const endsAtMs = Date.now() + totalMs;
+  const gen = ++epoch;
   persist(sessionId, endsAtMs, label, totalMs); // truth first
-  await arm(endsAtMs, label).catch(() => undefined);
+  await serial(() => arm(endsAtMs, label, gen)).catch(() => undefined);
 }
 
 export async function cancelRest(): Promise<void> {
-  db.delete(schema.timerState).where(eq(schema.timerState.id, ROW_ID)).run();
-  try {
-    NativeTimer.cancel();
-  } catch {
-    /* not compiled in */
-  }
-  await Notifications.cancelScheduledNotificationAsync(FALLBACK_ID).catch(() => undefined);
+  epoch++;
+  db.delete(schema.timerState).where(eq(schema.timerState.id, ROW_ID)).run(); // truth first
+  await serial(async () => {
+    try {
+      NativeTimer.cancel();
+    } catch {
+      /* not compiled in */
+    }
+    await Notifications.cancelScheduledNotificationAsync(FALLBACK_ID).catch(() => undefined);
+  }).catch(() => undefined);
 }
 
 export async function addSeconds(delta: number): Promise<void> {
@@ -85,8 +108,9 @@ export async function addSeconds(delta: number): Promise<void> {
   const endsAtMs = Math.max(Date.now() + 1000, Date.parse(t.endsAt) + delta * 1000);
   const totalMs = Math.max(1000, Number(getRaw(TOTAL_KEY) ?? 0) + delta * 1000);
   const label = t.label ?? 'Rest';
+  const gen = ++epoch;
   persist(t.sessionId, endsAtMs, label, totalMs);
-  await arm(endsAtMs, label).catch(() => undefined);
+  await serial(() => arm(endsAtMs, label, gen)).catch(() => undefined);
 }
 
 /** Clears only the timer that actually expired, never a newer one. */

@@ -66,3 +66,10 @@ must still ship.
 3. Restore with the wrong key → clear error, local data untouched
 4. Backup on a metered connection with the app backgrounded mid-upload → resumes
 5. Export → open the CSV in a spreadsheet on a laptop
+
+## Implementation design
+
+The resolved design, screen flows and copy live in
+`docs/superpowers/specs/2026-09-12-backup-and-restore-design.md`.
+That document closes the two open choices above: SQLCipher at rest, and a recovery
+phrase that is the root secret rather than a display encoding of the key.

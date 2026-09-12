@@ -1,11 +1,26 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, PrimaryButton, Screen, SectionHeader, Sheet, StatTile, Stepper } from '@/components';
+import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
-import { deleteEntry, getDay, MEAL_SLOTS, repeatDay, repeatMeal, updateEntryGrams, type DayEntry, type MealSlot } from '@/db/repositories/food';
+import {
+  deleteEntries,
+  deleteEntry,
+  getDay,
+  logUsual,
+  MEAL_SLOTS,
+  repeatDay,
+  repeatMeal,
+  restoreEntry,
+  updateEntryGrams,
+  usualFor,
+  type DayEntry,
+  type MealSlot,
+  type UsualMeal,
+} from '@/db/repositories/food';
 import { AddFoodSheet } from '@/features/food/AddFoodSheet';
-import { computeTargets } from '@/features/food/targets';
+import { computeTargets, confidenceLabel } from '@/features/food/targets';
 import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, hit, space } from '@/theme/tokens';
 
@@ -17,9 +32,37 @@ const unit = (label: string | null) => (label ?? 'serving').replace(/^1\s+/, '')
 export default function FoodScreen() {
   const [date, setDate] = useState(todayISO());
   const yesterday = addDays(date, -1);
+
+  // Left open overnight, the screen would still be logging into yesterday. On
+  // resume, move on only if the user was on the current day; browsing history stays.
+  const shownToday = useRef(todayISO());
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') return;
+      const now = todayISO();
+      if (now === shownToday.current) return;
+      if (date === shownToday.current) setDate(now);
+      shownToday.current = now;
+    });
+    return () => sub.remove();
+  }, [date]);
+
   const day = useLive(() => getDay(date), ['meal_log', 'food', 'recipe', 'recipe_item'], [date]);
   const prev = useLive(() => getDay(yesterday), ['meal_log', 'food', 'recipe', 'recipe_item'], [yesterday]);
   const t = useLive(() => computeTargets(date), ['meal_log', 'food', 'recipe', 'recipe_item', 'weigh_in', 'setting', 'session'], [date]);
+
+  // What you usually eat, per meal — one lookup for all four slots, since hooks
+  // cannot run inside the render loop below.
+  const usual = useLive(
+    () => Object.fromEntries(MEAL_SLOTS.map((m) => [m, usualFor(m, 4, 60, date)])) as Record<MealSlot, UsualMeal[]>,
+    ['meal_log', 'food', 'recipe'],
+    [date],
+  );
+
+  const addUsual = (slot: MealSlot, u: UsualMeal) => {
+    const id = logUsual(date, slot, u);
+    if (id) toast(`Added ${u.label}`, { label: 'Undo', onPress: () => deleteEntries([id]) });
+  };
 
   const [adding, setAdding] = useState<MealSlot | null>(null);
   const [editing, setEditing] = useState<DayEntry | null>(null);
@@ -45,16 +88,19 @@ export default function FoodScreen() {
         <StatTile label="Fat" value={`${Math.round(day.totals.fat)} / ${t.fatG} g`} tone="muted" />
       </View>
       <Text style={styles.note}>
-        {t.basis === 'estimated' ? 'Estimate · ' : 'Measured · '}
-        {t.note}
+        {t.manual ? 'Yours · ' : t.basis === 'estimated' ? 'Estimate · ' : 'Measured · '}
+        {confidenceLabel(t)} · {t.note}
       </Text>
 
-      {prev.entries.length > 0 ? (
+      {prev.entries.length > 0 && day.entries.length === 0 ? (
         <PrimaryButton
           label={`Repeat ${date === todayISO() ? 'yesterday' : fmtDayLabel(yesterday)} (${prev.entries.length} items)`}
           size="gym"
           style={styles.gap}
-          onPress={() => repeatDay(yesterday, date)}
+          onPress={() => {
+            const ids = repeatDay(yesterday, date);
+            toast(`Copied ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`, { label: 'Undo', onPress: () => deleteEntries(ids) });
+          }}
         />
       ) : null}
 
@@ -68,7 +114,14 @@ export default function FoodScreen() {
               title={`${slot}${entries.length ? ` · ${Math.round(kcal)} kcal` : ''}`}
               right={
                 prevSlot.length > 0 && entries.length === 0 ? (
-                  <PrimaryButton label="Repeat" tone="ghost" onPress={() => repeatMeal(yesterday, slot, date)} />
+                  <PrimaryButton
+                    label="Repeat"
+                    tone="ghost"
+                    onPress={() => {
+                      const ids = repeatMeal(yesterday, slot, date);
+                      toast(`Copied ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`, { label: 'Undo', onPress: () => deleteEntries(ids) });
+                    }}
+                  />
                 ) : undefined
               }
             />
@@ -77,7 +130,9 @@ export default function FoodScreen() {
                 <Pressable
                   key={e.id}
                   style={styles.entry}
-                  onLongPress={() => {
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${e.label}`}
+                  onPress={() => {
                     setServings(Math.max(0.5, Math.round(e.servings * 2) / 2));
                     setEditing(e);
                   }}
@@ -90,6 +145,19 @@ export default function FoodScreen() {
                   </Text>
                 </Pressable>
               ))}
+              {usual[slot].length > 0 ? (
+                <View style={styles.usual}>
+                  {usual[slot].map((u) => (
+                    <PrimaryButton
+                      key={`${u.foodId ?? ''}:${u.recipeId ?? ''}`}
+                      label={u.label}
+                      tone="ghost"
+                      accessibilityLabel={`Add your usual ${u.label} to ${slot}`}
+                      onPress={() => addUsual(slot, u)}
+                    />
+                  ))}
+                </View>
+              ) : null}
               <PrimaryButton label={`Add to ${slot}`} tone="neutral" onPress={() => setAdding(slot)} />
             </Card>
           </View>
@@ -115,7 +183,8 @@ export default function FoodScreen() {
               label="Remove"
               tone="danger"
               onPress={() => {
-                deleteEntry(editing.id);
+                const row = deleteEntry(editing.id);
+                toast('Removed', { label: 'Undo', onPress: () => restoreEntry(row) });
                 setEditing(null);
               }}
             />
@@ -127,6 +196,7 @@ export default function FoodScreen() {
 }
 
 const styles = StyleSheet.create({
+  usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
   dateNav: { flexDirection: 'row', gap: space.xs },
   tiles: { flexDirection: 'row', gap: space.sm },
   gapSm: { marginTop: space.sm },

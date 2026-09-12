@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast, TrendChart } from '@/components';
+import { Card, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast, TrendChart } from '@/components';
 import { useLive } from '@/db/live';
 import { getSlot, updateSlot } from '@/db/repositories/program';
 import { activeRecommendations, dismissRecommendation, recentWorkouts, undismissRecommendation, weekInsights, weekSummary } from '@/db/repositories/progress';
@@ -114,6 +114,19 @@ export default function ProgressScreen() {
         <Card tone="positive">
           <Text style={styles.cardTitle}>Deload week in progress</Text>
           <Text style={styles.muted}>Half the sets, a bit lighter. Normal targets return {fmtDayLabel(addDays(deloadSince, 7))}.</Text>
+          <PrimaryButton
+            label="End deload now"
+            tone="neutral"
+            style={styles.gap}
+            onPress={() =>
+              confirm({
+                title: 'End the deload week?',
+                message: 'Normal sets and loads come back from your next workout.',
+                confirmLabel: 'End deload',
+                onConfirm: () => setSetting('lastDeloadDate', null),
+              })
+            }
+          />
         </Card>
       ) : deload.deload && !deloadDismissed && isThisWeek ? (
         <Card tone="warning">
@@ -220,7 +233,10 @@ export default function ProgressScreen() {
 
       {workouts.length ? (
         <>
-          <SectionHeader title="Recent workouts" />
+          <SectionHeader
+            title="Recent workouts"
+            right={<PrimaryButton label="See all" tone="ghost" onPress={() => router.push('/history')} />}
+          />
           <Card style={styles.list}>
             {workouts.map((w, i) => (
               <Pressable key={w.session.id} style={[styles.liftRow, i > 0 && styles.divider]} onPress={() => router.push(`/session/summary/${w.session.id}`)}>
@@ -254,6 +270,7 @@ function Row({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
+  gap: { marginTop: space.md },
   nav: { flexDirection: 'row' },
   tiles: { flexDirection: 'row', gap: space.sm },
   row: { flexDirection: 'row', gap: space.sm, marginTop: space.md },

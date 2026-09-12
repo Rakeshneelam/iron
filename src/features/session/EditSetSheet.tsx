@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
+import { CATALOG_BY_ID } from '@/data/catalog';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
 import { Stepper } from '@/components/Stepper';
@@ -28,11 +29,23 @@ export function EditSetSheet({ set, step, onClose }: { set: SetRow | null; step:
     setWarmup(set.isWarmup === 1);
   }, [set]);
 
+  // A plank is stored in seconds, so ten minutes is 600 — clamping that to a rep
+  // range silently rewrote the entry as 100.
+  const timed = set ? CATALOG_BY_ID.get(set.exerciseId)?.measure === 'time' : false;
+
   return (
     <Sheet visible={set !== null} onClose={onClose} title="Edit set">
       <View style={styles.pair}>
         <Stepper label="kg" value={weight} step={step} min={0} max={500} size="gym" onChange={setWeight} />
-        <Stepper label="reps" value={reps} step={1} min={0} max={100} size="gym" onChange={setReps} />
+        <Stepper
+          label={timed ? 'sec' : 'reps'}
+          value={reps}
+          step={timed ? 5 : 1}
+          min={0}
+          max={timed ? 7200 : 100}
+          size="gym"
+          onChange={setReps}
+        />
       </View>
       <ChipRow options={RIR_OPTIONS} value={rir} onChange={setRir} size="gym" />
       <View style={styles.pair}>

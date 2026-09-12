@@ -30,6 +30,7 @@ import {
   insertSet,
   planProgress,
   reopenSession,
+  setSessionTargetSets,
   skipDay,
   skipExercise,
   startSession,
@@ -38,7 +39,9 @@ import {
   restoreSessionExercise,
   unskipExercise,
 } from '../src/db/repositories/sessions.ts';
+import { deleteEntries, getDay, logFood, repeatDay, usualFor } from '../src/db/repositories/food.ts';
 import { getSettings, setRaw, setSetting } from '../src/db/repositories/settings.ts';
+import { searchWorkouts } from '../src/db/repositories/progress.ts';
 import { wipeAllData } from '../src/db/repositories/admin.ts';
 
 before(async () => {
@@ -109,6 +112,26 @@ describe('workout lifecycle', () => {
     const r = finishSession(s.id);
     assert.equal(r.discarded, true);
     assert.equal(db.select().from(schema.session).all().length, 0);
+  });
+
+  test('a workout with only warm-ups logged is kept, not silently discarded', () => {
+    const { dayA } = seedPlan();
+    const s = startSession(dayA.id);
+    insertSet({ sessionId: s.id, exerciseId: 'squat', weight: 20, reps: 10, rir: 5, isWarmup: true });
+    const r = finishSession(s.id);
+    assert.equal(r.discarded, false);
+    assert.equal(r.status, 'partial');
+    assert.equal(getSessionSets(s.id).length, 1, 'the warm-up survives the finish');
+  });
+
+  test('the target the workout was actually run to decides completion, not the plan', () => {
+    const { dayA } = seedPlan(); // squat + bench, two target sets each
+    const s = startSession(dayA.id);
+    setSessionTargetSets(s.id, 'squat', 1); // what a deload week prescribes
+    work(s.id, 'squat', 1);
+    work(s.id, 'bench', 2);
+    assert.equal(planProgress(s.id).done, 2, 'squat is done at its deloaded target');
+    assert.equal(finishSession(s.id).status, 'completed');
   });
 
   test('all target sets = completed; some = partial', () => {
@@ -207,6 +230,20 @@ describe('changing today without breaking history', () => {
     assert.deepEqual(getSessionPlan(s.id).map((p) => p.exerciseId), ['squat', 'row']);
   });
 
+  test("swap does not hand the replacement the old lift's start weight; undo puts it back", () => {
+    const { dayA } = seedPlan();
+    updateSlot(getSlots(dayA.id)[1]!.id, { startWeight: 60 });
+    const s = startSession(dayA.id);
+    const bench = getSessionPlan(s.id).find((p) => p.exerciseId === 'bench')!;
+    assert.equal(bench.slot?.startWeight, 60);
+
+    swapSessionExercise(s.id, 'bench', 'row');
+    assert.equal(getSessionPlan(s.id).find((p) => p.exerciseId === 'row')!.slot?.startWeight, null);
+
+    swapSessionExercise(s.id, 'row', 'bench', bench.slot?.startWeight ?? null);
+    assert.equal(getSessionPlan(s.id).find((p) => p.exerciseId === 'bench')!.slot?.startWeight, 60);
+  });
+
   test('remove is undoable and restores the same position', () => {
     const { dayA } = seedPlan();
     const s = startSession(dayA.id);
@@ -231,6 +268,112 @@ describe('changing today without breaking history', () => {
     const s = startSession(dayA.id);
     insertSet({ sessionId: s.id, exerciseId: 'row', weight: 40, reps: 10, rir: 2 });
     assert.ok(getSessionPlan(s.id).some((p) => p.exerciseId === 'row' && p.adHoc));
+  });
+});
+
+describe('food', () => {
+  test('repeating a day is one undoable action that touches only its own copies', () => {
+    db.insert(schema.food)
+      .values({ id: 'oats', name: 'Oats', servingG: 40, kcal: 150, protein: 5, carb: 27, fat: 3 })
+      .run();
+    logFood({ dateISO: '2026-03-01', mealSlot: 'breakfast', foodId: 'oats', grams: 100 });
+
+    const ids = repeatDay('2026-03-01', '2026-03-02');
+    assert.equal(ids.length, 1);
+    assert.equal(getDay('2026-03-02').entries.length, 1);
+
+    deleteEntries(ids);
+    assert.equal(getDay('2026-03-02').entries.length, 0, 'undo removes the copy');
+    assert.equal(getDay('2026-03-01').entries.length, 1, 'and leaves the original alone');
+  });
+});
+
+describe('workout history search', () => {
+  test('finds workouts by lift, and answers "what did I do last time" on the row', () => {
+    const { dayA } = seedPlan();
+    const a = startSession(dayA.id);
+    insertSet({ sessionId: a.id, exerciseId: 'squat', weight: 100, reps: 5, rir: 2 });
+    insertSet({ sessionId: a.id, exerciseId: 'squat', weight: 110, reps: 3, rir: 1 });
+    insertSet({ sessionId: a.id, exerciseId: 'bench', weight: 60, reps: 8, rir: 2 });
+    finishSession(a.id);
+
+    const all = searchWorkouts();
+    assert.equal(all.length, 1);
+    assert.equal(all[0]!.sets, 3);
+    assert.equal(all[0]!.top, null, 'no lift searched, no top set shown');
+
+    const squats = searchWorkouts({ text: 'squa' });
+    assert.equal(squats.length, 1);
+    assert.equal(squats[0]!.top?.weight, 110, 'the heaviest working set of the lift searched');
+    assert.equal(squats[0]!.top?.reps, 3, 'and the reps from that same set');
+  });
+
+  test('a lift you never did returns nothing rather than everything', () => {
+    const { dayA } = seedPlan();
+    const s = startSession(dayA.id);
+    work(s.id, 'squat', 2);
+    finishSession(s.id);
+    assert.deepEqual(searchWorkouts({ text: 'deadlift' }), []);
+  });
+
+  test('warm-ups never become the top set', () => {
+    const { dayA } = seedPlan();
+    const s = startSession(dayA.id);
+    insertSet({ sessionId: s.id, exerciseId: 'squat', weight: 200, reps: 1, rir: 5, isWarmup: true });
+    insertSet({ sessionId: s.id, exerciseId: 'squat', weight: 100, reps: 5, rir: 2 });
+    finishSession(s.id);
+    assert.equal(searchWorkouts({ text: 'squat' })[0]!.top?.weight, 100);
+  });
+
+  test('the date range narrows it', () => {
+    const { dayA } = seedPlan();
+    const s = startSession(dayA.id);
+    work(s.id, 'squat', 1);
+    finishSession(s.id);
+    assert.equal(searchWorkouts({ sinceISO: '2000-01-01' }).length, 1);
+    assert.equal(searchWorkouts({ sinceISO: '2999-01-01' }).length, 0);
+  });
+});
+
+describe('usual meals', () => {
+  const logAt = (date: string, slot: 'breakfast' | 'dinner', foodId: string, grams: number) =>
+    logFood({ dateISO: date, mealSlot: slot, foodId, grams });
+
+  beforeEach(() => {
+    db.insert(schema.food)
+      .values([
+        { id: 'oats', name: 'Oats', servingG: 40, kcal: 150, protein: 5, carb: 27, fat: 3 },
+        { id: 'eggs', name: 'Eggs', servingG: 50, kcal: 70, protein: 6, carb: 0, fat: 5 },
+      ])
+      .run();
+  });
+
+  test('offers what you actually eat for that meal, most often first', () => {
+    logAt('2026-03-01', 'breakfast', 'oats', 80);
+    logAt('2026-03-02', 'breakfast', 'oats', 80);
+    logAt('2026-03-03', 'breakfast', 'eggs', 100);
+    logAt('2026-03-03', 'dinner', 'eggs', 150);
+
+    const usual = usualFor('breakfast', 4, 60, '2026-03-10');
+    assert.deepEqual(usual.map((u) => u.label), ['Oats', 'Eggs']);
+    assert.equal(usual[0]!.times, 2);
+  });
+
+  test('breakfast and dinner are different questions', () => {
+    logAt('2026-03-01', 'breakfast', 'oats', 80);
+    logAt('2026-03-01', 'dinner', 'eggs', 150);
+    assert.deepEqual(usualFor('dinner', 4, 60, '2026-03-10').map((u) => u.label), ['Eggs']);
+  });
+
+  test('remembers the portion you last had, not a default', () => {
+    logAt('2026-03-01', 'breakfast', 'oats', 60);
+    logAt('2026-03-05', 'breakfast', 'oats', 95);
+    assert.equal(usualFor('breakfast', 4, 60, '2026-03-10')[0]!.grams, 95);
+  });
+
+  test('forgets what you stopped eating months ago', () => {
+    logAt('2025-01-01', 'breakfast', 'oats', 80);
+    assert.deepEqual(usualFor('breakfast', 4, 60, '2026-03-10'), []);
   });
 });
 

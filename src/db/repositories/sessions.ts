@@ -113,7 +113,7 @@ export function skipDay(routineDayId: string): string {
   return id;
 }
 
-const rawKeys = (id: string) => [`session:${id}:adhoc`, `session:${id}:skipped`, `session:${id}:order`, `session:${id}:readinessDone`, `session:${id}:warmup`];
+const rawKeys = (id: string) => [`session:${id}:adhoc`, `session:${id}:skipped`, `session:${id}:order`, `session:${id}:readinessDone`, `session:${id}:warmup`, `session:${id}:targets`];
 
 export type WarmupState = 'pending' | 'done' | 'skipped';
 
@@ -128,11 +128,12 @@ export function setWarmupState(sessionId: string, state: WarmupState): void {
   else setRaw(`session:${sessionId}:warmup`, state);
 }
 
-function workingSetCount(sessionId: string): number {
+/** Any set at all, warm-ups included — a session with logged warm-ups is not empty. */
+function loggedSetCount(sessionId: string): number {
   const row = db
     .select({ n: sql<number>`count(*)` })
     .from(schema.setLog)
-    .where(and(eq(schema.setLog.sessionId, sessionId), eq(schema.setLog.isWarmup, 0)))
+    .where(eq(schema.setLog.sessionId, sessionId))
     .get();
   return Number(row?.n ?? 0);
 }
@@ -148,11 +149,13 @@ function close(sessionId: string, status: SessionStatus): void {
 
 /**
  * Finish: `completed` when every planned exercise hit its target sets, else `partial`.
- * A workout with no working sets is discarded — opening and closing one by accident
- * must never advance the routine or leave an empty row in history.
+ * A workout with nothing logged at all is discarded — opening and closing one by
+ * accident must never advance the routine or leave an empty row in history. Logged
+ * warm-ups count as something: someone who warmed up and then had to leave did do
+ * the work, and deleting it without asking is worse than a partial on the record.
  */
 export function finishSession(sessionId: string): { discarded: boolean; status: SessionStatus | null } {
-  if (workingSetCount(sessionId) === 0) {
+  if (loggedSetCount(sessionId) === 0) {
     deleteSession(sessionId);
     return { discarded: true, status: null };
   }
@@ -170,7 +173,7 @@ export function finishSession(sessionId: string): { discarded: boolean; status: 
  * the whole workout is deleted.
  */
 export function cancelSession(sessionId: string, keepSets: boolean): void {
-  if (keepSets && workingSetCount(sessionId) > 0) close(sessionId, 'cancelled');
+  if (keepSets && loggedSetCount(sessionId) > 0) close(sessionId, 'cancelled');
   else deleteSession(sessionId);
 }
 
@@ -496,13 +499,37 @@ export interface PlanProgress {
   skipped: number;
 }
 
+const targetsKey = (id: string) => `session:${id}:targets`;
+
+/**
+ * The set counts this workout is actually running to, where a suggestion moved them
+ * off the plan — a deload halves them, ADD_SET adds one. Stored beside the session
+ * rather than on the plan row on purpose: prescribe() derives its count FROM that
+ * row, so writing ADD_SET's +1 back would have the next prescription add another.
+ */
+export function sessionTargetSets(sessionId: string): Record<string, number> {
+  try {
+    const v: unknown = JSON.parse(getRaw(targetsKey(sessionId)) ?? '{}');
+    return v !== null && typeof v === 'object' ? (v as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Records the target the user was actually shown, so the checklist, the set counter
+ *  and the finish status cannot disagree about what "done" means today. */
+export function setSessionTargetSets(sessionId: string, exerciseId: string, sets: number): void {
+  setRaw(targetsKey(sessionId), JSON.stringify({ ...sessionTargetSets(sessionId), [exerciseId]: sets }));
+}
+
 export function planProgress(sessionId: string): PlanProgress {
   const plan = getSessionPlan(sessionId).filter((p) => !p.adHoc);
+  const targets = sessionTargetSets(sessionId);
   const counts = new Map<string, number>();
   for (const s of getSessionSets(sessionId)) if (s.isWarmup === 0) counts.set(s.exerciseId, (counts.get(s.exerciseId) ?? 0) + 1);
   return {
     planned: plan.length,
-    done: plan.filter((p) => !p.skipped && (counts.get(p.exerciseId) ?? 0) >= (p.slot?.targetSets ?? 1)).length,
+    done: plan.filter((p) => !p.skipped && (counts.get(p.exerciseId) ?? 0) >= (targets[p.exerciseId] ?? p.slot?.targetSets ?? 1)).length,
     skipped: plan.filter((p) => p.skipped).length,
   };
 }
@@ -568,11 +595,14 @@ export function unskipExercise(sessionId: string, exerciseId: string): void {
 /**
  * Today-only swap (machine taken, tweaked shoulder). The planned targets move to the
  * new exercise; sets already logged on the old one stay and still show on the list.
+ * The start weight does not move — it was picked for a different lift — so the
+ * replacement calibrates off its own history instead. `startWeight` exists for the
+ * undo path, which hands the original exercise its load back.
  */
-export function swapSessionExercise(sessionId: string, fromId: string, toId: string): void {
+export function swapSessionExercise(sessionId: string, fromId: string, toId: string, startWeight: number | null = null): void {
   if (fromId === toId || getRow(sessionId, toId)) return;
   if (getRow(sessionId, fromId)) {
-    db.update(schema.sessionExercise).set({ exerciseId: toId, skipped: 0 }).where(seKey(sessionId, fromId)).run();
+    db.update(schema.sessionExercise).set({ exerciseId: toId, skipped: 0, startWeight }).where(seKey(sessionId, fromId)).run();
   } else {
     addSessionExercise(sessionId, toId);
   }

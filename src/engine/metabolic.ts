@@ -43,18 +43,24 @@ export function weightTrend(weighIns: WeighIn[], alpha = 0.1): { date: string; t
   });
 }
 
-/** kg per week the trend line is moving. Negative = losing. */
-export function weeklyRateKg(weighIns: WeighIn[], days = 14, alpha = 0.1): number {
+/**
+ * kg per week the trend line is moving. Negative = losing.
+ *
+ * `points` counts weigh-ins, not days — someone who weighs once a week has seven
+ * readings across six weeks, so the change is divided by the real calendar span
+ * between the first and last of them. Counting readings as days reported a rate
+ * seven times too fast, and phaseCheck turns that into calorie advice.
+ */
+export function weeklyRateKg(weighIns: WeighIn[], points = 14, alpha = 0.1): number {
   const t = weightTrend(weighIns, alpha);
   if (t.length < 7) return 0;
-  const window = t.slice(-days);
+  const window = t.slice(-points);
   if (window.length < 7) return 0;
-  const spanDays = Math.max(1, window.length - 1);
   const firstW = window[0];
   const lastW = window[window.length - 1];
   if (!firstW || !lastW) return 0;
-  const delta = lastW.trend - firstW.trend;
-  return (delta / spanDays) * 7;
+  const spanDays = Math.max(1, daysBetween(firstW.date, lastW.date));
+  return ((lastW.trend - firstW.trend) / spanDays) * 7;
 }
 
 /* ============================ TDEE ======================================= */
@@ -87,10 +93,16 @@ export function adaptiveTDEE(
   if (trend.length < 14) return null;
 
   const windowStart = intakeWindow[0];
-  if (!windowStart) return null;
-  const first = trend.find((t) => t.date >= windowStart.date) ?? trend[0];
-  const lastT = trend[trend.length - 1];
-  if (!first || !lastT) return null;
+  const windowEnd = intakeWindow[intakeWindow.length - 1];
+  if (!windowStart || !windowEnd) return null;
+
+  // Both endpoints must sit inside the food window. Without this, a food diary
+  // from August and a weight history from January produce a confident number
+  // describing neither: the intake is one period and the weight change another.
+  const first = trend.find((t) => t.date >= windowStart.date);
+  const within = trend.filter((t) => t.date <= windowEnd.date);
+  const lastT = within[within.length - 1];
+  if (!first || !lastT || first.date > lastT.date) return null;
   const spanDays = Math.max(1, daysBetween(first.date, lastT.date));
   if (spanDays < 10) return null;
 

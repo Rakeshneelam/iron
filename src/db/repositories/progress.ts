@@ -2,7 +2,7 @@
  * Weekly progress and the inputs for plan recommendations. Read-only: trends come
  * from the engine; this file only gathers the numbers.
  */
-import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, like, lt, lte, max, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
@@ -176,6 +176,89 @@ export function recentWorkouts(limit = 10): { session: Session; dayLabel: string
       )
     : new Map<string, number>();
   return rows.map((r) => ({ session: r.session, dayLabel: r.dayLabel, sets: counts.get(r.session.id) ?? 0 }));
+}
+
+export interface HistoryRow {
+  session: Session;
+  dayLabel: string | null;
+  sets: number;
+  /** Top working set of the lift you searched for — the answer to "what did I do last time". */
+  top: { name: string; weight: number; reps: number } | null;
+}
+
+/**
+ * Past workouts, newest first, narrowed by a lift name and/or a start date.
+ *
+ * One list and one field rather than a mode switch: people arrive here asking either
+ * "what did I do on bench" or "what did I do in March", and being made to pick a
+ * search mode first serves neither. When a lift is named, each row carries that
+ * lift's top set, because that number is the actual question.
+ */
+export function searchWorkouts(opts: { text?: string; sinceISO?: string; limit?: number } = {}): HistoryRow[] {
+  const text = opts.text?.trim() ?? '';
+  const conds = [isNotNull(schema.session.endedAt)];
+  if (opts.sinceISO) conds.push(gte(schema.session.date, opts.sinceISO));
+  if (text) {
+    conds.push(
+      inArray(
+        schema.session.id,
+        db
+          .select({ id: schema.setLog.sessionId })
+          .from(schema.setLog)
+          .innerJoin(schema.exercise, eq(schema.exercise.id, schema.setLog.exerciseId))
+          .where(like(schema.exercise.name, `%${text}%`)),
+      ),
+    );
+  }
+
+  const rows = db
+    .select({ session: schema.session, dayLabel: schema.routineDay.label })
+    .from(schema.session)
+    .leftJoin(schema.routineDay, eq(schema.session.routineDayId, schema.routineDay.id))
+    .where(and(...conds))
+    .orderBy(desc(schema.session.startedAt))
+    .limit(opts.limit ?? 100)
+    .all();
+
+  const ids = rows.map((r) => r.session.id);
+  if (ids.length === 0) return [];
+
+  const counts = new Map(
+    db
+      .select({ id: schema.setLog.sessionId, n: sql<number>`count(*)` })
+      .from(schema.setLog)
+      .where(and(inArray(schema.setLog.sessionId, ids), eq(schema.setLog.isWarmup, 0)))
+      .groupBy(schema.setLog.sessionId)
+      .all()
+      .map((r) => [r.id, Number(r.n)]),
+  );
+
+  const tops = new Map<string, { name: string; weight: number; reps: number }>();
+  if (text) {
+    // Bare `reps` and `name` come from the row that matched max(weight) — SQLite's
+    // documented behaviour with exactly one max() in the query.
+    for (const r of db
+      .select({
+        id: schema.setLog.sessionId,
+        name: schema.exercise.name,
+        weight: max(schema.setLog.weight),
+        reps: schema.setLog.reps,
+      })
+      .from(schema.setLog)
+      .innerJoin(schema.exercise, eq(schema.exercise.id, schema.setLog.exerciseId))
+      .where(and(inArray(schema.setLog.sessionId, ids), eq(schema.setLog.isWarmup, 0), like(schema.exercise.name, `%${text}%`)))
+      .groupBy(schema.setLog.sessionId)
+      .all()) {
+      if (r.weight !== null) tops.set(r.id, { name: r.name, weight: Number(r.weight), reps: Number(r.reps) });
+    }
+  }
+
+  return rows.map((r) => ({
+    session: r.session,
+    dayLabel: r.dayLabel,
+    sets: counts.get(r.session.id) ?? 0,
+    top: tops.get(r.session.id) ?? null,
+  }));
 }
 
 /* ============================ recommendations =========================== */
