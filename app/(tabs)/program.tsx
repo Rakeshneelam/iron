@@ -79,11 +79,11 @@ export default function PlansScreen() {
             {r.active ? <Pill label="Active" tone="accent" /> : <Icon name="chevronRight" size={20} color={color.textMuted} />}
           </View>
           <Text style={styles.muted}>
-            {r.daysPerWeek}× a week · {days.length} {days.length === 1 ? 'day' : 'days'} · {exercises} exercises
+            {days.length} {days.length === 1 ? 'day' : 'days'} a week, {exercises} {exercises === 1 ? 'exercise' : 'exercises'}
           </Text>
           {days.length ? (
             <Text style={styles.days} numberOfLines={1}>
-              {days.join('  ·  ')}
+              {days.join(', ')}
             </Text>
           ) : null}
           {!r.active ? <PrimaryButton label="Use this plan" tone="neutral" style={styles.gapTop} onPress={() => activate(r)} /> : null}
@@ -106,7 +106,7 @@ export default function PlansScreen() {
       {archived.length ? (
         <>
           <Pressable style={styles.toggle} onPress={() => setShowArchived(!showArchived)} accessibilityRole="button">
-            <SectionHeader title={`Archived · ${archived.length}`} />
+            <SectionHeader title="Archived" hint={`${archived.length} ${archived.length === 1 ? 'plan' : 'plans'}`} />
             <Icon name={showArchived ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
           </Pressable>
           {showArchived
@@ -145,7 +145,8 @@ export default function PlansScreen() {
                 {i === 0 ? <Text style={styles.badge}>Best match</Text> : null}
               </View>
               <Text style={styles.muted}>
-                {GOAL[m.template.goal]} · {LEVEL[m.template.level]} · {m.template.daysPerWeek} days · ~{m.template.minutes} min
+                {m.template.daysPerWeek} days a week, about {m.template.minutes} minutes
+                <Text style={styles.mutedFaint}>{`\n${GOAL[m.template.goal]} · ${LEVEL[m.template.level]}`}</Text>
               </Text>
             </View>
             <Icon name="chevronRight" size={20} color={color.textMuted} />
@@ -178,7 +179,8 @@ export default function PlansScreen() {
                   const swapped = adapted.swaps.some((x) => x.to === s.exerciseId);
                   return (
                     <Text key={s.exerciseId} style={styles.slot}>
-                      {CATALOG_BY_ID.get(s.exerciseId)?.name ?? s.exerciseId} · {s.targetSets} × {s.repLo}–{s.repHi}
+                      {CATALOG_BY_ID.get(s.exerciseId)?.name ?? s.exerciseId}
+                      <Text style={styles.mutedFaint}>{`   ${s.targetSets} × ${s.repLo}–${s.repHi}`}</Text>
                       {swapped ? <Text style={styles.swapped}>  (swapped for your equipment)</Text> : null}
                     </Text>
                   );
@@ -196,6 +198,7 @@ export default function PlansScreen() {
 }
 
 const styles = StyleSheet.create({
+  mutedFaint: { color: color.textFaint },
   flex1: { flex: 1 },
   headerBtns: { flexDirection: 'row', gap: space.xs },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },

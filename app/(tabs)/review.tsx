@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast, TrendChart } from '@/components';
+import { Card, confirm, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast, TrendChart } from '@/components';
 import { useLive } from '@/db/live';
 import { getSlot, updateSlot } from '@/db/repositories/program';
 import { activeRecommendations, dismissRecommendation, recentWorkouts, undismissRecommendation, weekInsights, weekSummary } from '@/db/repositories/progress';
@@ -186,16 +186,17 @@ export default function ProgressScreen() {
         </>
       ) : null}
 
-      <SectionHeader title="Consistency" />
+      <SectionHeader
+        title="Consistency"
+        hint={empty && isThisWeek ? 'Nothing logged yet. Start a workout and these fill in.' : undefined}
+      />
       <View style={styles.tiles}>
         <StatTile label="Workouts" value={week.plannedDays ? `${done} / ${week.plannedDays}` : String(done)} tone={week.plannedDays && done >= week.plannedDays ? 'positive' : 'default'} />
         <StatTile label="Skipped" value={String(week.skipped)} tone="muted" hint={week.cancelled ? `${week.cancelled} cancelled` : undefined} />
         <StatTile label="Time" value={`${week.minutes} min`} tone="muted" />
       </View>
 
-      {empty ? (
-        <EmptyState message={isThisWeek ? 'No workouts yet this week. Your numbers will show up here.' : 'No workouts this week.'} />
-      ) : (
+      {empty ? null : (
         <>
           <SectionHeader title="Training" />
           <View style={styles.tiles}>
