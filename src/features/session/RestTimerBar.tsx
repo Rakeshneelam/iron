@@ -14,8 +14,10 @@ export function RestTimerBar({ sessionId }: { sessionId: string }) {
     <View style={styles.wrap}>
       <View style={styles.row}>
         <Text style={styles.clock}>{fmtClock(Math.ceil(t.remainingMs / 1000))}</Text>
+        {/* "rest · Lying L…" — the exercise name never fit beside four controls, and
+            the screen above already says which lift you are resting from. */}
         <Text style={styles.label} numberOfLines={1}>
-          rest · {t.label ?? ''}
+          rest
         </Text>
         <PrimaryButton label="−15s" tone="neutral" onPress={() => t.add(-15)} />
         <PrimaryButton label="+30s" tone="neutral" onPress={() => t.add(30)} />
