@@ -50,6 +50,8 @@ export default function Setup() {
   const choice = picked ?? ranked[0]?.template.id ?? OWN;
   const shown = showAll ? ranked : ranked.slice(0, 3);
 
+  const ready = name.trim().length > 0 && days.length > 0;
+
   const finish = () => {
     setSetting('name', name.trim());
     setSetting('sex', sex);
@@ -87,7 +89,15 @@ export default function Setup() {
           onPress={() => router.push('/settings/restore')}
         />
 
-        <TextInput value={name} onChangeText={setName} placeholder="Your name (optional)" placeholderTextColor={color.textFaint} style={styles.input} autoCapitalize="words" />
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Your name"
+          placeholderTextColor={color.textFaint}
+          style={styles.input}
+          autoCapitalize="words"
+          accessibilityLabel="Your name, required"
+        />
 
         <SectionHeader title="Training" />
         <Text style={styles.label}>Main goal</Text>
@@ -140,7 +150,9 @@ export default function Setup() {
         <Text style={styles.hint}>Every plan is fully editable, and you can keep several and switch any time.</Text>
       </Screen>
       <View style={[styles.actionBar, { paddingBottom: insets.bottom + space.md }]}>
-        <PrimaryButton label="Let's go" size="gym" disabled={days.length === 0} onPress={finish} />
+        {/* Says which thing is missing rather than leaving a dead button. */}
+        {!ready ? <Text style={styles.gate}>{name.trim() ? 'Pick the days you can train.' : 'Enter your name to continue.'}</Text> : null}
+        <PrimaryButton label="Let's go" size="gym" disabled={!ready} onPress={finish} />
       </View>
     </View>
   );
@@ -162,6 +174,7 @@ function Choice({ title, subtitle, selected, badge, onPress }: { title: string; 
 }
 
 const styles = StyleSheet.create({
+  gate: { ...font.caption, color: color.textMuted, textAlign: 'center', marginBottom: space.xs },
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   input: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.gym },
