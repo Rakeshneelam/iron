@@ -52,6 +52,12 @@ export default function Setup() {
 
   const ready = name.trim().length > 0 && days.length > 0;
 
+  // Screen reserves layout.actionBarHeight at the bottom, but this bar is taller than
+  // that — more so once the gate line appears — which was hiding the last question
+  // behind it. Measured, so it stays right whatever the bar ends up containing.
+  const [barHeight, setBarHeight] = useState(0);
+  const clearance = Math.max(0, barHeight - layout.actionBarHeight);
+
   const finish = () => {
     setSetting('name', name.trim());
     setSetting('sex', sex);
@@ -148,8 +154,12 @@ export default function Setup() {
         {!showAll ? <PrimaryButton label="See all plans" tone="ghost" onPress={() => setShowAll(true)} /> : null}
         <Choice title="Build my own" subtitle="Start empty and add days and exercises" selected={choice === OWN} onPress={() => setPicked(OWN)} />
         <Text style={styles.hint}>Every plan is fully editable, and you can keep several and switch any time.</Text>
+        <View style={{ height: clearance }} />
       </Screen>
-      <View style={[styles.actionBar, { paddingBottom: insets.bottom + space.md }]}>
+      <View
+        style={[styles.actionBar, { paddingBottom: insets.bottom + space.md }]}
+        onLayout={(e) => setBarHeight(e.nativeEvent.layout.height)}
+      >
         {/* Says which thing is missing rather than leaving a dead button. */}
         {!ready ? <Text style={styles.gate}>{name.trim() ? 'Pick the days you can train.' : 'Enter your name to continue.'}</Text> : null}
         <PrimaryButton label="Let's go" size="gym" disabled={!ready} onPress={finish} />

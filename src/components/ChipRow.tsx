@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
@@ -13,7 +13,7 @@ export interface ChipRowProps<T extends string | number> {
   value: T | null | undefined;
   onChange: (next: T) => void;
   size?: 'gym' | 'default';
-  /** Equal-width chips across the row (RIR 0-4). Otherwise a horizontal scroller. */
+  /** Equal-width chips on one line (RIR 0-4). Otherwise they size to their label and wrap. */
   fill?: boolean;
   haptics?: boolean;
 }
@@ -46,25 +46,26 @@ export function ChipRow<T extends string | number>({
           pressed && !selected && styles.pressed,
         ]}
       >
-        <Text style={[size === 'gym' ? styles.textGym : styles.text, selected && styles.textSelected]} numberOfLines={1}>
+        {/* Two lines, not an ellipsis: "General fitness" truncated to "General fit…" is
+            the option becoming unreadable, which is worse than a taller chip. */}
+        <Text style={[size === 'gym' ? styles.textGym : styles.text, selected && styles.textSelected]} numberOfLines={2}>
           {o.label}
         </Text>
       </Pressable>
     );
   });
 
-  if (fill) return <View style={styles.row}>{chips}</View>;
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-      {chips}
-    </ScrollView>
-  );
+  // Wrapping, never a horizontal scroller: an option parked off the right edge with
+  // no scroll affordance is an option the user cannot see and will never find.
+  return <View style={[styles.row, !fill && styles.wrap]}>{chips}</View>;
 }
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: space.sm },
+  wrap: { flexWrap: 'wrap' },
   chip: {
     paddingHorizontal: space.md,
+    paddingVertical: space.xs,
     borderRadius: radius.md,
     backgroundColor: color.surfaceHigh,
     alignItems: 'center',
@@ -75,7 +76,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   selected: { backgroundColor: color.accent, borderColor: color.accent },
   pressed: { backgroundColor: color.border },
-  text: { ...font.label, color: color.text },
+  text: { ...font.label, color: color.text, textAlign: 'center' },
   textGym: { ...font.heading, ...font.numeric, color: color.text },
   textSelected: { color: color.onAccent },
 });
