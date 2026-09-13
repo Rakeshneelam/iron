@@ -44,9 +44,9 @@ Six surfaces, in priority order:
 |---|---|---|
 | 1 | **Today** | The workout for today, logged set by set, with next-set suggestions |
 | 2 | **Plans** | Any number of plans (templates or custom), one active; days → exercises |
-| 3 | **Body** | Morning bodyweight before training; smoothed trend, not raw dots |
+| 3 | **Daily** | Optional check-in (weight, sleep, soreness, stress) shown on Today before the workout; smoothed weight trend, not raw dots; sleep. Measurements live on Body |
 | 4 | **Food** | Calories/macros with one-tap repeats of his real meals |
-| 5 | **Water** | Daily target, quick log, debt-based reminders |
+| 5 | **Water** | Daily target, quick log, debt-based reminders. A screen off the check-in card, not a tab |
 | 6 | **Progress** | Weekly summary + plan suggestions the user approves (`src/engine/recommend.ts`) |
 
 The core intelligence is already written and tested in `src/engine/`. **Do not

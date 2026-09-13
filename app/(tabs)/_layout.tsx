@@ -3,14 +3,18 @@ import { Tabs } from 'expo-router/js-tabs';
 import { Icon, type IconName } from '@/components/Icon';
 import { color, font } from '@/theme/tokens';
 
-/** Route names are kept from v1 (deep links and notifications point at them); titles are what users see. */
+/**
+ * Route names are kept from v1 where they exist (deep links and notifications point
+ * at them); titles are what users see. Ordered by how often each is opened: the
+ * three daily screens first. Water is a screen off the check-in card, not a tab.
+ */
 const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: 'index', title: 'Today', icon: 'dumbbell' },
+  { name: 'daily', title: 'Daily', icon: 'pulse' },
+  { name: 'food', title: 'Food', icon: 'food' },
   { name: 'program', title: 'Plans', icon: 'plans' },
   { name: 'review', title: 'Progress', icon: 'progress' },
-  { name: 'body', title: 'Body', icon: 'body' },
-  { name: 'water', title: 'Water', icon: 'water' },
-  { name: 'food', title: 'Food', icon: 'food' },
+  { name: 'body', title: 'Body', icon: 'ruler' },
 ];
 
 export default function TabsLayout() {

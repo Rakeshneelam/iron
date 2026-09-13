@@ -9,7 +9,7 @@ import { seedIfNeeded } from '@/db/seed';
 /** Child tables first, so foreign keys never block a delete. */
 const USER_TABLES = [
   'set_log', 'exercise_session_stat', 'session_exercise', 'timer_state', 'session',
-  'routine_slot', 'routine_day', 'routine', 'weigh_in', 'measurement',
+  'routine_slot', 'routine_day', 'routine', 'weigh_in', 'check_in', 'measurement',
   'meal_log', 'recipe_item', 'recipe', 'water_log', 'exercise_link', 'setting', 'equipment',
 ] as const;
 

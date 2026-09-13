@@ -1,5 +1,5 @@
 /** Bodyweight and circumferences. Trend smoothing happens in the engine, never here. */
-import { desc, eq, isNotNull } from 'drizzle-orm';
+import { asc, desc, eq, gte, isNotNull } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
@@ -7,6 +7,26 @@ import type { WeighIn } from '@/engine/metabolic';
 import { newId } from '@/lib/ids';
 
 export type Measurement = typeof schema.measurement.$inferSelect;
+export type CheckIn = typeof schema.checkIn.$inferSelect;
+
+export function getCheckIn(dateISO: string): CheckIn | undefined {
+  return db.select().from(schema.checkIn).where(eq(schema.checkIn.date, dateISO)).get();
+}
+
+/** One check-in per day: checking in again replaces that day's answers. */
+export function saveCheckIn(row: CheckIn): void {
+  const { date: _date, ...answers } = row;
+  db.insert(schema.checkIn).values(row).onConflictDoUpdate({ target: schema.checkIn.date, set: answers }).run();
+}
+
+export function deleteCheckIn(dateISO: string): void {
+  db.delete(schema.checkIn).where(eq(schema.checkIn.date, dateISO)).run();
+}
+
+/** Ascending, from `fromISO` on. */
+export function listCheckIns(fromISO: string): CheckIn[] {
+  return db.select().from(schema.checkIn).where(gte(schema.checkIn.date, fromISO)).orderBy(asc(schema.checkIn.date)).all();
+}
 
 /** One weigh-in per day: re-logging the same morning replaces it. */
 export function upsertWeighIn(dateISO: string, kg: number, note?: string): void {

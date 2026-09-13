@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -55,7 +56,7 @@ export default function WaterScreen() {
         : 'No more reminders today.';
 
   const logged = history.filter((d) => d.ml > 0);
-  const hit = history.filter((d) => d.ml >= plan.targetMl).length;
+  const daysHit = history.filter((d) => d.ml >= plan.targetMl).length;
   const avg = logged.length ? logged.reduce((a, d) => a + d.ml, 0) / logged.length : 0;
   const dayTotal = entries.reduce((a, e) => a + e.ml, 0);
 
@@ -64,12 +65,15 @@ export default function WaterScreen() {
       title="Water"
       subtitle={`Target ${ml(plan.targetMl)}`}
       right={
-        <IconButton
-          icon="edit"
-          tone="neutral"
-          accessibilityLabel="Change your daily water target"
-          onPress={() => setTargetSheet(true)}
-        />
+        <View style={styles.headerBtns}>
+          <IconButton
+            icon="edit"
+            tone="neutral"
+            accessibilityLabel="Change your daily water target"
+            onPress={() => setTargetSheet(true)}
+          />
+          <PrimaryButton label="Done" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+        </View>
       }
     >
       <View style={styles.center}>
@@ -118,7 +122,7 @@ export default function WaterScreen() {
           highlight={history.length - 1}
         />
         <Text style={styles.hint}>
-          Target hit {hit} of 14 days{logged.length ? ` · average ${ml(avg)} on days you logged` : ''}
+          Target hit {daysHit} of 14 days{logged.length ? ` · average ${ml(avg)} on days you logged` : ''}
         </Text>
       </Card>
 
@@ -198,6 +202,7 @@ function AmountSheet({
 }
 
 const styles = StyleSheet.create({
+  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   center: { alignItems: 'center', marginVertical: space.md },
   status: { ...font.label, color: color.textMuted, textAlign: 'center', marginBottom: space.lg },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

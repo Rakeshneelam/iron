@@ -15,6 +15,7 @@ import { e1RM, type SessionLog } from '@/engine/progression';
 import { nowISO, todayISO } from '@/lib/date';
 import { newId } from '@/lib/ids';
 
+import { getCheckIn, getWeighIn } from './body';
 import { getExercise, getLinkedSources, type Exercise } from './exercises';
 import { groupBy, parseIdList, toEngineSet } from './mappers';
 import { getSlots, type Targets } from './program';
@@ -73,17 +74,15 @@ function planRows(sessionId: string, routineDayId: string): SessionExerciseRow[]
 export function startSession(routineDayId: string | null, opts: { fit?: readonly { exerciseId: string; sets: number }[] } = {}): Session {
   const open = getActiveSession();
   if (open) return open;
+  const date = todayISO();
   const row: Session = {
     id: newId(),
     routineDayId,
-    date: todayISO(),
+    date,
     startedAt: nowISO(),
     endedAt: null,
     status: 'active',
-    bodyweightKg: null,
-    sleepHours: null,
-    soreness: null,
-    stress: null,
+    ...readinessOn(date),
     sessionRpe: null,
     notes: null,
   };
@@ -199,28 +198,25 @@ export function reopenSession(sessionId: string): boolean {
   return true;
 }
 
-export function setReadiness(
-  sessionId: string,
-  r: { bodyweightKg?: number; sleepHours?: number; soreness?: number; stress?: number },
-): void {
-  const patch: Partial<Session> = {};
-  if (r.bodyweightKg !== undefined) patch.bodyweightKg = r.bodyweightKg;
-  if (r.sleepHours !== undefined) patch.sleepHours = r.sleepHours;
-  if (r.soreness !== undefined) patch.soreness = r.soreness;
-  if (r.stress !== undefined) patch.stress = r.stress;
-  if (Object.keys(patch).length) db.update(schema.session).set(patch).where(eq(schema.session.id, sessionId)).run();
-  markReadinessDone(sessionId);
+/** The day's check-in and weigh-in, in the session's readiness columns. */
+function readinessOn(date: string): Pick<Session, 'bodyweightKg' | 'sleepHours' | 'soreness' | 'stress'> {
+  const c = getCheckIn(date);
+  return {
+    bodyweightKg: getWeighIn(date)?.kg ?? null,
+    sleepHours: c?.sleepHours ?? null,
+    soreness: c?.soreness ?? null,
+    stress: c?.stress ?? null,
+  };
 }
 
-export function markReadinessDone(sessionId: string): void {
-  db.insert(schema.setting)
-    .values({ key: `session:${sessionId}:readinessDone`, value: 'true' })
-    .onConflictDoNothing()
-    .run();
-}
-
-export function isReadinessDone(sessionId: string): boolean {
-  return getRaw(`session:${sessionId}:readinessDone`) === 'true';
+/**
+ * A check-in saved after Start still counts, up to the first logged set. After that
+ * the targets on screen stay put: readiness never moves a weight mid-workout.
+ */
+export function syncReadiness(): void {
+  const open = getActiveSession();
+  if (!open || loggedSetCount(open.id) > 0) return;
+  db.update(schema.session).set(readinessOn(open.date)).where(eq(schema.session.id, open.id)).run();
 }
 
 /** Post-workout feedback: effort (session RPE 1–10) and free-text notes. */

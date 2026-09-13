@@ -21,7 +21,6 @@ import {
   getSessionSets,
   getWarmupState,
   insertSet,
-  isReadinessDone,
   removeSessionExercise,
   restoreSessionExercise,
   sessionTargetSets,
@@ -45,7 +44,6 @@ import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { Elapsed } from '@/features/session/Elapsed';
 import { PlateSheet } from '@/features/session/PlateSheet';
 import { fmtSet, liftOf, rampFor, readinessFrom, suggestFor, suggestionContext, verdictLabel, VERDICT_TONE } from '@/features/session/prescription';
-import { ReadinessPrompt } from '@/features/session/ReadinessPrompt';
 import { RestTimerBar } from '@/features/session/RestTimerBar';
 import { SetControls } from '@/features/session/SetControls';
 import { minutesLabel, MODE_OPTIONS } from '@/features/warmup/labels';
@@ -75,7 +73,6 @@ export default function SessionScreen() {
   const session = useLive(() => getSession(id), ['session'], [id]);
   const plan = useLive(() => getSessionPlan(id), ['session_exercise', 'set_log', 'exercise'], [id]);
   const sets = useLive(() => getSessionSets(id), ['set_log'], [id]);
-  const readinessDone = useLive(() => isReadinessDone(id), ['setting'], [id]);
   // Plan notes are read live, not snapshotted: editing a cue should show up next workout.
   const notes = useLive(
     () => new Map((session?.routineDayId ? getSlots(session.routineDayId) : []).map((s) => [s.exerciseId, s.notes])),
@@ -432,7 +429,6 @@ export default function SessionScreen() {
             </View>
           </Card>
         ) : null}
-        {!readinessDone && sets.length === 0 ? <ReadinessPrompt sessionId={id} /> : null}
 
         {!current ? (
           <EmptyState message="No exercises yet." hint="Add one and you can start logging sets." actionLabel="Add exercise" onAction={() => setPicker({ mode: 'add' })} />

@@ -64,8 +64,8 @@ export default function PrivacyScreen() {
       <SectionHeader title="If you create an account" />
       <Card>
         <P>
-          An account is optional and Iron works fully without one. If you make one, five things are stored on our server:
-          your name, email address, occupation, age and sex.
+          An account is optional and Iron works fully without one. If you make one, these are stored on our server:
+          your name, email address, age and sex, plus an occupation if you gave one in an earlier version.
         </P>
         <P style={styles.gap}>
           Your workouts, bodyweight, measurements, food, water and anything you flagged to go easy on are never sent
@@ -81,7 +81,7 @@ export default function PrivacyScreen() {
       <Card>
         <P>
           Delete all my data, in Settings, erases everything on this phone. Delete account, also in Settings, erases your
-          name, email, occupation, age and sex from our server. Disconnect stops Drive backups; backups already in Drive
+          account details from our server. Disconnect stops Drive backups; backups already in Drive
           can be deleted from your Google account at any time. Uninstalling Iron removes everything local.
         </P>
       </Card>

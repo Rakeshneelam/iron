@@ -194,7 +194,7 @@ function Cable({ frame, anchor }: { frame: SharedValue<number[]>; anchor: readon
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', gap: space.sm },
+  wrap: { alignItems: 'center', gap: space.lg },
   controls: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   views: { marginLeft: space.sm },
 });

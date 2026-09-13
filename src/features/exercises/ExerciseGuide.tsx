@@ -128,15 +128,16 @@ function LinkRow({ title, hint, onPress }: { title: string; hint: string; onPres
 }
 
 const styles = StyleSheet.create({
-  stack: { gap: space.md, paddingBottom: space.lg },
+  // Illustrations need air: text set right under a figure reads as part of the drawing.
+  stack: { gap: space.xl, paddingBottom: space.lg },
   flex: { flex: 1 },
-  stage: { alignItems: 'center', backgroundColor: color.bg, borderRadius: radius.lg, paddingVertical: space.md },
-  legend: { gap: space.xs, alignItems: 'center' },
+  stage: { alignItems: 'center', backgroundColor: color.bg, borderRadius: radius.lg, paddingVertical: space.lg },
+  legend: { gap: space.xs, alignItems: 'center', marginTop: -space.sm },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   dot: { width: 10, height: 10, borderRadius: 5 },
   legendText: { ...font.label, color: color.text },
   meta: { ...font.caption, color: color.textMuted, textAlign: 'center' },
-  block: { gap: space.xs },
+  block: { gap: space.sm },
   blockTitle: { ...font.label, color: color.textMuted },
   line: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
   num: { ...font.label, ...font.numeric, color: color.accent, width: 14 },

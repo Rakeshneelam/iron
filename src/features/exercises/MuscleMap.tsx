@@ -74,6 +74,6 @@ export function MuscleMap({
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'center', gap: space.xl },
-  col: { alignItems: 'center', gap: space.xs },
+  col: { alignItems: 'center', gap: space.sm },
   cap: { ...font.caption, color: color.textFaint },
 });

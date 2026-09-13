@@ -90,19 +90,6 @@ export default function PlansScreen() {
         </Card>
       ))}
 
-      <Card onPress={() => router.push('/library')}>
-        <View style={styles.rowBetween}>
-          <View style={styles.rowStart}>
-            <Icon name="book" size={20} color={color.accent} />
-            <View>
-              <Text style={styles.body}>Exercise library</Text>
-              <Text style={styles.muted}>How-tos, muscles, swaps, warm-up drills</Text>
-            </View>
-          </View>
-          <Icon name="chevronRight" size={20} color={color.textMuted} />
-        </View>
-      </Card>
-
       {archived.length ? (
         <>
           <Pressable style={styles.toggle} onPress={() => setShowArchived(!showArchived)} accessibilityRole="button">
@@ -202,7 +189,6 @@ const styles = StyleSheet.create({
   flex1: { flex: 1 },
   headerBtns: { flexDirection: 'row', gap: space.xs },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
-  rowStart: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   name: { ...font.heading, color: color.text, flexShrink: 1 },
   body: { ...font.body, color: color.text },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },

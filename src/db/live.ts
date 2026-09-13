@@ -13,7 +13,7 @@ import { useEffect, useMemo, useReducer } from 'react';
 /** SQLite table names (snake_case), as reported by the change listener. */
 export type TableName =
   | 'exercise' | 'exercise_link' | 'equipment' | 'routine' | 'routine_day' | 'routine_slot'
-  | 'session' | 'session_exercise' | 'set_log' | 'exercise_session_stat' | 'weigh_in' | 'measurement' | 'food'
+  | 'session' | 'session_exercise' | 'set_log' | 'exercise_session_stat' | 'weigh_in' | 'check_in' | 'measurement' | 'food'
   | 'recipe' | 'recipe_item' | 'meal_log' | 'water_log' | 'setting' | 'timer_state';
 
 export function useLive<T>(read: () => T, tables: readonly TableName[], deps: readonly unknown[] = []): T {

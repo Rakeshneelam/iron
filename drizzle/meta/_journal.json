@@ -15,6 +15,13 @@
       "when": 1789093253890,
       "tag": "0001_session_status_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789238406680,
+      "tag": "0002_check_in",
+      "breakpoints": true
     }
   ]
 }

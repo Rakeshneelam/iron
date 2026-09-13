@@ -16,12 +16,14 @@ export interface TrendChartProps {
   onScrub?: (p: Pt | null) => void;
   format?: (y: number) => string;
   formatX?: (x: number) => string;
+  /** The value line above the plot. Off where the number is already shown beside it. */
+  readout?: boolean;
 }
 
 const PAD = space.md;
 const MAX_POINTS = 200;
 
-export function TrendChart({ trend, raw = [], markers = [], height = 180, onScrub, format, formatX }: TrendChartProps) {
+export function TrendChart({ trend, raw = [], markers = [], height = 180, onScrub, format, formatX, readout = true }: TrendChartProps) {
   const [width, setWidth] = useState(0);
   const [scrub, setScrub] = useState<Pt | null>(null);
 
@@ -64,10 +66,12 @@ export function TrendChart({ trend, raw = [], markers = [], height = 180, onScru
 
   return (
     <View>
-      <View style={styles.readout}>
-        <Text style={styles.readValue}>{shown ? fmt(shown.y) : '—'}</Text>
-        {shown && formatX ? <Text style={styles.readLabel}>{formatX(shown.x)}</Text> : null}
-      </View>
+      {readout ? (
+        <View style={styles.readout}>
+          <Text style={styles.readValue}>{shown ? fmt(shown.y) : '—'}</Text>
+          {shown && formatX ? <Text style={styles.readLabel}>{formatX(shown.x)}</Text> : null}
+        </View>
+      ) : null}
       <View
         style={{ height }}
         onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}

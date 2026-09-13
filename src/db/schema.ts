@@ -175,6 +175,17 @@ export const weighIn = sqliteTable('weigh_in', {
 });
 
 /**
+ * The morning check-in: how you slept and how you feel. One row per day; weight
+ * stays in `weigh_in`. A workout copies both into its session row when it starts.
+ */
+export const checkIn = sqliteTable('check_in', {
+  date: text('date').primaryKey(),
+  sleepHours: real('sleep_hours'),
+  soreness: integer('soreness'),
+  stress: integer('stress'),
+});
+
+/**
  * One reading per row. `cm` holds the value in the site's unit — cm for
  * circumferences, % for `bodyFat` (see features/body/sites.ts). Kept as `cm` so no
  * migration rewrites existing rows.

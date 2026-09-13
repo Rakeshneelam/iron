@@ -1,52 +1,27 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, TrendChart } from '@/components';
+import { Card, EmptyState, Icon, PrimaryButton, Screen, SectionHeader } from '@/components';
 import { useLive } from '@/db/live';
-import { getLatestWeight, listMeasurements, listWeighIns, type Measurement } from '@/db/repositories/body';
-import { PHASES, setSetting, useSettings } from '@/db/repositories/settings';
-import { phaseCheck, weeklyRateKg, weightTrend } from '@/engine/metabolic';
+import { listMeasurements, type Measurement } from '@/db/repositories/body';
+import { useSettings } from '@/db/repositories/settings';
 import { DetailsSheet } from '@/features/body/DetailsSheet';
-import { MeasureSheet, readingBefore, SiteSheet, WeighInSheet, type WeighEntry } from '@/features/body/sheets';
+import { MeasureSheet, readingBefore, SiteSheet } from '@/features/body/sheets';
 import { SITES } from '@/features/body/sites';
-import { GOALS } from '@/features/settings/goals';
-import { addDays, daysBetweenISO, fmtDayLabel, todayISO } from '@/lib/date';
-import { kg, kgNum, signed } from '@/lib/format';
-import { DEFAULT_WEIGHT_KG } from '@/services/hydration';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { addDays, fmtDayLabel } from '@/lib/date';
+import { kgNum, signed } from '@/lib/format';
+import { color, font, gap, hit, radius, space } from '@/theme/tokens';
 
-const RANGES = [
-  { label: '1M', value: 30 },
-  { label: '3M', value: 90 },
-  { label: '1Y', value: 365 },
-  { label: 'All', value: 0 },
-];
-
-/** The trend is the signal; a single morning is noise. Never red for weight going up. */
+/**
+ * Measurements, and the facts about you the maths needs. Weight moved to Daily,
+ * beside the check-in it is logged with; this screen changes every few weeks.
+ */
 export default function BodyScreen() {
   const settings = useSettings();
-  const today = todayISO();
-  const weighIns = useLive(() => listWeighIns(), ['weigh_in']);
   const measurements = useLive(() => listMeasurements(), ['measurement']);
-
-  const [range, setRange] = useState(90);
-  const [weigh, setWeigh] = useState<WeighEntry | null>(null);
   const [measuring, setMeasuring] = useState(false);
   const [site, setSite] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
   const [details, setDetails] = useState(false);
-
-  const todays = weighIns.find((w) => w.date === today);
-  const trend = useMemo(() => weightTrend(weighIns), [weighIns]);
-  const lastTrend = trend[trend.length - 1]?.trend ?? null;
-  const rate = weeklyRateKg(weighIns);
-  const pctWk = lastTrend ? (rate / lastTrend) * 100 : 0;
-  const check = lastTrend !== null && trend.length >= 7 ? phaseCheck(settings.phase, lastTrend, rate) : null;
-
-  const shown = range ? trend.filter((t) => t.date >= addDays(today, -range)) : trend;
-  const first = shown[0]?.date ?? today;
-  const trendPts = shown.map((t) => ({ x: daysBetweenISO(first, t.date), y: t.trend }));
-  const rawPts = shown.map((t) => ({ x: daysBetweenISO(first, t.date), y: t.raw }));
 
   const bySite = useMemo(() => {
     const m = new Map<string, Measurement[]>();
@@ -58,116 +33,8 @@ export default function BodyScreen() {
   const waist = bySite.get('waist')?.[0];
   const whtr = waist && settings.heightCm > 0 ? waist.cm / settings.heightCm : null;
 
-  const recent = [...weighIns].reverse().slice(0, showAll ? 60 : 5);
-  const hasMeasurements = measurements.length > 0;
-  /** One point is not a trend. Below this the card shows a weight, not a trend. */
-  const hasTrend = trend.length >= 2;
-
   return (
-    <Screen
-      title="Body"
-      right={
-        <IconButton
-          icon="edit"
-          tone="neutral"
-          accessibilityLabel="Edit your name, sex, age and height"
-          onPress={() => setDetails(true)}
-        />
-      }
-    >
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.hero}>
-            {lastTrend === null ? '—' : kgNum(Math.round(lastTrend * 10) / 10)}
-            <Text style={styles.unit}> kg</Text>
-          </Text>
-          {trend.length >= 7 ? <Pill label={`${signed(rate, 2)} kg/wk · ${signed(pctWk, 2)}%`} /> : null}
-        </View>
-        {/* Edit sits with the number it edits, and says "edit" rather than "plus" —
-            the header button that used to do this looked like adding a new reading.
-            The value itself is only repeated once there is a trend to distinguish
-            it from; with one reading the hero already IS today's weight. */}
-        <View style={styles.todayRow}>
-          <Text style={styles.muted}>
-            {!todays ? 'Not weighed today' : hasTrend ? `Today ${kg(todays.kg)}` : 'Weighed today'}
-          </Text>
-          {todays ? (
-            <IconButton
-              icon="edit"
-              tone="neutral"
-              accessibilityLabel={`Edit today's weight, ${kg(todays.kg)}`}
-              onPress={() => setWeigh({ date: today, kg: todays.kg, existing: true })}
-            />
-          ) : null}
-        </View>
-        {trend.length >= 2 ? (
-          <View style={styles.chart}>
-            <TrendChart
-              trend={trendPts}
-              raw={rawPts}
-              height={150}
-              format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`}
-              formatX={(x) => fmtDayLabel(addDays(first, x))}
-            />
-            <ChipRow options={RANGES} value={range} onChange={setRange} />
-          </View>
-        ) : (
-          <Text style={styles.hint}>Log a few mornings and your trend line appears here.</Text>
-        )}
-      </Card>
-
-      {!todays ? (
-        <PrimaryButton
-          label="Log today's weight"
-          size="gym"
-          icon={<Icon name="plus" size={18} color={color.onAccent} />}
-          onPress={() => setWeigh({ date: today, kg: getLatestWeight() ?? DEFAULT_WEIGHT_KG, existing: false })}
-        />
-      ) : null}
-
-      <SectionHeader title="Goal" hint="Sets your calorie and water targets." />
-      <Card>
-        <ChipRow
-          options={GOALS.filter((g) => PHASES.includes(g.value))}
-          value={settings.phase}
-          onChange={(v) => setSetting('phase', v)}
-          fill={false}
-        />
-        {check ? (
-          <Text style={[styles.body, styles.checkNote, check.onTrack ? styles.onTrack : styles.offTrack]}>{check.message}</Text>
-        ) : (
-          <Text style={styles.hint}>
-            {trend.length >= 7
-              ? 'Weigh in a few more mornings and Iron will tell you whether this is working.'
-              : `A weekly check against this goal starts once you have seven weigh-ins. ${trend.length} so far.`}
-          </Text>
-        )}
-      </Card>
-
-      {recent.length > 1 ? (
-        <>
-          <SectionHeader title="Weigh-ins" />
-          <Card style={styles.list}>
-            {recent.map((w, i) => (
-              <Pressable
-                key={w.date}
-                style={[styles.row, i > 0 && styles.divider]}
-                onPress={() => setWeigh({ date: w.date, kg: w.kg, existing: true })}
-                accessibilityHint="Tap to edit or delete"
-              >
-                <Text style={styles.body}>{fmtDayLabel(w.date)}</Text>
-                <Text style={styles.value}>{kg(w.kg)}</Text>
-              </Pressable>
-            ))}
-          </Card>
-          {weighIns.length > 5 ? <PrimaryButton label={showAll ? 'Show fewer' : 'Show all'} tone="ghost" onPress={() => setShowAll(!showAll)} /> : null}
-        </>
-      ) : null}
-
-      <SectionHeader
-        title="Measurements"
-        right={hasMeasurements ? <PrimaryButton label="Log" tone="neutral" icon={<Icon name="ruler" size={16} />} onPress={() => setMeasuring(true)} /> : undefined}
-      />
+    <Screen title="Body" subtitle="Measurements and your details">
       {measured.length === 0 ? (
         <EmptyState
           message="Measure every 2–4 weeks."
@@ -177,6 +44,7 @@ export default function BodyScreen() {
         />
       ) : (
         <>
+          <PrimaryButton label="Log measurements" tone="neutral" icon={<Icon name="ruler" size={16} />} style={styles.log} onPress={() => setMeasuring(true)} />
           {whtr !== null ? (
             <Card>
               <View style={styles.rowBetween}>
@@ -208,7 +76,18 @@ export default function BodyScreen() {
         </>
       )}
 
-      <WeighInSheet entry={weigh} onClose={() => setWeigh(null)} />
+      <SectionHeader title="Your details" hint="Used for calorie and water targets. Nothing here leaves this phone." />
+      <Card onPress={() => setDetails(true)}>
+        <Detail label="Name" value={settings.name || '—'} />
+        <Detail label="Sex" value={settings.sex === 'female' ? 'Female' : 'Male'} />
+        <Detail label="Age" value={String(settings.age)} />
+        <Detail label="Height" value={`${settings.heightCm} cm`} />
+        <View style={styles.edit}>
+          <Icon name="edit" size={16} color={color.textMuted} />
+          <Text style={styles.hintInline}>Tap to edit</Text>
+        </View>
+      </Card>
+
       <MeasureSheet visible={measuring} latest={latestBySite} onClose={() => setMeasuring(false)} />
       <DetailsSheet visible={details} onClose={() => setDetails(false)} />
       <SiteSheet site={site} rows={site ? (bySite.get(site) ?? []) : []} onClose={() => setSite(null)} />
@@ -216,25 +95,28 @@ export default function BodyScreen() {
   );
 }
 
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detail}>
+      <Text style={styles.muted}>{label}</Text>
+      <Text style={styles.value} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  checkNote: { marginTop: space.md },
-  onTrack: { color: color.positive },
-  offTrack: { color: color.warning },
-  todayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: hit.default },
-  trendNote: { ...font.caption, color: color.textMuted },
+  log: { marginBottom: gap.between },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
-  hero: { ...font.display, ...font.numeric, fontSize: 44, color: color.text },
-  unit: { ...font.heading, color: color.textMuted },
+  detail: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, minHeight: hit.default },
+  edit: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm },
   unitSmall: { ...font.caption, color: color.textMuted },
   muted: { ...font.label, color: color.textMuted },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  chart: { marginTop: space.md, gap: space.md },
-  gapTop: { marginTop: space.md },
-  list: { paddingVertical: 0 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  hintInline: { ...font.caption, color: color.textMuted },
   body: { ...font.body, color: color.text },
-  value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
+  value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600', flexShrink: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   tile: { width: '48.5%', backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, padding: space.md, gap: 2 },
   pressed: { backgroundColor: color.surfaceHigh },

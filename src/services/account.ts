@@ -24,7 +24,7 @@ import {
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 import { firebaseAuth, firestore, isAccountsConfigured } from './firebase';
-import { configureGoogleSignin } from './googleSignin';
+import { configureGoogleSignin, googleConfigReport } from './googleSignin';
 
 export type Sex = 'male' | 'female';
 
@@ -89,22 +89,19 @@ export async function loadProfile(): Promise<Profile | null> {
   return snap.exists() ? ({ ...EMPTY_PROFILE, ...(snap.data() as Partial<Profile>) } as Profile) : null;
 }
 
-export interface SignUpInput extends Omit<Profile, 'marketingOptInAt'> {
+/** Name, email, password — age and sex come from setup's next step, never asked twice. */
+export interface SignUpInput {
+  name: string;
+  email: string;
   password: string;
+  marketingOptIn: boolean;
 }
 
 export async function signUpWithEmail(input: SignUpInput): Promise<void> {
   const auth = firebaseAuth();
   const cred = await createUserWithEmailAndPassword(auth, input.email.trim(), input.password);
   if (input.name.trim()) await updateProfile(cred.user, { displayName: input.name.trim() });
-  await saveProfile({
-    name: input.name.trim(),
-    email: input.email.trim(),
-    occupation: input.occupation.trim(),
-    age: input.age,
-    sex: input.sex,
-    marketingOptIn: input.marketingOptIn,
-  });
+  await saveProfile({ name: input.name.trim(), email: input.email.trim(), marketingOptIn: input.marketingOptIn });
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<void> {
@@ -133,11 +130,32 @@ export async function signInWithGoogle(): Promise<{ isNew: boolean; name: string
 
   const cred = await signInWithCredential(firebaseAuth(), GoogleAuthProvider.credential(idToken));
   const existing = await getDoc(profileRef(cred.user.uid));
-  return {
+  const out = {
     isNew: !existing.exists(),
     name: cred.user.displayName ?? res.data.user.name ?? '',
     email: cred.user.email ?? res.data.user.email ?? '',
   };
+  // A first sign-in has no profile yet: seed it from what Google already knows, so
+  // tapping the button is the whole sign-up. The marketing box stays unticked.
+  if (out.isNew) await saveProfile({ name: out.name, email: out.email, marketingOptIn: false });
+  return out;
+}
+
+/** Firebase and Google error codes are not sentences. Turn the common ones into advice. */
+export function accountErrorMessage(e: unknown): string {
+  const code = typeof e === 'object' && e !== null && 'code' in e ? String((e as { code: unknown }).code) : '';
+  if (code.includes('email-already-in-use')) return 'That email already has an account. Log in instead.';
+  if (code.includes('invalid-email')) return "That email address doesn't look right.";
+  if (code.includes('weak-password')) return 'Use at least 8 characters.';
+  if (code.includes('invalid-credential') || code.includes('wrong-password')) return 'That email and password do not match.';
+  if (code.includes('user-not-found')) return 'No account with that email.';
+  if (code.includes('too-many-requests')) return 'Too many attempts. Wait a few minutes.';
+  if (code.includes('network')) return 'No connection. Nothing was changed.';
+  // Not a user error and not a password problem: the Google project is missing this app.
+  if (code.includes('DEVELOPER_ERROR') || code === '10') {
+    return `Google sign-in isn't set up for this app yet, so use email for now. ${googleConfigReport()}`;
+  }
+  return e instanceof Error ? e.message : 'Something went wrong. Nothing was changed.';
 }
 
 export async function signOutAccount(): Promise<void> {

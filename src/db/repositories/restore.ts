@@ -23,7 +23,7 @@ type Row = Record<string, unknown>;
  */
 export const BACKUP_TABLES = [
   'exercise', 'exercise_link', 'equipment', 'routine', 'routine_day', 'routine_slot', 'session', 'session_exercise', 'set_log',
-  'exercise_session_stat', 'weigh_in', 'measurement', 'food', 'recipe', 'recipe_item', 'meal_log', 'water_log', 'setting',
+  'exercise_session_stat', 'weigh_in', 'check_in', 'measurement', 'food', 'recipe', 'recipe_item', 'meal_log', 'water_log', 'setting',
 ] as const;
 
 /** Built-in exercises and foods are app data, not the user's — the same line wipeAllData draws. */
