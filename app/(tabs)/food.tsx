@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, IconButton, PrimaryButton, Screen, SectionHeader, Sheet, StatTile, Stepper } from '@/components';
+import { DateStepper, useSelectedDate } from '@/components/DateStepper';
 import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
 import {
@@ -31,22 +32,9 @@ const unit = (label: string | null) => (label ?? 'serving').replace(/^1\s+/, '')
 
 /** Target: a normal day in under 30 seconds. Repeat is the primary action; search is the fallback. */
 export default function FoodScreen() {
-  const [date, setDate] = useState(todayISO());
+  // Shared with Water, midnight rule included (components/DateStepper).
+  const [date, setDate] = useSelectedDate();
   const yesterday = addDays(date, -1);
-
-  // Left open overnight, the screen would still be logging into yesterday. On
-  // resume, move on only if the user was on the current day; browsing history stays.
-  const shownToday = useRef(todayISO());
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => {
-      if (s !== 'active') return;
-      const now = todayISO();
-      if (now === shownToday.current) return;
-      if (date === shownToday.current) setDate(now);
-      shownToday.current = now;
-    });
-    return () => sub.remove();
-  }, [date]);
 
   const day = useLive(() => getDay(date), ['meal_log', 'food', 'recipe', 'recipe_item'], [date]);
   const prev = useLive(() => getDay(yesterday), ['meal_log', 'food', 'recipe', 'recipe_item'], [yesterday]);
@@ -76,18 +64,17 @@ export default function FoodScreen() {
       title="Food"
       subtitle={fmtDayLabel(date)}
       right={
-        <View style={styles.dateNav}>
-          <PrimaryButton label="‹" tone="ghost" onPress={() => setDate(addDays(date, -1))} />
-          <PrimaryButton label="›" tone="ghost" disabled={date >= todayISO()} onPress={() => setDate(addDays(date, 1))} />
-          <IconButton
-            icon="edit"
-            tone="neutral"
-            accessibilityLabel="Change your calorie and protein targets"
-            onPress={() => setTargetSheet(true)}
-          />
-        </View>
+        <IconButton
+          icon="edit"
+          tone="neutral"
+          accessibilityLabel="Change your calorie and protein targets"
+          onPress={() => setTargetSheet(true)}
+        />
       }
     >
+      {/* Labelled controls, and a way back to today — the bare ‹ › said nothing to
+          a screen reader and left no exit from three days ago. */}
+      <DateStepper value={date} onChange={setDate} />
       <View style={styles.tiles}>
         <StatTile label="Protein" value={`${Math.round(day.totals.protein)} / ${t.proteinG} g`} tone="accent" />
         <StatTile label="Calories" value={`${Math.round(day.totals.kcal)} / ${t.kcal}`} />
@@ -226,7 +213,6 @@ export default function FoodScreen() {
 const styles = StyleSheet.create({
   entryProtein: { color: color.textMuted },
   usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
-  dateNav: { flexDirection: 'row', gap: space.xs },
   tiles: { flexDirection: 'row', gap: space.sm },
   gapSm: { marginTop: space.sm },
   gap: { marginTop: space.lg },
