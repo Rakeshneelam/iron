@@ -173,7 +173,14 @@ export default function SessionScreen() {
     setPain(false);
   };
 
-  useEffect(prefill, [current?.exerciseId, suggestion]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Prefill when an exercise opens or its prescription changes. Adjusted during
+  // render rather than in an effect, so the right numbers are on the first frame.
+  const [prefilledFor, setPrefilledFor] = useState<typeof suggestion | undefined>(undefined);
+  if (prefilledFor !== suggestion) {
+    setPrefilledFor(suggestion);
+    setWhyOpen(false);
+    prefill();
+  }
 
   // Record the set count the user is actually shown. Planned exercises only: an
   // added one has no slot, and giving it one would hand it the wrong rest default.
@@ -190,7 +197,6 @@ export default function SessionScreen() {
     setReps(suggestion.repTarget[0]);
     setRir(suggestion.targetRIR);
   };
-  useEffect(() => setWhyOpen(false), [current?.exerciseId]);
 
   if (!session || session.endedAt) {
     return (
@@ -234,7 +240,6 @@ export default function SessionScreen() {
 
   const logSet = (asWarmup = false, w = weight, r = reps) => {
     if (!current || !suggestion) return;
-    const prev = sets[sets.length - 1];
     const row = insertSet({
       sessionId: id,
       exerciseId: current.exerciseId,
@@ -244,7 +249,6 @@ export default function SessionScreen() {
       isWarmup: asWarmup,
       painFlag: asWarmup ? false : pain,
       wasOverride: !asWarmup && suggestion.verdict !== 'CALIBRATE' && Math.abs(w - suggestion.weight) > 1e-6,
-      restTakenSeconds: prev ? Math.round((Date.now() - Date.parse(prev.loggedAt)) / 1000) : undefined,
     });
     setIndex(idx); // stay here, even once the target is reached
     if (warmupState === 'pending' && !asWarmup) setWarmupState(id, 'skipped');

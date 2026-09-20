@@ -43,7 +43,10 @@ export function Stepper({
 }: StepperProps) {
   const dp = decimalsOf(step);
   const valueRef = useRef(value);
-  valueRef.current = value;
+  // Re-synced after every render, as the old in-render assignment did, but outside render.
+  useEffect(() => {
+    valueRef.current = value;
+  });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');

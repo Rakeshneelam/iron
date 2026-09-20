@@ -18,34 +18,41 @@ import { PHASE_LABEL } from './labels';
  * drills (from a timestamp, so it survives re-renders), Next/Back, Finish.
  * The countdown starts on tap — you need a moment to get into position.
  */
+/** A drill's timed length, both sides included; 0 for rep-based drills. */
+const secondsOf = (item: RoutineItem | undefined) => (item?.dose.seconds ? item.dose.seconds * (item.dose.perSide ? 2 : 1) : 0);
+
 export function DrillPlayer({ items, onFinish, onExit }: { items: readonly RoutineItem[]; onFinish: () => void; onExit: () => void }) {
   const [i, setI] = useState(0);
   const item = items[i];
-  const sides = item?.dose.perSide ? 2 : 1;
-  const total = item?.dose.seconds ? item.dose.seconds * sides : 0;
+  const total = secondsOf(item);
   const [left, setLeft] = useState(total);
   const [endsAt, setEndsAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const remaining = endsAt ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : left;
 
-  useEffect(() => {
-    setLeft(total);
+  /** Moving to another drill resets its clock, in the same tap. */
+  const go = (n: number) => {
+    setI(n);
+    setLeft(secondsOf(items[n]));
     setEndsAt(null);
-  }, [i, total]);
+  };
 
+  // The tick both advances the clock and notices the end, so nothing reacts to
+  // state in an effect body.
   useEffect(() => {
     if (!endsAt) return;
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, [endsAt]);
-
-  useEffect(() => {
-    if (endsAt && remaining === 0) {
+    const t = setInterval(() => {
+      const at = Date.now();
+      if (at < endsAt) {
+        setNow(at);
+        return;
+      }
       setEndsAt(null);
       setLeft(0);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }, [endsAt, remaining]);
+    }, 250);
+    return () => clearInterval(t);
+  }, [endsAt]);
 
   if (!item) return null;
   const demo = drillDemo(item.drill.demo);
@@ -94,8 +101,8 @@ export function DrillPlayer({ items, onFinish, onExit }: { items: readonly Routi
         </View>
       ) : null}
       <View style={styles.nav}>
-        <PrimaryButton label="Back" tone="ghost" disabled={i === 0} onPress={() => setI(i - 1)} />
-        <PrimaryButton label={last ? 'Finish' : 'Next'} size="gym" style={styles.flex} onPress={() => (last ? onFinish() : setI(i + 1))} />
+        <PrimaryButton label="Back" tone="ghost" disabled={i === 0} onPress={() => go(i - 1)} />
+        <PrimaryButton label={last ? 'Finish' : 'Next'} size="gym" style={styles.flex} onPress={() => (last ? onFinish() : go(i + 1))} />
       </View>
     </View>
   );

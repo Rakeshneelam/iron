@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
@@ -49,9 +49,12 @@ export function AddFoodSheet({
   const [tab, setTab] = useState<Tab>(startOnRecipe ? 'newRecipe' : 'frequent');
   // Re-apply on each open: useState only runs once, so opening from the Recipes card
   // after opening from "Add to breakfast" would otherwise land on the wrong tab.
-  useEffect(() => {
+  // Adjusted during render, on the open itself, instead of an effect a frame later.
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
     if (visible) setTab(startOnRecipe ? 'newRecipe' : 'frequent');
-  }, [visible, startOnRecipe]);
+  }
   const [q, setQ] = useState('');
   const [food, setFood] = useState<Food | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
@@ -116,7 +119,7 @@ export function AddFoodSheet({
         ))}
       {tab === 'recipes' ? (
         recipes.length === 0 ? (
-          <Text style={styles.muted}>Save a meal you make often under "New recipe".</Text>
+          <Text style={styles.muted}>Save a meal you make often under “New recipe”.</Text>
         ) : (
           recipes.map((r) => (
             <Pressable key={r.id} style={styles.item} onPress={() => { setRecipe(r); setServings(1); }}>
@@ -217,7 +220,7 @@ function NewRecipe({ onCreated }: { onCreated: (r: Recipe) => void }) {
       ))}
       <TextInput value={q} onChangeText={setQ} placeholder="Search for an ingredient" placeholderTextColor={color.textFaint} style={styles.input} />
       {results.length === 0 ? (
-        <Text style={[styles.muted, styles.gap]}>Nothing matches "{q.trim()}". Add it under New food first.</Text>
+        <Text style={[styles.muted, styles.gap]}>Nothing matches “{q.trim()}”. Add it under New food first.</Text>
       ) : (
         results.map((f) => (
           <Pressable key={f.id} style={styles.item} onPress={() => add(f)} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}>

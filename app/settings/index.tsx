@@ -40,7 +40,7 @@ export default function SettingsScreen() {
         <ChipRow options={LEVEL_OPTIONS} value={s.experience} onChange={(v) => setSetting('experience', v)} />
         <Text style={styles.label}>Training days</Text>
         <ToggleChips options={WEEKDAYS} values={s.trainingDays} onToggle={(d) => { setSetting('trainingDays', toggle(s.trainingDays, d)); void rescheduleAll(); }} />
-        <Text style={styles.hint}>Your plan runs in order whatever the day — these only set reminders and "planned this week".</Text>
+        <Text style={styles.hint}>Your plan runs in order whatever the day — these only set reminders and “planned this week”.</Text>
         <View style={styles.gap}>
           <Stepper label="Typical session length" suffix="min" value={s.trainingMinutes} step={5} min={15} max={180} onChange={(v) => setSetting('trainingMinutes', v)} />
         </View>

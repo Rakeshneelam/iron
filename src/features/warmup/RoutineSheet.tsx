@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
@@ -38,11 +38,15 @@ export function RoutineSheet<M extends string>(p: RoutineSheetProps<M>) {
   const [open, setOpen] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
 
-  useEffect(() => {
+  // A new routine, or the sheet opening or closing, starts from the routine as
+  // planned. Adjusted during render, so the old list never flashes first.
+  const [shownFor, setShownFor] = useState({ routine: p.routine, visible: p.visible });
+  if (shownFor.routine !== p.routine || shownFor.visible !== p.visible) {
+    setShownFor({ routine: p.routine, visible: p.visible });
     setItems(p.routine.items);
     setPlaying(false);
     setOpen(null);
-  }, [p.routine, p.visible]);
+  }
 
   const total = items.reduce((t, i) => t + i.seconds, 0);
   const replace = (index: number) => {

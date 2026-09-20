@@ -29,6 +29,8 @@ export function useLive<T>(read: () => T, tables: readonly TableName[], deps: re
   }, [key]);
 
   // `read` is an inline closure; what it depends on is `deps` plus the DB version.
+  // Deps are a handful of ids and dates, so one string key stands in for the list.
+  const depsKey = JSON.stringify(deps);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(read, [version, key, ...deps]);
+  return useMemo(() => read(), [version, key, depsKey]);
 }

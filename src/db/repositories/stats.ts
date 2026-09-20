@@ -10,7 +10,6 @@ import * as schema from '@/db/schema';
 import {
   bestE1RM,
   readinessModifier,
-  shouldDeload,
   slope,
   tonnage,
   working,

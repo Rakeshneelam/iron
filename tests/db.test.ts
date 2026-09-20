@@ -18,7 +18,6 @@ import {
   removeSlot,
   resolveNextDay,
   restoreSlot,
-  setActiveRoutine,
   updateSlot,
 } from '../src/db/repositories/program.ts';
 import {

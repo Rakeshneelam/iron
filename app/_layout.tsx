@@ -29,17 +29,20 @@ type Boot = { state: 'loading' } | { state: 'ready' } | { state: 'error'; messag
 export default function RootLayout() {
   const [boot, setBoot] = useState<Boot>({ state: 'loading' });
 
-  const start = useCallback(() => {
-    setBoot({ state: 'loading' });
+  // State only changes in the promise callbacks; the first render is already 'loading'.
+  const open = useCallback(() => {
     initDatabase().then(
       () => setBoot({ state: 'ready' }),
       (e: unknown) => setBoot({ state: 'error', message: e instanceof Error ? e.message : String(e) }),
     );
   }, []);
 
-  useEffect(() => {
-    start();
-  }, [start]);
+  useEffect(open, [open]);
+
+  const retry = () => {
+    setBoot({ state: 'loading' });
+    open();
+  };
 
   useEffect(() => {
     if (boot.state !== 'loading') void SplashScreen.hideAsync().catch(() => undefined);
@@ -59,9 +62,9 @@ export default function RootLayout() {
           </>
         ) : boot.state === 'error' ? (
           <View style={styles.center}>
-            <Text style={styles.title}>Iron couldn't open its database.</Text>
+            <Text style={styles.title}>{"Iron couldn't open its database."}</Text>
             <Text style={styles.body}>Your data has not been touched. {boot.message}</Text>
-            <PrimaryButton label="Try again" onPress={start} />
+            <PrimaryButton label="Try again" onPress={retry} />
           </View>
         ) : (
           <View style={styles.root} />

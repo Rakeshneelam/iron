@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Icon, IconButton, MiniBars, PrimaryButton, Ring, Screen, SectionHeader, Sheet, Stepper, toast } from '@/components';
@@ -18,7 +18,7 @@ import { color, font, hit, space } from '@/theme/tokens';
 const QUICK = [250, 500, 750, 1000] as const;
 const WEEKDAY = 'SMTWTFS';
 
-type AmountSheet = { mode: 'add' } | { mode: 'edit'; entry: WaterEntry };
+type AmountTarget = { mode: 'add' } | { mode: 'edit'; entry: WaterEntry };
 
 /** Debt-based: the schedule is recomputed after every log, and it stays quiet when you're ahead. */
 export default function WaterScreen() {
@@ -28,7 +28,7 @@ export default function WaterScreen() {
   const entries = useLive(() => getDayEntries(viewDate), ['water_log'], [viewDate]);
   const plan = useLive(() => hydrationPlan(), ['water_log', 'setting', 'weigh_in', 'session']);
   const history = useLive(() => historyMl(14), ['water_log']);
-  const [sheet, setSheet] = useState<AmountSheet | null>(null);
+  const [sheet, setSheet] = useState<AmountTarget | null>(null);
   const next = plan.slots[0];
 
   const log = (amount: number, date = today) => {
@@ -132,28 +132,26 @@ export default function WaterScreen() {
   );
 }
 
-function AmountSheet({
-  sheet,
-  onClose,
-  onAdd,
-  viewDate,
-}: {
-  sheet: AmountSheet | null;
+interface AmountProps {
   onClose: () => void;
   onAdd: (amount: number, date: string) => void;
   viewDate: string;
-}) {
-  const [amount, setAmount] = useState(300);
-  const [date, setDate] = useState(todayISO());
-  useEffect(() => {
-    if (!sheet) return;
-    setAmount(sheet.mode === 'edit' ? sheet.entry.ml : 300);
-    setDate(viewDate);
-  }, [sheet, viewDate]);
+}
+
+function AmountSheet({ sheet, ...rest }: AmountProps & { sheet: AmountTarget | null }) {
+  return (
+    <Sheet visible={sheet !== null} onClose={rest.onClose} title={sheet?.mode === 'edit' ? 'Edit entry' : 'Custom amount'}>
+      {/* Mounted per opening, so it starts from the entry without an effect. */}
+      {sheet ? <AmountForm key={sheet.mode === 'edit' ? sheet.entry.id : 'add'} sheet={sheet} {...rest} /> : null}
+    </Sheet>
+  );
+}
+
+function AmountForm({ sheet, onClose, onAdd, viewDate }: AmountProps & { sheet: AmountTarget }) {
+  const [amount, setAmount] = useState(sheet.mode === 'edit' ? sheet.entry.ml : 300);
+  const [date, setDate] = useState(viewDate);
 
   return (
-    <Sheet visible={sheet !== null} onClose={onClose} title={sheet?.mode === 'edit' ? 'Edit entry' : 'Custom amount'}>
-      {sheet ? (
         <View style={styles.stack}>
           {sheet.mode === 'add' ? <DateStepper value={date} onChange={setDate} /> : null}
           <Stepper suffix="ml" size="gym" value={amount} step={50} min={50} max={3000} onChange={setAmount} />
@@ -196,8 +194,6 @@ function AmountSheet({
           ) : null}
           {sheet.mode === 'add' && date !== todayISO() ? <Text style={styles.hint}>Adding to {fmtDayLabel(date)}.</Text> : null}
         </View>
-      ) : null}
-    </Sheet>
   );
 }
 

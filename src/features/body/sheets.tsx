@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DateStepper } from '@/components/DateStepper';
@@ -33,21 +33,23 @@ export interface WeighEntry {
 
 /** Log or fix a weigh-in, including its date. Delete is undoable. */
 export function WeighInSheet({ entry, onClose }: { entry: WeighEntry | null; onClose: () => void }) {
-  const [date, setDate] = useState(todayISO());
-  const [value, setValue] = useState(70);
-  useEffect(() => {
-    if (!entry) return;
-    setDate(entry.date);
-    setValue(entry.kg);
-  }, [entry]);
-
   return (
     <Sheet visible={entry !== null} onClose={onClose} title={entry?.existing ? 'Edit weigh-in' : 'Log weight'}>
-      {entry ? (
+      {/* Mounted per opening, so it starts from the entry without an effect. */}
+      {entry ? <WeighInForm key={`${entry.date}:${entry.existing}`} entry={entry} onClose={onClose} /> : null}
+    </Sheet>
+  );
+}
+
+function WeighInForm({ entry, onClose }: { entry: WeighEntry; onClose: () => void }) {
+  const [date, setDate] = useState(entry.date);
+  const [value, setValue] = useState(entry.kg);
+
+  return (
         <View style={styles.stack}>
           <DateStepper value={date} onChange={setDate} />
           <Stepper suffix="kg" size="gym" value={value} step={0.1} min={30} max={250} onChange={setValue} />
-          <Text style={styles.hint}>Same time each morning, before food. One reading per day — saving replaces that day's.</Text>
+          <Text style={styles.hint}>{"Same time each morning, before food. One reading per day — saving replaces that day's."}</Text>
           <PrimaryButton
             label="Save"
             size="gym"
@@ -70,8 +72,6 @@ export function WeighInSheet({ entry, onClose }: { entry: WeighEntry | null; onC
             />
           ) : null}
         </View>
-      ) : null}
-    </Sheet>
   );
 }
 
@@ -82,13 +82,17 @@ const GROUPS: SiteGroup[] = ['core', 'upper', 'arms', 'legs'];
  * you actually change are saved, so an untouched stepper never writes a fake reading.
  */
 export function MeasureSheet({ visible, latest, onClose }: { visible: boolean; latest: Map<string, number>; onClose: () => void }) {
-  const [date, setDate] = useState(todayISO());
+  return (
+    <Sheet visible={visible} onClose={onClose} title="Log measurements">
+      {/* Mounted per opening: today's date and nothing touched, every time. */}
+      {visible ? <MeasureForm latest={latest} onClose={onClose} /> : null}
+    </Sheet>
+  );
+}
+
+function MeasureForm({ latest, onClose }: { latest: Map<string, number>; onClose: () => void }) {
+  const [date, setDate] = useState(todayISO);
   const [values, setValues] = useState<Record<string, number>>({});
-  useEffect(() => {
-    if (!visible) return;
-    setDate(todayISO());
-    setValues({});
-  }, [visible]);
 
   const touched = Object.keys(values).length;
   const save = () => {
@@ -101,7 +105,7 @@ export function MeasureSheet({ visible, latest, onClose }: { visible: boolean; l
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Log measurements">
+    <>
       <DateStepper value={date} onChange={setDate} />
       <Text style={[styles.hint, styles.center]}>Change only what you measured. Relaxed, same spot each time.</Text>
       {GROUPS.map((g) => {
@@ -128,7 +132,7 @@ export function MeasureSheet({ visible, latest, onClose }: { visible: boolean; l
         );
       })}
       <PrimaryButton label={touched ? `Save ${touched}` : 'Nothing changed yet'} size="gym" disabled={!touched} style={styles.save} onPress={save} />
-    </Sheet>
+    </>
   );
 }
 

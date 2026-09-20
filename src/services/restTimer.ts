@@ -137,12 +137,15 @@ export function useRestTimer(sessionId: string | null = null): RestTimerView {
 
   useEffect(() => {
     if (endsAtMs === null) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 250);
+    const tick = () => setNow(Date.now());
+    // First tick straight away rather than 250 ms late, but from a callback, not the effect body.
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, 250);
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') setNow(Date.now());
+      if (s === 'active') tick();
     });
     return () => {
+      clearTimeout(first);
       clearInterval(id);
       sub.remove();
     };

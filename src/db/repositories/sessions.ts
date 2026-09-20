@@ -235,8 +235,17 @@ export function insertSet(input: {
   isWarmup?: boolean;
   painFlag?: boolean;
   wasOverride?: boolean;
-  restTakenSeconds?: number;
 }): SetRow {
+  // Rest is measured at the write, from the session's previous set: one clock,
+  // however the screen got here.
+  const prev = db
+    .select({ at: schema.setLog.loggedAt })
+    .from(schema.setLog)
+    .where(eq(schema.setLog.sessionId, input.sessionId))
+    .orderBy(desc(schema.setLog.loggedAt))
+    .limit(1)
+    .get();
+  const loggedAt = nowISO();
   const next = db
     .select({ n: sql<number>`coalesce(max(${schema.setLog.setIndex}), -1)` })
     .from(schema.setLog)
@@ -252,8 +261,8 @@ export function insertSet(input: {
     rir: input.rir,
     isWarmup: input.isWarmup ? 1 : 0,
     painFlag: input.painFlag ? 1 : 0,
-    restTakenSeconds: input.restTakenSeconds ?? null,
-    loggedAt: nowISO(),
+    restTakenSeconds: prev ? Math.round((Date.parse(loggedAt) - Date.parse(prev.at)) / 1000) : null,
+    loggedAt,
     // Denormalised at insert (docs/03): charts and trends never recompute it.
     e1rm: e1RM(input.weight, input.reps, input.rir),
     wasOverride: input.wasOverride ? 1 : 0,
