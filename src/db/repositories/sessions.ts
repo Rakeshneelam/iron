@@ -127,8 +127,12 @@ export function setWarmupState(sessionId: string, state: WarmupState): void {
   else setRaw(`session:${sessionId}:warmup`, state);
 }
 
-/** Any set at all, warm-ups included — a session with logged warm-ups is not empty. */
-function loggedSetCount(sessionId: string): number {
+/**
+ * Any set at all, warm-ups included — a session with logged warm-ups is not empty.
+ * Exported because the screens have to ask the same question before offering to
+ * throw a workout away: counting only working sets there silently deleted warm-ups.
+ */
+export function savedSetCount(sessionId: string): number {
   const row = db
     .select({ n: sql<number>`count(*)` })
     .from(schema.setLog)
@@ -154,7 +158,7 @@ function close(sessionId: string, status: SessionStatus): void {
  * the work, and deleting it without asking is worse than a partial on the record.
  */
 export function finishSession(sessionId: string): { discarded: boolean; status: SessionStatus | null } {
-  if (loggedSetCount(sessionId) === 0) {
+  if (savedSetCount(sessionId) === 0) {
     deleteSession(sessionId);
     return { discarded: true, status: null };
   }
@@ -172,7 +176,7 @@ export function finishSession(sessionId: string): { discarded: boolean; status: 
  * the whole workout is deleted.
  */
 export function cancelSession(sessionId: string, keepSets: boolean): void {
-  if (keepSets && loggedSetCount(sessionId) > 0) close(sessionId, 'cancelled');
+  if (keepSets && savedSetCount(sessionId) > 0) close(sessionId, 'cancelled');
   else deleteSession(sessionId);
 }
 
@@ -215,7 +219,7 @@ function readinessOn(date: string): Pick<Session, 'bodyweightKg' | 'sleepHours' 
  */
 export function syncReadiness(): void {
   const open = getActiveSession();
-  if (!open || loggedSetCount(open.id) > 0) return;
+  if (!open || savedSetCount(open.id) > 0) return;
   db.update(schema.session).set(readinessOn(open.date)).where(eq(schema.session.id, open.id)).run();
 }
 

@@ -2,13 +2,13 @@ import { Redirect, router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, confirm, Icon, IconButton, PrimaryButton, Screen, toast } from '@/components';
+import { Card, ChipRow, Icon, IconButton, PrimaryButton, Screen, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { getCheckIn } from '@/db/repositories/body';
 import { getActiveRoutine, getDay, getDays, getSlots, resolveNextDay } from '@/db/repositories/program';
 import { recentMuscles } from '@/db/repositories/progress';
-import { cancelSession, deleteSession, getActiveSession, getSessionSets, listSessions, planProgress, skipDay, startSession, type SessionStatus } from '@/db/repositories/sessions';
+import { deleteSession, getActiveSession, getSessionSets, listSessions, planProgress, savedSetCount, skipDay, startSession, type SessionStatus } from '@/db/repositories/sessions';
 import { useSettings } from '@/db/repositories/settings';
 import { estimateSeconds, fitSession, type FitSlot } from '@/engine/planner';
 import { recoverySession } from '@/engine/recovery';
@@ -16,12 +16,12 @@ import { WARMUP_BUDGET_S } from '@/engine/warmup';
 import { CheckInCard } from '@/features/checkin/CheckInCard';
 import { CheckInSheet } from '@/features/checkin/CheckInSheet';
 import { drillKit } from '@/features/profile';
+import { cancelWorkout } from '@/features/session/cancel';
 import { Elapsed } from '@/features/session/Elapsed';
 import { fmtSet, suggestFor, suggestionContext } from '@/features/session/prescription';
 import { RoutineSheet } from '@/features/warmup/RoutineSheet';
 import { addDays, parseISODate, todayISO, weekStartISO } from '@/lib/date';
 import { kg } from '@/lib/format';
-import { cancelRest } from '@/services/restTimer';
 import { color, font, layout, space } from '@/theme/tokens';
 
 const BUDGETS = [0, 45, 30, 20];
@@ -41,6 +41,8 @@ export default function Today() {
       return {
         active,
         activeSets: active ? getSessionSets(active.id).filter((s) => s.isWarmup === 0).length : 0,
+        // Every persisted row, warm-ups included: what cancelling would destroy.
+        activeSaved: active ? savedSetCount(active.id) : 0,
         activeProgress: active ? planProgress(active.id) : null,
         activeDay: active?.routineDayId ? getDay(active.routineDayId) : undefined,
         routine,
@@ -133,22 +135,7 @@ export default function Today() {
   if (state.active) {
     const a = state.active;
     const p = state.activeProgress;
-    const discard = () => {
-      const drop = (keep: boolean) => {
-        void cancelRest();
-        cancelSession(a.id, keep);
-        toast(keep ? 'Workout cancelled — logged sets kept' : 'Workout discarded');
-      };
-      if (state.activeSets === 0) return drop(false);
-      confirm({
-        title: 'Discard this workout?',
-        message: `You logged ${state.activeSets} ${state.activeSets === 1 ? 'set' : 'sets'}. Keep them in history (the day won't count as done), or delete everything.`,
-        confirmLabel: 'Delete all',
-        destructive: true,
-        onConfirm: () => drop(false),
-        alternative: { label: 'Keep sets', onPress: () => drop(true) },
-      });
-    };
+    const discard = () => cancelWorkout(a.id, state.activeSaved);
     return (
       <View style={styles.flex}>
         <Screen title={title} subtitle={subtitle} right={gear}>
@@ -162,7 +149,7 @@ export default function Today() {
               <Stat value={<Elapsed since={a.startedAt} />} label="elapsed" />
             </View>
           </Card>
-          <PrimaryButton label="Discard workout" tone="ghost" icon={<Icon name="trash" size={16} color={color.textMuted} />} onPress={discard} />
+          <PrimaryButton label="Cancel workout" tone="ghost" icon={<Icon name="trash" size={16} color={color.textMuted} />} onPress={discard} />
           <View style={styles.gap} />
           {weekStrip}
           {checkInSheet}

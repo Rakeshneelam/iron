@@ -5,14 +5,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, ReasonLine, Sheet, toast } from '@/components';
+import { Card, ChipRow, EmptyState, Icon, IconButton, Pill, PrimaryButton, ReasonLine, Sheet, toast } from '@/components';
 import { CATALOG, CATALOG_BY_ID, type Stress } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import type { Exercise } from '@/db/repositories/exercises';
 import { getDay, getSlots } from '@/db/repositories/program';
 import {
   addSessionExercise,
-  cancelSession,
   deleteSet,
   finishSession,
   getLastPerformance,
@@ -40,6 +39,7 @@ import { sessionWarmup } from '@/engine/warmup';
 import { ExerciseInfoSheet } from '@/features/exercises/ExerciseInfoSheet';
 import { ExercisePicker } from '@/features/exercises/ExercisePicker';
 import { drillKit, toolsOf } from '@/features/profile';
+import { cancelWorkout } from '@/features/session/cancel';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { Elapsed } from '@/features/session/Elapsed';
 import { PlateSheet } from '@/features/session/PlateSheet';
@@ -50,7 +50,7 @@ import { minutesLabel, MODE_OPTIONS } from '@/features/warmup/labels';
 import { RoutineSheet } from '@/features/warmup/RoutineSheet';
 import { fmtClock, fmtDayLabel } from '@/lib/date';
 import { kg, kgNum } from '@/lib/format';
-import { cancelRest, startRest } from '@/services/restTimer';
+import { cancelRest, startRest, useRestTimer } from '@/services/restTimer';
 import { color, font, hit, layout, radius, space } from '@/theme/tokens';
 
 type ExState = 'done' | 'partial' | 'todo' | 'skipped';
@@ -80,6 +80,9 @@ export default function SessionScreen() {
     [session?.routineDayId],
   );
   const warmupState = useLive(() => getWarmupState(id), ['setting'], [id]);
+  // Subscribed here, not inside the bar: rest keeps running whatever the exercise
+  // list is doing, so the dock must be able to mount without a current exercise.
+  const rest = useRestTimer(id);
   const ctx = useMemo(() => suggestionContext(), []);
 
   const [index, setIndex] = useState<number | null>(null);
@@ -254,7 +257,11 @@ export default function SessionScreen() {
     if (warmupState === 'pending' && !asWarmup) setWarmupState(id, 'skipped');
     if (settings.hapticsEnabled) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPain(false);
-    if (asWarmup) return;
+    if (asWarmup) {
+      // A warm-up is a persisted row like any other, so it gets the same Undo.
+      toast(`Warm-up logged · ${setText(w, r)}`, { label: 'Undo', onPress: () => deleteSet(row.id) });
+      return;
+    }
     // Superset: move straight to the partner that is a set behind and rest only
     // once the round is finished — that alternation is the point of pairing them.
     const behind = partners.find((p) => p.exerciseId !== current.exerciseId && (counts.get(p.exerciseId) ?? 0) < exWork.length + 1 && (counts.get(p.exerciseId) ?? 0) < targetOf(p));
@@ -315,21 +322,8 @@ export default function SessionScreen() {
 
   const cancel = () => {
     setMenuOpen(false);
-    const leave = (keep: boolean) => {
-      void cancelRest();
-      cancelSession(id, keep);
-      toast(keep ? 'Workout cancelled — logged sets kept' : 'Workout discarded');
-      router.replace('/');
-    };
-    if (totalWork === 0) return leave(false);
-    confirm({
-      title: 'Cancel this workout?',
-      message: `You logged ${totalWork} ${totalWork === 1 ? 'set' : 'sets'}. Keep them in history (the day won't count as done), or delete everything.`,
-      confirmLabel: 'Delete all',
-      destructive: true,
-      onConfirm: () => leave(false),
-      alternative: { label: 'Keep sets', onPress: () => leave(true) },
-    });
+    // Every persisted row, warm-ups included — see features/session/cancel.ts.
+    cancelWorkout(id, sets.length, () => router.replace('/'));
   };
 
   const swapSuggestions =
@@ -509,15 +503,35 @@ export default function SessionScreen() {
                   {loadType === 'barbell' ? <PrimaryButton label="Plates" tone="ghost" onPress={() => setPlates(true)} /> : null}
                 </View>
                 {showWarmups
-                  ? ramp.map((w, i) => {
-                      const done = exWarm.length > i;
+                  ? // Saved warm-ups beyond the planned ramp still get a row: a working
+                    // set re-flagged as a warm-up in EditSetSheet must not vanish.
+                    Array.from({ length: Math.max(ramp.length, exWarm.length) }, (_, i) => {
+                      const w = ramp[i];
+                      const saved = exWarm[i];
+                      if (saved) {
+                        return (
+                          <Pressable
+                            key={saved.id}
+                            onPress={() => setEditing(saved)}
+                            accessibilityLabel={`Warm-up ${i + 1}: ${setText(saved.weight, saved.reps)}. Tap to edit.`}
+                            style={styles.warm}
+                          >
+                            <Text style={[styles.body, styles.mutedText]}>
+                              {setText(saved.weight, saved.reps)}
+                              {w ? <Text style={styles.caption}>  {w.pct}%</Text> : null}
+                            </Text>
+                            <Icon name="check" size={18} color={color.positive} />
+                          </Pressable>
+                        );
+                      }
+                      if (!w) return null;
                       return (
-                        <Pressable key={i} disabled={done} onPress={() => logSet(true, w.kg, w.reps)} style={styles.warm}>
-                          <Text style={[styles.body, done && styles.mutedText]}>
+                        <Pressable key={`ramp-${i}`} onPress={() => logSet(true, w.kg, w.reps)} style={styles.warm}>
+                          <Text style={styles.body}>
                             {kgNum(w.kg)} kg × {w.reps}
                             <Text style={styles.caption}>  {w.pct}%</Text>
                           </Text>
-                          {done ? <Icon name="check" size={18} color={color.positive} /> : <Text style={styles.caption}>tap when done</Text>}
+                          <Text style={styles.caption}>tap when done</Text>
                         </Pressable>
                       );
                     })
@@ -593,9 +607,10 @@ export default function SessionScreen() {
         )}
       </ScrollView>
 
-      {current && !current.skipped ? (
+      {rest.running || (current && !current.skipped) ? (
         <View style={[styles.controls, { paddingBottom: insets.bottom + space.sm }]}>
-          <RestTimerBar sessionId={id} />
+          <RestTimerBar timer={rest} />
+          {current && !current.skipped ? (
           <SetControls
             weight={weight}
             reps={reps}
@@ -619,6 +634,7 @@ export default function SessionScreen() {
             onPain={setPain}
             onLog={() => logSet(false)}
           />
+          ) : null}
         </View>
       ) : null}
 
