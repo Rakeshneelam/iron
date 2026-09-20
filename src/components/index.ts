@@ -1,7 +1,7 @@
 export { Bar, type BarProps, type BarTone } from './Bar';
 export { Card, type CardProps, type CardTone } from './Card';
 export { ChipRow, type ChipOption, type ChipRowProps } from './ChipRow';
-export { DateStepper } from './DateStepper';
+export { DateStepper, useSelectedDate, type DateStepperProps } from './DateStepper';
 export { confirm } from './confirm';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { Icon, type IconName, type IconProps } from './Icon';
@@ -15,6 +15,7 @@ export { Screen, useReducedMotion, type ScreenProps } from './Screen';
 export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
 export { Sheet, type SheetProps } from './Sheet';
 export { StatTile, type StatTileProps, type StatTone } from './StatTile';
+export { TargetField, type TargetFieldProps } from './TargetField';
 export { TextField, type TextFieldProps } from './TextField';
 export { Stepper, type StepperProps } from './Stepper';
 export { dismissToast, toast, ToastHost } from './Toast';

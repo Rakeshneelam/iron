@@ -17,11 +17,13 @@ export function trainedToday(): boolean {
   return getActiveSession()?.date === today || listSessions(3).some((s) => s.date === today);
 }
 
-export function hydrationTarget(): { ml: number; breakdown: string } {
+/**
+ * What Iron works out on its own, override or not. The target sheet needs it to
+ * show the automatic figure and to start Custom from the value actually in force
+ * rather than from zero (UX-08).
+ */
+export function automaticHydrationTarget(): { ml: number; breakdown: string } {
   const s = getSettings();
-  if (s.hydrationOverrideMl !== null && s.hydrationOverrideMl > 0) {
-    return { ml: s.hydrationOverrideMl, breakdown: 'Fixed target from Settings' };
-  }
   const weightKg = getLatestWeight() ?? DEFAULT_WEIGHT_KG;
   const training = trainedToday();
   const ml = hydrationTargetMl({
@@ -34,6 +36,13 @@ export function hydrationTarget(): { ml: number; breakdown: string } {
   if (training) parts.push(`+ ${s.trainingMinutes} min training`);
   if (s.ambientTempC !== null && s.ambientTempC > 30) parts.push(`+ heat (${s.ambientTempC}°C)`);
   return { ml, breakdown: parts.join(' ') };
+}
+
+/** The target actually in force: the user's own number if they set one. */
+export function hydrationTarget(): { ml: number; breakdown: string } {
+  const override = getSettings().hydrationOverrideMl;
+  if (override !== null && override > 0) return { ml: override, breakdown: 'Your own target' };
+  return automaticHydrationTarget();
 }
 
 /**

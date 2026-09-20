@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -5,7 +6,6 @@ import { Card, EmptyState, Icon, PrimaryButton, Screen, SectionHeader } from '@/
 import { useLive } from '@/db/live';
 import { listMeasurements, type Measurement } from '@/db/repositories/body';
 import { useSettings } from '@/db/repositories/settings';
-import { DetailsSheet } from '@/features/body/DetailsSheet';
 import { MeasureSheet, readingBefore, SiteSheet } from '@/features/body/sheets';
 import { SITES } from '@/features/body/sites';
 import { addDays, fmtDayLabel } from '@/lib/date';
@@ -21,7 +21,6 @@ export default function BodyScreen() {
   const measurements = useLive(() => listMeasurements(), ['measurement']);
   const [measuring, setMeasuring] = useState(false);
   const [site, setSite] = useState<string | null>(null);
-  const [details, setDetails] = useState(false);
 
   const bySite = useMemo(() => {
     const m = new Map<string, Measurement[]>();
@@ -77,7 +76,7 @@ export default function BodyScreen() {
       )}
 
       <SectionHeader title="Your details" hint="Used for calorie and water targets. Nothing here leaves this phone." />
-      <Card onPress={() => setDetails(true)}>
+      <Card onPress={() => router.push('/settings/profile')}>
         <Detail label="Name" value={settings.name || '—'} />
         <Detail label="Sex" value={settings.sex === 'female' ? 'Female' : 'Male'} />
         <Detail label="Age" value={String(settings.age)} />
@@ -89,7 +88,6 @@ export default function BodyScreen() {
       </Card>
 
       <MeasureSheet visible={measuring} latest={latestBySite} onClose={() => setMeasuring(false)} />
-      <DetailsSheet visible={details} onClose={() => setDetails(false)} />
       <SiteSheet site={site} rows={site ? (bySite.get(site) ?? []) : []} onClose={() => setSite(null)} />
     </Screen>
   );

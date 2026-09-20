@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Card, ChipRow, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Stepper, ToggleChips } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { setSetting, useSettings } from '@/db/repositories/settings';
-import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle, toolsOf, TOOL_OPTIONS, WEEKDAYS } from '@/features/profile';
+import { LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle, toolsOf, TOOL_OPTIONS, WEEKDAYS } from '@/features/profile';
 import { Row, TimeAdjuster } from '@/features/settings/Row';
 import { MODE_OPTIONS } from '@/features/warmup/labels';
 import { openBatteryOptimisationSettings, rescheduleAll } from '@/services/notifications';
@@ -32,10 +32,13 @@ export default function SettingsScreen() {
 
   return (
     <Screen title="Settings" right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
+      <SectionHeader title="You" />
+      <Card onPress={() => router.push('/settings/profile')}>
+        <LinkRow title="Profile & goals" hint="Name, sex, age, height, training goal and body-weight goal." />
+      </Card>
+
       <SectionHeader title="Training" />
       <Card>
-        <Text style={styles.label}>Main goal</Text>
-        <ChipRow options={GOAL_OPTIONS} value={s.goalFocus} onChange={(v) => setSetting('goalFocus', v)} />
         <Text style={styles.label}>Experience</Text>
         <ChipRow options={LEVEL_OPTIONS} value={s.experience} onChange={(v) => setSetting('experience', v)} />
         <Text style={styles.label}>Training days</Text>

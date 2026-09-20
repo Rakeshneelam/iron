@@ -10,8 +10,17 @@ import { DEFAULT_WEIGHT_KG } from '@/services/hydration';
 export interface DayTargets extends Targets {
   tdeeConfidence: number | null;
   loggedDays: number;
-  /** True when the user set the numbers themselves. */
+  /** True when the user set either number themselves. */
   manual: boolean;
+  /**
+   * What Iron would work out on its own, override or not.
+   *
+   * The target sheet needs this: it used to show a null override as `0`, so the
+   * screen said "0 kcal" for a target of 2,300 and the first + tap wrote 50 rather
+   * than adjusting anything. Custom now starts from the effective number, which is
+   * this one until the user takes over (UX-08).
+   */
+  auto: { kcal: number; proteinG: number; basis: Targets['basis']; note: string };
 }
 
 /**
@@ -57,8 +66,9 @@ export function computeTargets(dateISO: string): DayTargets {
     proteinG,
     fatG,
     carbG,
-    note: manual ? 'Your own targets. Clear them in Settings to go back to the estimate.' : t.note,
+    note: manual ? 'Your own targets. Switch either one back to Automatic to hand it back to Iron.' : t.note,
     manual,
+    auto: { kcal: t.kcal, proteinG: t.proteinG, basis: t.basis, note: t.note },
     tdeeConfidence: adaptive?.confidence ?? null,
     loggedDays: intake.length,
   };
