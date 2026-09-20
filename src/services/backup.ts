@@ -8,7 +8,7 @@
 import { File, Paths } from 'expo-file-system';
 
 import { expoDb, openKeyedDatabaseFile } from '@/db/client';
-import { restoreBackup, BACKUP_TABLES } from '@/db/repositories/restore';
+import { inspectTables, BACKUP_TABLES, type Inspection } from '@/db/repositories/restore';
 import { getRaw, setRaw } from '@/db/repositories/settings';
 import { nowISO } from '@/lib/date';
 
@@ -87,43 +87,67 @@ export type { DriveFile };
 export { listBackups };
 
 /**
- * Restores a Drive backup into the live database.
+ * Downloads a Drive backup and reads it with the phrase the user typed. Changes
+ * NOTHING: it stages the file in the cache, opens it on its own connection, copies
+ * the rows out, validates them against the live schema and hands back a preview.
  *
- * The downloaded file is encrypted with the key this install already holds, so it is
- * opened as its own keyed connection and its rows are copied across — rather than
- * swapped in as a file, which would need a restart the app has no way to perform.
- * Everything below reuses the same validated, transactional apply as a file restore.
+ * This is the whole of UX-13. Restore advertised "put it back on another phone" and
+ * then opened the staged file with the key THIS install holds — which by definition
+ * is not the key that encrypted a backup from another phone — so the one case the
+ * feature existed for could not work, and the screen only said so afterwards. The
+ * phrase now decrypts the staged copy and nothing else: the live database and the
+ * key in this phone's keystore are untouched whatever happens here.
+ *
+ * There is no new crypto. `openKeyedDatabaseFile` is the same helper the app opens
+ * itself with, and SQLCipher does its own PBKDF2 over the phrase.
  */
-export async function restoreFromDrive(fileId: string): Promise<number> {
-  const bytes = await downloadBackup(fileId);
+export async function inspectDriveBackup(file: DriveFile, phrase: string): Promise<Inspection> {
   const staged = new File(Paths.cache, 'iron-restore-staging.db');
+  const clear = () => {
+    try {
+      staged.delete();
+    } catch {
+      /* cache; nothing there, or it will go anyway */
+    }
+  };
+
+  let bytes: Uint8Array;
   try {
-    staged.delete();
+    bytes = await downloadBackup(file.id);
   } catch {
-    /* nothing there */
+    return { ok: false, reason: 'That backup could not be downloaded. Nothing on this phone was touched.' };
   }
+
+  clear();
   staged.create();
   staged.write(bytes);
-
-  const tables = readTables(staged);
-  const n = restoreBackup(tables);
   try {
-    staged.delete();
-  } catch {
-    /* cache */
+    // A wrong phrase throws on the first read, not on open: SQLCipher cannot tell a
+    // bad key from a corrupt file until it tries to decrypt a page.
+    const tables = readTables(staged, phrase);
+    return inspectTables(tables, { exportedAt: file.createdTime });
+  } catch (e) {
+    return { ok: false, reason: phraseProblem(e) };
+  } finally {
+    clear();
   }
-  return n;
+}
+
+/** decodePhrase's messages are already written for the person typing. */
+function phraseProblem(e: unknown): string {
+  const message = e instanceof Error ? e.message : '';
+  if (message.includes('recovery phrase')) return message;
+  return 'That phrase does not open this backup. Check it against the one shown on the phone that made it.';
 }
 
 type Row = Record<string, unknown>;
 
 /**
- * Reads every backed-up table out of a database file. Opened through the same keyed
- * path the app uses, so a file from another install — encrypted with a different
- * phrase — simply fails to read rather than importing nonsense.
+ * Reads every backed-up table out of a database file, with the given phrase or —
+ * when none is supplied — this install's own key.
  */
-function readTables(file: File): Record<string, Row[]> {
-  const handle = openKeyedDatabaseFile(file.uri.replace('file://', ''));
+function readTables(file: File, phrase?: string): Record<string, Row[]> {
+  const handle = openKeyedDatabaseFile(file.uri.replace('file://', ''), phrase);
   try {
     const out: Record<string, Row[]> = {};
     for (const t of BACKUP_TABLES) out[t] = handle.getAllSync<Row>(`SELECT * FROM "${t}"`);
@@ -132,4 +156,3 @@ function readTables(file: File): Record<string, Row[]> {
     handle.closeSync();
   }
 }
-
