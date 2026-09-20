@@ -5,7 +5,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Card, ChipRow, Icon, IconButton, PrimaryButton, Screen, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
-import { getCheckIn } from '@/db/repositories/body';
 import { getActiveRoutine, getDay, getDays, getSlots, resolveNextDay } from '@/db/repositories/program';
 import { recentMuscles } from '@/db/repositories/progress';
 import { deleteSession, getActiveSession, getSessionSets, listSessions, planProgress, savedSetCount, skipDay, startSession, type SessionStatus } from '@/db/repositories/sessions';
@@ -13,7 +12,7 @@ import { useSettings } from '@/db/repositories/settings';
 import { estimateSeconds, fitSession, type FitSlot } from '@/engine/planner';
 import { recoverySession } from '@/engine/recovery';
 import { WARMUP_BUDGET_S } from '@/engine/warmup';
-import { CheckInCard } from '@/features/checkin/CheckInCard';
+import { CheckInRow } from '@/features/checkin/CheckInRow';
 import { CheckInSheet } from '@/features/checkin/CheckInSheet';
 import { drillKit } from '@/features/profile';
 import { cancelWorkout } from '@/features/session/cancel';
@@ -26,10 +25,30 @@ import { color, font, layout, space } from '@/theme/tokens';
 
 const BUDGETS = [0, 45, 30, 20];
 const WEEK_STATUSES: readonly SessionStatus[] = ['completed', 'partial', 'skipped', 'cancelled'];
+/** Only these count as work done today. Cancelled is never completed (AGENTS §1.4). */
+const TRAINED: readonly SessionStatus[] = ['completed', 'partial'];
+const WEEK_WORDS: Record<SessionStatus, string> = {
+  completed: 'trained',
+  partial: 'trained, partly',
+  cancelled: 'started, cancelled',
+  skipped: 'skipped',
+  active: 'in progress',
+};
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 /**
- * Today: the check-in first, then the workout. Start offers the check-in once a
- * day — optional, one tap to skip — so the workout begins with today's readiness.
+ * Today: the workout, first.
+ *
+ * It used to open with the check-in card in every state — a title, a hint, three
+ * cells and a weight chart — with the workout below it, so on a 360dp phone the
+ * thing the screen exists for started below the fold. And Start intercepted itself
+ * to offer the check-in sheet whenever none existed that day, which put a modal
+ * between someone standing in a gym and their first set (UX-02).
+ *
+ * Now: what you are doing, then the optional context, then the detail. Start
+ * starts, using whatever readiness is already saved; the check-in is a row you can
+ * tap, and opening it deliberately still offers Save and start. The full weight
+ * trend lives on Body, with the rest of it.
  */
 export default function Today() {
   const settings = useSettings();
@@ -38,6 +57,7 @@ export default function Today() {
     () => {
       const active = getActiveSession();
       const routine = getActiveRoutine();
+      const recent = listSessions(10);
       return {
         active,
         activeSets: active ? getSessionSets(active.id).filter((s) => s.isWarmup === 0).length : 0,
@@ -48,8 +68,8 @@ export default function Today() {
         routine,
         days: routine ? getDays(routine.id) : [],
         next: routine ? resolveNextDay(routine.id) : undefined,
-        checkedIn: getCheckIn(today) !== undefined,
-        trainedToday: listSessions(5).some((s) => s.date === today),
+        // A workout cancelled today is not a workout done today.
+        finishedToday: recent.find((s) => s.date === today && TRAINED.includes(s.status)),
         week: listSessions(20, WEEK_STATUSES),
       };
     },
@@ -58,10 +78,10 @@ export default function Today() {
   );
 
   const [pickedDayId, setPickedDayId] = useState<string | null>(null);
+  const [daysOpen, setDaysOpen] = useState(false);
   const [budget, setBudget] = useState(0);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
-  /** Open check-in sheet; `start` is set when it was opened by a Start button. */
-  const [checkIn, setCheckIn] = useState<{ start?: () => void } | null>(null);
+  const [checkIn, setCheckIn] = useState(false);
   const day = state.days.find((d) => d.id === pickedDayId) ?? state.next;
 
   const preview = useLive(
@@ -82,40 +102,23 @@ export default function Today() {
   const subtitle = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
   const gear = <IconButton icon="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />;
   const weekStrip = <WeekStrip today={today} sessions={state.week} trainingDays={settings.trainingDays} />;
-
-  const begin = (start: () => void) => (state.checkedIn ? start() : setCheckIn({ start }));
-  const pendingStart = checkIn?.start;
-  const checkInCard = <CheckInCard trend onCheckIn={() => setCheckIn({})} />;
-  const checkInSheet = (
-    <CheckInSheet
-      visible={checkIn !== null}
-      onClose={() => setCheckIn(null)}
-      onStart={
-        pendingStart
-          ? () => {
-              setCheckIn(null);
-              pendingStart();
-            }
-          : undefined
-      }
-    />
-  );
-  const startEmpty = () => begin(() => router.push(`/session/${startSession(null).id}`));
+  const checkInRow = <CheckInRow onCheckIn={() => setCheckIn(true)} />;
+  const checkInSheet = <CheckInSheet visible={checkIn} onClose={() => setCheckIn(false)} />;
+  const startEmpty = () => router.push(`/session/${startSession(null).id}`);
 
   const restDay = !settings.trainingDays.includes(new Date().getDay());
-  const recoveryCard =
-    restDay || state.trainedToday ? (
-      <Card onPress={() => setRecoveryOpen(true)}>
-        <View style={styles.rowCenter}>
-          <Icon name="moon" size={20} color={color.accent} />
-          <View style={styles.flex1}>
-            <Text style={styles.rowTitle}>{state.trainedToday ? 'Done for today' : 'Rest day'}: easy mobility</Text>
-            <Text style={styles.muted}>About 8 minutes, gentle. Optional.</Text>
-          </View>
-          <Icon name="chevronRight" size={18} color={color.textMuted} />
+  const recoveryCard = (
+    <Card onPress={() => setRecoveryOpen(true)}>
+      <View style={styles.rowCenter}>
+        <Icon name="moon" size={20} color={color.accent} />
+        <View style={styles.flex1}>
+          <Text style={styles.rowTitle}>Easy mobility</Text>
+          <Text style={styles.muted}>About 8 minutes, gentle. Optional.</Text>
         </View>
-      </Card>
-    ) : null;
+        <Icon name="chevronRight" size={18} color={color.textMuted} />
+      </View>
+    </Card>
+  );
   const recoverySheet = (
     <RoutineSheet
       visible={recoveryOpen}
@@ -135,21 +138,26 @@ export default function Today() {
   if (state.active) {
     const a = state.active;
     const p = state.activeProgress;
-    const discard = () => cancelWorkout(a.id, state.activeSaved);
     return (
       <View style={styles.flex}>
         <Screen title={title} subtitle={subtitle} right={gear}>
-          {checkInCard}
           <Card tone="accent">
             <Text style={styles.eyebrow}>In progress</Text>
-            <Text style={styles.cardTitle}>{state.activeDay?.label ?? 'Workout'}</Text>
+            <Text style={styles.dayTitle}>{state.activeDay?.label ?? 'Workout'}</Text>
             <View style={styles.stats}>
               <Stat value={String(state.activeSets)} label="sets" />
               {p && p.planned > 0 ? <Stat value={`${p.done + p.skipped}/${p.planned}`} label="exercises" /> : null}
               <Stat value={<Elapsed since={a.startedAt} />} label="elapsed" />
             </View>
           </Card>
-          <PrimaryButton label="Cancel workout" tone="ghost" icon={<Icon name="trash" size={16} color={color.textMuted} />} onPress={discard} />
+          <View style={styles.gapTop}>{checkInRow}</View>
+          <PrimaryButton
+            label="Cancel workout"
+            tone="ghost"
+            style={styles.gapTop}
+            icon={<Icon name="trash" size={16} color={color.textMuted} />}
+            onPress={() => cancelWorkout(a.id, state.activeSaved)}
+          />
           <View style={styles.gap} />
           {weekStrip}
           {checkInSheet}
@@ -165,20 +173,24 @@ export default function Today() {
   if (!state.routine || !day) {
     const routine = state.routine;
     return (
-      <Screen title={title} subtitle={subtitle} right={gear}>
-        {checkInCard}
-        <Card>
-          <Text style={styles.cardTitle}>{routine ? `${routine.name} has no days yet` : 'No active plan'}</Text>
-          <Text style={styles.muted}>{routine ? 'Add a day and some exercises to get started.' : 'Pick a ready-made plan or build your own.'}</Text>
-          <PrimaryButton label={routine ? 'Edit plan' : 'Choose a plan'} style={styles.gapTop} onPress={() => router.push(routine ? `/plan/${routine.id}` : '/program')} />
-        </Card>
-        <PrimaryButton label="Start an empty workout" tone="ghost" icon={<Icon name="plus" size={16} />} onPress={startEmpty} />
-        {recoveryCard}
-        <View style={styles.gap} />
-        {weekStrip}
-        {recoverySheet}
-        {checkInSheet}
-      </Screen>
+      <View style={styles.flex}>
+        <Screen title={title} subtitle={subtitle} right={gear}>
+          <Card>
+            <Text style={styles.cardTitle}>{routine ? `${routine.name} has no days yet` : 'No active plan'}</Text>
+            <Text style={styles.muted}>{routine ? 'Add a day and some exercises to get started.' : 'Pick a ready-made plan or build your own.'}</Text>
+            <PrimaryButton label={routine ? 'Edit plan' : 'Choose a plan'} style={styles.gapTop} onPress={() => router.push(routine ? `/plan/${routine.id}` : '/program')} />
+          </Card>
+          <View style={styles.gapTop}>{checkInRow}</View>
+          {restDay ? <View style={styles.gapTop}>{recoveryCard}</View> : null}
+          <View style={styles.gap} />
+          {weekStrip}
+          {recoverySheet}
+          {checkInSheet}
+        </Screen>
+        <ActionBar>
+          <PrimaryButton label="Start an empty workout" size="gym" icon={<Icon name="plus" size={18} color={color.onAccent} />} onPress={startEmpty} />
+        </ActionBar>
+      </View>
     );
   }
 
@@ -197,26 +209,69 @@ export default function Today() {
     setPickedDayId(null);
     toast(`Skipped ${day.label}`, { label: 'Undo', onPress: () => deleteSession(id) });
   };
+  /** One tap, with or without a check-in: the engine uses whatever readiness is saved. */
+  const start = () => router.push(`/session/${startSession(day.id, fit ? { fit: fit.slots } : {}).id}`);
+
+  // Three states share this screen: a rest day, a workout already finished today,
+  // or neither. They change the words and the emphasis, not the layout.
+  const done = state.finishedToday;
+  const eyebrow = done ? 'Done for today' : restDay ? 'Rest day' : `${day.id === state.next?.id ? 'Up next in' : 'Chosen from'} ${state.routine.name}`;
+  const startLabel = done ? 'Start another workout' : restDay ? 'Train anyway' : `Start ${day.label}${fit ? ` · ${budget} min` : ''}`;
 
   return (
     <View style={styles.flex}>
       <Screen title={title} subtitle={subtitle} right={gear}>
-        {checkInCard}
-        {restDay && !state.trainedToday ? recoveryCard : null}
-
-        <View style={styles.workoutHead}>
-          <Text style={styles.eyebrow}>
-            {day.id === state.next?.id ? 'Up next in' : 'Chosen from'} {state.routine.name}
-          </Text>
-          <Text style={styles.dayTitle}>{day.label}</Text>
+        {/* What you are doing, above everything else. */}
+        <Card>
+          <Text style={styles.eyebrow}>{eyebrow}</Text>
+          <Text style={styles.dayTitle}>{done ? (done.status === 'partial' ? 'Workout logged' : 'Workout done') : day.label}</Text>
           <Text style={styles.muted}>
-            {preview.length} {preview.length === 1 ? 'exercise' : 'exercises'}, about {fit ? fit.minutes : fullMinutes} minutes
+            {done
+              ? `${done.status === 'partial' ? 'Some of it logged' : 'All of it logged'} · ${day.label} is next.`
+              : `${preview.length} ${preview.length === 1 ? 'exercise' : 'exercises'}, about ${fit ? fit.minutes : fullMinutes} minutes`}
           </Text>
-        </View>
+          {restDay && !done ? <Text style={styles.muted}>Not a training day. Train anyway if you want to.</Text> : null}
+        </Card>
 
-        {state.days.length > 1 ? (
+        {/* Optional context, one row. */}
+        <View style={styles.gapTop}>{checkInRow}</View>
+
+        {/* The detail, with the two decisions that change it kept together. */}
+        <View style={styles.previewHead}>
+          <Text style={styles.sectionTitle}>{day.label}</Text>
+          {state.days.length > 1 ? (
+            <PrimaryButton
+              label={daysOpen ? 'Hide days' : 'Change workout day'}
+              tone="ghost"
+              accessibilityLabel={daysOpen ? 'Hide the other workout days' : 'Change which workout day to do'}
+              onPress={() => setDaysOpen(!daysOpen)}
+            />
+          ) : null}
+        </View>
+        {/* Every day chip on screen every time was a row of noise for a rare decision. */}
+        {daysOpen && state.days.length > 1 ? (
           <View style={styles.chipsGap}>
-            <ChipRow options={state.days.map((d) => ({ label: d.label, value: d.id }))} value={day.id} onChange={setPickedDayId} fill={false} />
+            <ChipRow
+              options={state.days.map((d) => ({ label: d.label, value: d.id }))}
+              value={day.id}
+              onChange={(v) => {
+                setPickedDayId(v);
+                setDaysOpen(false);
+              }}
+              fill={false}
+            />
+          </View>
+        ) : null}
+        {budgets.length > 1 ? (
+          <View style={styles.budget}>
+            <Text style={styles.label}>How long have you got?</Text>
+            <ChipRow options={budgets.map((m) => ({ label: m === 0 ? 'Full' : `${m} min`, value: m }))} value={budget} onChange={setBudget} />
+            {fit ? (
+              <Text style={styles.muted}>
+                Keeps the main lifts{fit.trimmed.length ? `, trims ${fit.trimmed.length}` : ''}
+                {fit.dropped.length ? `, leaves out ${fit.dropped.length}` : ''}, quick warm-up{fit.over ? ', still a little over' : ''}
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -256,24 +311,12 @@ export default function Today() {
           })}
         </Card>
 
-        {budgets.length > 1 ? (
-          <View style={styles.budget}>
-            <Text style={styles.label}>Short on time?</Text>
-            <ChipRow options={budgets.map((m) => ({ label: m === 0 ? 'Full' : `${m} min`, value: m }))} value={budget} onChange={setBudget} />
-            {fit ? (
-              <Text style={styles.muted}>
-                Keeps the main lifts{fit.trimmed.length ? `, trims ${fit.trimmed.length}` : ''}
-                {fit.dropped.length ? `, leaves out ${fit.dropped.length}` : ''}, quick warm-up{fit.over ? ', still a little over' : ''}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-
+        {/* Secondary options, then a neutral look at the week. */}
         <View style={styles.secondary}>
           <PrimaryButton label="Skip day" tone="ghost" icon={<Icon name="skip" size={16} />} style={styles.flex1} onPress={skip} />
           <PrimaryButton label="Empty workout" tone="ghost" icon={<Icon name="plus" size={16} />} style={styles.flex1} onPress={startEmpty} />
         </View>
-        {state.trainedToday ? recoveryCard : null}
+        {restDay || done ? <View style={styles.gapTop}>{recoveryCard}</View> : null}
         <View style={styles.gap} />
         {weekStrip}
         {recoverySheet}
@@ -281,10 +324,12 @@ export default function Today() {
       </Screen>
       <ActionBar>
         <PrimaryButton
-          label={`Start ${day.label}${fit ? ` · ${budget} min` : ''}`}
+          label={startLabel}
           size="gym"
-          icon={<Icon name="play" size={18} color={color.onAccent} />}
-          onPress={() => begin(() => router.push(`/session/${startSession(day.id, fit ? { fit: fit.slots } : {}).id}`))}
+          // Quieter once the day's work is already logged — still one tap away.
+          tone={done ? 'neutral' : 'accent'}
+          icon={<Icon name="play" size={18} color={done ? color.text : color.onAccent} />}
+          onPress={start}
         />
       </ActionBar>
     </View>
@@ -305,9 +350,16 @@ function WeekStrip({ today, sessions, trainingDays }: { today: string; sessions:
         const status = byDate.get(date);
         const planned = trainingDays.includes(parseISODate(date).getDay());
         const isToday = date === today;
+        // A cancelled day is shown as having happened, never as completed — the
+        // filled dot is reserved for 'completed' and says so to a screen reader.
         const trained = status === 'completed' || status === 'partial' || status === 'cancelled';
         return (
-          <View key={date} style={styles.weekDay}>
+          <View
+            key={date}
+            style={styles.weekDay}
+            accessible
+            accessibilityLabel={`${DAY_NAMES[i]}: ${status ? WEEK_WORDS[status] : planned ? 'planned' : 'nothing planned'}`}
+          >
             <Text style={[styles.weekLabel, isToday && styles.weekLabelOn]}>{'MTWTFSS'[i]}</Text>
             <View
               style={[
@@ -340,7 +392,7 @@ function Stat({ value, label }: { value: React.ReactNode; label: string }) {
 const styles = StyleSheet.create({
   week: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.sm, marginBottom: space.md },
   weekDay: { alignItems: 'center', gap: space.xs },
-  weekLabel: { ...font.caption, color: color.textFaint },
+  weekLabel: { ...font.caption, color: color.textMuted },
   weekLabelOn: { color: color.text, fontWeight: '700' },
   weekDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: color.surfaceHigh },
   weekPlanned: { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.border },
@@ -348,29 +400,29 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   gap: { height: space.lg },
-  gapTop: { marginTop: space.lg },
+  gapTop: { marginTop: space.md },
   rowCenter: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   rowTitle: { ...font.body, color: color.text, fontWeight: '600' },
-  // The card above already leaves gap.between; this makes the workout its own section.
-  workoutHead: { marginTop: space.lg },
   eyebrow: { ...font.caption, color: color.textMuted },
-  exAside: { color: color.textFaint },
+  exAside: { color: color.textMuted },
   dayTitle: { ...font.title, color: color.text, marginTop: space.xs },
   cardTitle: { ...font.heading, color: color.text, marginTop: space.xs },
+  sectionTitle: { ...font.heading, color: color.text },
   muted: { ...font.label, color: color.textMuted, marginTop: space.xs },
   label: { ...font.label, color: color.text, fontWeight: '600' },
-  chipsGap: { marginTop: space.lg },
-  list: { marginTop: space.lg, paddingVertical: space.xs },
+  previewHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, marginTop: space.xl },
+  chipsGap: { marginTop: space.md },
+  list: { marginTop: space.md, paddingVertical: space.xs },
   exRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
   cut: { opacity: 0.45 },
   strike: { textDecorationLine: 'line-through' },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  exIdx: { ...font.label, ...font.numeric, color: color.textFaint, width: space.lg },
+  exIdx: { ...font.label, ...font.numeric, color: color.textMuted, width: space.lg },
   exName: { ...font.body, color: color.text, fontWeight: '600' },
   exMeta: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: 2 },
   exWeight: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
-  budget: { gap: space.sm, marginBottom: space.md },
-  secondary: { flexDirection: 'row', gap: space.sm },
+  budget: { gap: space.sm, marginTop: space.md },
+  secondary: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   stats: { flexDirection: 'row', gap: space.xl, marginTop: space.md },
   stat: { gap: 2 },
   statValue: { ...font.heading, ...font.numeric, color: color.text },

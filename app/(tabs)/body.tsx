@@ -1,124 +1,86 @@
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, EmptyState, Icon, PrimaryButton, Screen, SectionHeader } from '@/components';
-import { useLive } from '@/db/live';
-import { listMeasurements, type Measurement } from '@/db/repositories/body';
+import { Card, ChipRow, Icon, Screen } from '@/components';
 import { useSettings } from '@/db/repositories/settings';
-import { MeasureSheet, readingBefore, SiteSheet } from '@/features/body/sheets';
-import { SITES } from '@/features/body/sites';
-import { addDays, fmtDayLabel } from '@/lib/date';
-import { kgNum, signed } from '@/lib/format';
-import { color, font, gap, hit, radius, space } from '@/theme/tokens';
+import { MeasurementsSection } from '@/features/body/MeasurementsSection';
+import { RecoverySection } from '@/features/body/RecoverySection';
+import { WeightSection } from '@/features/body/WeightSection';
+import { color, font, gap, space } from '@/theme/tokens';
+
+const SECTIONS = [
+  { label: 'Weight', value: 'weight' as const },
+  { label: 'Recovery', value: 'recovery' as const },
+  { label: 'Measurements', value: 'measurements' as const },
+];
+export type BodySection = (typeof SECTIONS)[number]['value'];
+
+const SUBTITLE: Record<BodySection, string> = {
+  weight: 'Your trend, not this morning’s number',
+  recovery: 'Sleep, soreness and stress',
+  measurements: 'Every 2–4 weeks',
+};
+
+const isSection = (v: unknown): v is BodySection => SECTIONS.some((s) => s.value === v);
 
 /**
- * Measurements, and the facts about you the maths needs. Weight moved to Daily,
- * beside the check-in it is logged with; this screen changes every few weeks.
+ * Body: how your body is changing, and how you feel.
+ *
+ * Three sections in one tab rather than three tabs, because they are asked at
+ * completely different rates — weight most mornings, recovery most days,
+ * measurements every few weeks — and each has exactly one primary action: Log
+ * weight, Check in, Log measurements (UX-01).
+ *
+ * The section can come from the route, so a notification or deep link lands on the
+ * thing it was about (/body?section=measurements). Without a parameter the tab
+ * opens on Weight the first time and then stays where it was left, because an
+ * ordinary tab switch is not a request to go back to the start.
  */
 export default function BodyScreen() {
+  const params = useLocalSearchParams<{ section?: string }>();
   const settings = useSettings();
-  const measurements = useLive(() => listMeasurements(), ['measurement']);
-  const [measuring, setMeasuring] = useState(false);
-  const [site, setSite] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<BodySection>('weight');
+  // The parameter wins while it is on the URL; clearing it returns to the
+  // remembered section rather than snapping back to Weight.
+  const section = isSection(params.section) ? params.section : chosen;
 
-  const bySite = useMemo(() => {
-    const m = new Map<string, Measurement[]>();
-    for (const r of measurements) m.set(r.site, [...(m.get(r.site) ?? []), r]);
-    return m;
-  }, [measurements]);
-  const latestBySite = useMemo(() => new Map([...bySite].map(([k, rows]) => [k, rows[0]?.cm ?? 0])), [bySite]);
-  const measured = SITES.filter((s) => bySite.has(s.key));
-  const waist = bySite.get('waist')?.[0];
-  const whtr = waist && settings.heightCm > 0 ? waist.cm / settings.heightCm : null;
+  const select = (next: BodySection) => {
+    setChosen(next);
+    // Drop the parameter, or it would keep overriding the taps that follow it.
+    if (params.section !== undefined) router.setParams({ section: undefined });
+  };
 
   return (
-    <Screen title="Body" subtitle="Measurements and your details">
-      {measured.length === 0 ? (
-        <EmptyState
-          message="Measure every 2–4 weeks."
-          hint="Waist and arms show changes the scale hides."
-          actionLabel="Log measurements"
-          onAction={() => setMeasuring(true)}
-        />
-      ) : (
-        <>
-          <PrimaryButton label="Log measurements" tone="neutral" icon={<Icon name="ruler" size={16} />} style={styles.log} onPress={() => setMeasuring(true)} />
-          {whtr !== null ? (
-            <Card>
-              <View style={styles.rowBetween}>
-                <Text style={styles.body}>Waist-to-height</Text>
-                <Text style={[styles.value, { color: whtr < 0.5 ? color.positive : color.text }]}>{whtr.toFixed(2)}</Text>
-              </View>
-              <Text style={styles.hint}>Below 0.50 is the healthy range for most adults.</Text>
-            </Card>
-          ) : null}
-          <View style={styles.grid}>
-            {measured.map((s) => {
-              const rows = bySite.get(s.key) ?? [];
-              const latest = rows[0];
-              if (!latest) return null;
-              const month = readingBefore(rows, addDays(latest.date, -28));
-              const prev = month && month.id !== latest.id ? month : rows[1];
-              return (
-                <Pressable key={s.key} style={({ pressed }) => [styles.tile, pressed && styles.pressed]} onPress={() => setSite(s.key)} accessibilityRole="button">
-                  <Text style={styles.tileLabel}>{s.label}</Text>
-                  <Text style={styles.tileValue}>
-                    {kgNum(latest.cm)}
-                    <Text style={styles.unitSmall}> {s.unit}</Text>
-                  </Text>
-                  <Text style={styles.tileHint}>{prev ? `${signed(latest.cm - prev.cm)} since ${fmtDayLabel(prev.date)}` : fmtDayLabel(latest.date)}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
-      )}
+    <Screen title="Body" subtitle={SUBTITLE[section]}>
+      <View style={styles.selector}>
+        <ChipRow options={SECTIONS} value={section} onChange={select} />
+      </View>
 
-      <SectionHeader title="Your details" hint="Used for calorie and water targets. Nothing here leaves this phone." />
+      {section === 'weight' ? <WeightSection /> : null}
+      {section === 'recovery' ? <RecoverySection /> : null}
+      {section === 'measurements' ? <MeasurementsSection /> : null}
+
+      {/* A link, not a second profile editor. Profile & goals owns these (UX-03). */}
       <Card onPress={() => router.push('/settings/profile')}>
-        <Detail label="Name" value={settings.name || '—'} />
-        <Detail label="Sex" value={settings.sex === 'female' ? 'Female' : 'Male'} />
-        <Detail label="Age" value={String(settings.age)} />
-        <Detail label="Height" value={`${settings.heightCm} cm`} />
-        <View style={styles.edit}>
-          <Icon name="edit" size={16} color={color.textMuted} />
-          <Text style={styles.hintInline}>Tap to edit</Text>
+        <View style={styles.linkRow}>
+          <View style={styles.flex1}>
+            <Text style={styles.body}>Profile & goals</Text>
+            <Text style={styles.hint}>
+              {settings.name || 'Your details'} · {settings.age}, {settings.heightCm} cm — used for calorie and water targets.
+            </Text>
+          </View>
+          <Icon name="chevronRight" size={20} color={color.textMuted} />
         </View>
       </Card>
-
-      <MeasureSheet visible={measuring} latest={latestBySite} onClose={() => setMeasuring(false)} />
-      <SiteSheet site={site} rows={site ? (bySite.get(site) ?? []) : []} onClose={() => setSite(null)} />
     </Screen>
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.detail}>
-      <Text style={styles.muted}>{label}</Text>
-      <Text style={styles.value} numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  log: { marginBottom: gap.between },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
-  detail: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md, minHeight: hit.default },
-  edit: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm },
-  unitSmall: { ...font.caption, color: color.textMuted },
-  muted: { ...font.label, color: color.textMuted },
-  hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  hintInline: { ...font.caption, color: color.textMuted },
+  flex1: { flex: 1 },
+  selector: { marginBottom: gap.between },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   body: { ...font.body, color: color.text },
-  value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600', flexShrink: 1 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  tile: { width: '48.5%', backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, padding: space.md, gap: 2 },
-  pressed: { backgroundColor: color.surfaceHigh },
-  tileLabel: { ...font.caption, color: color.textMuted },
-  tileValue: { ...font.heading, ...font.numeric, color: color.text },
-  tileHint: { ...font.caption, ...font.numeric, color: color.textFaint },
+  hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
 });

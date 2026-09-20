@@ -1,5 +1,5 @@
 /** Bodyweight and circumferences. Trend smoothing happens in the engine, never here. */
-import { asc, desc, eq, gte, isNotNull } from 'drizzle-orm';
+import { asc, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import * as schema from '@/db/schema';
@@ -26,6 +26,28 @@ export function deleteCheckIn(dateISO: string): void {
 /** Ascending, from `fromISO` on. */
 export function listCheckIns(fromISO: string): CheckIn[] {
   return db.select().from(schema.checkIn).where(gte(schema.checkIn.date, fromISO)).orderBy(asc(schema.checkIn.date)).all();
+}
+
+/** Newest first — Body → Recovery lists these so a past answer can be corrected. */
+export function recentCheckIns(limit = 14): CheckIn[] {
+  return db.select().from(schema.checkIn).orderBy(desc(schema.checkIn.date)).limit(limit).all();
+}
+
+/** Total weigh-ins, so a history screen can say how many there are without loading them. */
+export function countWeighIns(): number {
+  const row = db.select({ n: sql<number>`count(*)` }).from(schema.weighIn).get();
+  return Number(row?.n ?? 0);
+}
+
+/** A page of weigh-ins, newest first — for the full history behind "View all". */
+export function pageWeighIns(limit: number, offset = 0): WeighIn[] {
+  return db
+    .select({ date: schema.weighIn.date, kg: schema.weighIn.kg })
+    .from(schema.weighIn)
+    .orderBy(desc(schema.weighIn.date))
+    .limit(limit)
+    .offset(offset)
+    .all();
 }
 
 /** One weigh-in per day: re-logging the same morning replaces it. */

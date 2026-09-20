@@ -3,15 +3,14 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
+import { DateStepper } from '@/components/DateStepper';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
-import { Stepper } from '@/components/Stepper';
 import { toast } from '@/components/Toast';
-import { deleteCheckIn, getCheckIn, getLatestWeight, getWeighIn, saveCheckIn, upsertWeighIn } from '@/db/repositories/body';
+import { deleteCheckIn, getCheckIn, getWeighIn, saveCheckIn, upsertWeighIn } from '@/db/repositories/body';
 import { syncReadiness } from '@/db/repositories/sessions';
-import { todayISO } from '@/lib/date';
-import { kg } from '@/lib/format';
-import { DEFAULT_WEIGHT_KG } from '@/services/hydration';
+import { WeightField, weightDraftFor, type WeightDraft } from '@/features/body/WeightField';
+import { fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, space } from '@/theme/tokens';
 
 const SLEEP = [
@@ -28,95 +27,100 @@ export const sleepLabel = (h: number) => (h <= 5 ? '≤5 h' : h >= 9 ? '9+ h' : 
 export interface CheckInSheetProps {
   visible: boolean;
   onClose: () => void;
+  /** The day being answered for. Defaults to today; Body passes a past date to fix one. */
+  date?: string;
+  /** Let the user move to another day from inside the sheet. */
+  datePicker?: boolean;
   /** Opened from Start: still optional, and both buttons carry on to the workout. */
   onStart?: () => void;
 }
 
 /**
- * The daily check-in. Every answer is optional and only answers are saved: an
- * untouched weight is the last reading, and saving it would invent a weigh-in.
+ * The daily check-in, and the one editor for a check-in on any day.
+ *
+ * Every answer is optional, every answer can go back to "Not recorded", and only
+ * answers are saved. The weight field is the shared one (features/body/WeightField):
+ * an untouched number is not an answer, and the sheet no longer claims "Saved as
+ * today's weigh-in" before its own Save handler has run (UX-03).
  */
-export function CheckInSheet({ visible, onClose, onStart }: CheckInSheetProps) {
+export function CheckInSheet({ visible, onClose, date, datePicker = false, onStart }: CheckInSheetProps) {
+  const day = date ?? todayISO();
   return (
-    <Sheet visible={visible} onClose={onClose} title={onStart ? 'Before you start' : 'Daily check-in'}>
-      {/* Mounted per opening, so the answers are read fresh without an effect. */}
-      {visible ? <Form onClose={onClose} onStart={onStart} /> : null}
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={onStart ? 'Before you start' : day === todayISO() ? 'Daily check-in' : `Check-in · ${fmtDayLabel(day)}`}
+    >
+      {/* Mounted per opening and per day, so the answers are read fresh without an effect. */}
+      {visible ? <Form key={day} date={day} datePicker={datePicker} onClose={onClose} onStart={onStart} /> : null}
     </Sheet>
   );
 }
 
-function Form({ onClose, onStart }: Omit<CheckInSheetProps, 'visible'>) {
-  const today = todayISO();
-  const [existing] = useState(() => getCheckIn(today));
-  const [weighed] = useState(() => getWeighIn(today));
-  const [latest] = useState(getLatestWeight);
-  const [weight, setWeight] = useState(() => weighed?.kg ?? latest ?? DEFAULT_WEIGHT_KG);
-  const [weightSet, setWeightSet] = useState(weighed !== undefined);
+function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker: boolean } & Omit<CheckInSheetProps, 'visible' | 'date' | 'datePicker'>) {
+  const [day, setDay] = useState(date);
+  const [existing, setExisting] = useState(() => getCheckIn(date));
+  const [weight, setWeight] = useState<WeightDraft>(() => weightDraftFor(date));
   const [sleep, setSleep] = useState<number | null>(existing?.sleepHours ?? null);
   const [soreness, setSoreness] = useState<number | null>(existing?.soreness ?? null);
   const [stress, setStress] = useState<number | null>(existing?.stress ?? null);
-  const answered = weightSet || sleep !== null || soreness !== null || stress !== null;
+  const answered = weight.given || sleep !== null || soreness !== null || stress !== null;
+
+  /** Moving day re-reads that day's answers: this is one editor, not one form per day. */
+  const goTo = (iso: string) => {
+    setDay(iso);
+    const c = getCheckIn(iso);
+    setExisting(c);
+    setWeight(weightDraftFor(iso));
+    setSleep(c?.sleepHours ?? null);
+    setSoreness(c?.soreness ?? null);
+    setStress(c?.stress ?? null);
+  };
 
   const save = () => {
-    if (weightSet) upsertWeighIn(today, weight);
-    saveCheckIn({ date: today, sleepHours: sleep, soreness, stress });
+    if (weight.given) upsertWeighIn(day, weight.kg);
+    saveCheckIn({ date: day, sleepHours: sleep, soreness, stress });
     syncReadiness();
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
+  /** Tapping the selected chip again clears it — an answer you can't take back isn't optional. */
+  const toggle = (current: number | null, set: (v: number | null) => void) => (v: number) => set(current === v ? null : v);
+  const recorded = (v: number | null) => (v === null ? 'Not recorded' : null);
+
   return (
     <View style={styles.stack}>
+      {datePicker ? <DateStepper value={day} onChange={goTo} /> : null}
       <Text style={styles.hint}>
-        {onStart ? "Optional. A rough night lowers today's targets; nothing here raises them." : 'Optional. Only what you answer is saved.'}
+        {onStart ? "Optional. A rough night lowers today's targets; nothing here raises them." : 'Optional. Only what you answer is saved, and any answer can go back to Not recorded.'}
       </Text>
 
       <View>
         <Text style={styles.label}>Morning weight</Text>
-        <Stepper
-          suffix="kg"
-          value={weight}
-          step={0.1}
-          min={30}
-          max={250}
-          onChange={(v) => {
-            setWeight(v);
-            setWeightSet(true);
-          }}
-        />
-        {weightSet ? (
-          <Text style={styles.note}>Saved as today&apos;s weigh-in.</Text>
-        ) : (
-          <View style={styles.row}>
-            <Text style={[styles.note, styles.flex]}>Not logged today. Tap − or + to set it.</Text>
-            {latest !== undefined ? <PrimaryButton label={`Same, ${kg(weight)}`} tone="ghost" onPress={() => setWeightSet(true)} /> : null}
-          </View>
-        )}
+        <WeightField draft={weight} onChange={setWeight} pendingLabel="Will save with the check-in" />
       </View>
 
-      <View>
-        <Text style={styles.label}>Sleep last night</Text>
-        <ChipRow options={SLEEP} value={sleep} onChange={setSleep} />
-      </View>
-      <View>
-        <Text style={styles.label}>Soreness: 1 fresh, 5 wrecked</Text>
-        <ChipRow options={SCALE} value={soreness} onChange={setSoreness} />
-      </View>
-      <View>
-        <Text style={styles.label}>Stress: 1 calm, 5 fried</Text>
-        <ChipRow options={SCALE} value={stress} onChange={setStress} />
-      </View>
+      <Answer label="Sleep last night" cleared={recorded(sleep)}>
+        <ChipRow options={SLEEP} value={sleep} onChange={toggle(sleep, setSleep)} />
+      </Answer>
+      <Answer label="Soreness: 1 fresh, 5 wrecked" cleared={recorded(soreness)}>
+        <ChipRow options={SCALE} value={soreness} onChange={toggle(soreness, setSoreness)} />
+      </Answer>
+      <Answer label="Stress: 1 calm, 5 fried" cleared={recorded(stress)}>
+        <ChipRow options={SCALE} value={stress} onChange={toggle(stress, setStress)} />
+      </Answer>
 
       {onStart ? (
         <View style={styles.actions}>
           <PrimaryButton
-            label="Start workout"
+            label="Save and start"
             size="gym"
             onPress={() => {
               if (answered) save();
               onStart();
             }}
           />
-          <PrimaryButton label="Skip check-in" tone="ghost" onPress={onStart} />
+          <PrimaryButton label="Start without saving" tone="ghost" onPress={onStart} />
         </View>
       ) : (
         <View style={styles.actions}>
@@ -126,26 +130,37 @@ function Form({ onClose, onStart }: Omit<CheckInSheetProps, 'visible'>) {
             disabled={!answered}
             onPress={() => {
               save();
+              toast(`Check-in saved for ${fmtDayLabel(day)}`);
               onClose();
             }}
           />
           {existing ? (
-            <PrimaryButton
-              label="Clear today's check-in"
-              tone="ghost"
-              onPress={() => {
-                deleteCheckIn(today);
-                syncReadiness();
-                toast('Check-in cleared', {
-                  label: 'Undo',
-                  onPress: () => {
-                    saveCheckIn(existing);
-                    syncReadiness();
-                  },
-                });
-                onClose();
-              }}
-            />
+            <>
+              <PrimaryButton
+                label="Clear this check-in"
+                tone="ghost"
+                onPress={() => {
+                  const was = existing;
+                  deleteCheckIn(day);
+                  syncReadiness();
+                  toast('Check-in cleared', {
+                    label: 'Undo',
+                    onPress: () => {
+                      saveCheckIn(was);
+                      syncReadiness();
+                    },
+                  });
+                  onClose();
+                }}
+              />
+              {/* Two different records. Clearing one must not imply the other went. */}
+              {getWeighIn(day) ? (
+                <Text style={styles.hint}>
+                  Clearing removes the sleep, soreness and stress answers. The weigh-in for this day is a separate
+                  record and stays — delete it from Body → Weight.
+                </Text>
+              ) : null}
+            </>
           ) : null}
         </View>
       )}
@@ -153,12 +168,24 @@ function Form({ onClose, onStart }: Omit<CheckInSheetProps, 'visible'>) {
   );
 }
 
+function Answer({ label, cleared, children }: { label: string; cleared: string | null; children: React.ReactNode }) {
+  return (
+    <View>
+      <View style={styles.labelRow}>
+        <Text style={[styles.label, styles.flex]}>{label}</Text>
+        {cleared ? <Text style={styles.note}>{cleared}</Text> : null}
+      </View>
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   stack: { gap: space.lg, paddingBottom: space.lg },
   flex: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  labelRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
   hint: { ...font.caption, color: color.textMuted },
   label: { ...font.label, color: color.text, fontWeight: '600', marginBottom: space.sm },
-  note: { ...font.caption, color: color.textMuted, marginTop: space.xs },
+  note: { ...font.caption, color: color.textMuted },
   actions: { gap: space.xs, marginTop: space.sm },
 });
