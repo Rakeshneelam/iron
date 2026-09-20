@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, IconButton, PrimaryButton, Screen, SectionHeader, Sheet, StatTile, Stepper } from '@/components';
+import { router } from 'expo-router';
+
+import { Card, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Sheet, StatTile, Stepper } from '@/components';
 import { DateStepper, useSelectedDate } from '@/components/DateStepper';
 import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
@@ -23,8 +25,11 @@ import {
 import { AddFoodSheet } from '@/features/food/AddFoodSheet';
 import { FoodTargetSheet } from '@/features/food/TargetSheet';
 import { computeTargets, confidenceLabel } from '@/features/food/targets';
+import { getDayTotal } from '@/db/repositories/water';
 import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
-import { color, font, hit, space } from '@/theme/tokens';
+import { ml } from '@/lib/format';
+import { hydrationTarget } from '@/services/hydration';
+import { color, font, hit, radius, space } from '@/theme/tokens';
 
 const cap = (s: string) => (s ? s[0]?.toUpperCase() + s.slice(1) : s);
 const fmtServings = (n: number) => (Math.round(n * 2) / 2).toString();
@@ -39,6 +44,9 @@ export default function FoodScreen() {
   const day = useLive(() => getDay(date), ['meal_log', 'food', 'recipe', 'recipe_item'], [date]);
   const prev = useLive(() => getDay(yesterday), ['meal_log', 'food', 'recipe', 'recipe_item'], [yesterday]);
   const t = useLive(() => computeTargets(date), ['meal_log', 'food', 'recipe', 'recipe_item', 'weigh_in', 'setting', 'session'], [date]);
+  // The day on screen, not today: browsing yesterday's meals must not show today's
+  // water, and must not hand today's date to the Water screen either (UX-07).
+  const water = useLive(() => ({ ml: getDayTotal(date), target: hydrationTarget().ml }), ['water_log', 'setting', 'weigh_in', 'session'], [date]);
 
   // What you usually eat, per meal — one lookup for all four slots, since hooks
   // cannot run inside the render loop below.
@@ -53,8 +61,8 @@ export default function FoodScreen() {
     if (id) toast(`Added ${u.label}`, { label: 'Undo', onPress: () => deleteEntries([id]) });
   };
 
-  const [adding, setAdding] = useState<MealSlot | null>(null);
-  const [recipeTab, setRecipeTab] = useState(false);
+  /** `null` slot means "opened without a meal" — the sheet asks before logging. */
+  const [adding, setAdding] = useState<{ slot: MealSlot | null; start?: 'frequent' | 'recipes' } | null>(null);
   const [targetSheet, setTargetSheet] = useState(false);
   const [editing, setEditing] = useState<DayEntry | null>(null);
   const [servings, setServings] = useState(1);
@@ -79,13 +87,28 @@ export default function FoodScreen() {
         <StatTile label="Protein" value={`${Math.round(day.totals.protein)} / ${t.proteinG} g`} tone="accent" />
         <StatTile label="Calories" value={`${Math.round(day.totals.kcal)} / ${t.kcal}`} />
       </View>
-      <View style={[styles.tiles, styles.gapSm]}>
-        <StatTile label="Carbs" value={`${Math.round(day.totals.carb)} / ${t.carbG} g`} tone="muted" />
-        <StatTile label="Fat" value={`${Math.round(day.totals.fat)} / ${t.fatG} g`} tone="muted" />
-      </View>
+      {/* Carbs and fat follow from the two above; they are a line, not a second pair of tiles. */}
+      <Text style={styles.secondary}>
+        Carbs {Math.round(day.totals.carb)} / {t.carbG} g{'   ·   '}Fat {Math.round(day.totals.fat)} / {t.fatG} g
+      </Text>
       <Text style={styles.note}>
         {t.manual ? 'Your own targets' : t.basis === 'estimated' ? `Estimate · ${confidenceLabel(t)}` : `Measured · ${confidenceLabel(t)}`}
       </Text>
+
+      {/* A link to the Water screen, on the day being browsed — not a second copy of it. */}
+      <Pressable
+        onPress={() => router.push(`/water?date=${date}`)}
+        accessibilityRole="button"
+        accessibilityLabel={`Water: ${ml(water.ml)} of ${ml(water.target)} on ${fmtDayLabel(date)}. Opens the water screen.`}
+        style={({ pressed }) => [styles.waterRow, pressed && styles.pressed]}
+      >
+        <Icon name="water" size={18} color={color.textMuted} />
+        <Text style={[styles.body, styles.flex1]}>Water</Text>
+        <Text style={styles.waterValue}>
+          {ml(water.ml)} <Text style={styles.note}>of {ml(water.target)}</Text>
+        </Text>
+        <Icon name="chevronRight" size={18} color={color.textMuted} />
+      </Pressable>
 
       {prev.entries.length > 0 && day.entries.length === 0 ? (
         <PrimaryButton
@@ -98,6 +121,12 @@ export default function FoodScreen() {
           }}
         />
       ) : null}
+
+      <SectionHeader
+        title="Saved meals & recipes"
+        hint="Log something you cook often, or save a new one."
+        right={<PrimaryButton label="Open" tone="ghost" onPress={() => setAdding({ slot: null, start: 'recipes' })} />}
+      />
 
       {MEAL_SLOTS.map((slot) => {
         const entries = day.bySlot[slot];
@@ -155,29 +184,24 @@ export default function FoodScreen() {
                   ))}
                 </View>
               ) : null}
-              <PrimaryButton label="Add food" tone="neutral" onPress={() => setAdding(slot)} />
+              <PrimaryButton label="Add food" tone="neutral" onPress={() => setAdding({ slot })} />
             </Card>
           </View>
         );
       })}
 
-      <SectionHeader title="Recipes" />
-      <Card>
-        <Text style={styles.note}>Save a meal you cook often, then log the whole thing in one tap.</Text>
-        <PrimaryButton
-          label="New recipe"
-          size="gym"
-          style={styles.gap}
-          onPress={() => { setRecipeTab(true); setAdding('breakfast'); }}
-        />
-      </Card>
-
+      {/*
+        The big "New recipe" card that used to sit below the entire diary is gone.
+        It opened the sheet with breakfast as the meal, so creating a recipe at 9pm
+        offered to log it to breakfast; saved meals are a destination at the top
+        now, and creating one is a tab inside the one picker (UX-07).
+      */}
       <AddFoodSheet
         visible={adding !== null}
-        slot={adding ?? 'breakfast'}
+        slot={adding?.slot ?? null}
+        start={adding?.start}
         dateISO={date}
-        startOnRecipe={recipeTab}
-        onClose={() => { setAdding(null); setRecipeTab(false); }}
+        onClose={() => setAdding(null)}
       />
 
       <Sheet visible={editing !== null} onClose={() => setEditing(null)} title={editing?.label}>
@@ -213,8 +237,24 @@ export default function FoodScreen() {
 const styles = StyleSheet.create({
   entryProtein: { color: color.textMuted },
   usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
+  flex1: { flex: 1 },
   tiles: { flexDirection: 'row', gap: space.sm },
-  gapSm: { marginTop: space.sm },
+  secondary: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: space.sm, textAlign: 'center' },
+  waterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    minHeight: hit.default,
+    marginTop: space.md,
+    paddingHorizontal: space.md,
+    backgroundColor: color.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  pressed: { backgroundColor: color.surfaceHigh },
+  body: { ...font.body, color: color.text },
+  waterValue: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
   gap: { marginTop: space.lg },
   note: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   entry: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm, minHeight: hit.default },

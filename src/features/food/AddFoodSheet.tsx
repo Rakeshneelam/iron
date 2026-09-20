@@ -2,23 +2,28 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
+import { IconButton } from '@/components/IconButton';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
 import { Stepper } from '@/components/Stepper';
+import { toast } from '@/components/Toast';
 import {
   createFood,
   createRecipe,
+  deleteEntries,
   foodMacros,
   getRecipeMacros,
   listRecipes,
   logFood,
   logRecipe,
+  MEAL_SLOTS,
   quickAddFoods,
   searchFoods,
   type Food,
   type MealSlot,
   type Recipe,
 } from '@/db/repositories/food';
+import { fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 type Tab = 'frequent' | 'search' | 'recipes' | 'newFood' | 'newRecipe';
@@ -29,42 +34,73 @@ const TABS: { label: string; value: Tab }[] = [
   { label: 'New food', value: 'newFood' },
   { label: 'New recipe', value: 'newRecipe' },
 ];
+const SLOT_CHIPS = MEAL_SLOTS.map((m) => ({ label: m[0]?.toUpperCase() + m.slice(1), value: m }));
 
 const unit = (label: string | null) => (label ?? 'serving').replace(/^1\s+/, '');
 
-export function AddFoodSheet({
-  visible,
-  slot,
-  dateISO,
-  startOnRecipe = false,
-  onClose,
-}: {
+/** An ingredient being assembled. Held by the sheet, not by the recipe form. */
+export interface DraftItem {
+  food: Food;
+  grams: number;
+}
+export interface RecipeDraft {
+  name: string;
+  servings: number;
+  items: DraftItem[];
+}
+const EMPTY_DRAFT: RecipeDraft = { name: '', servings: 1, items: [] };
+
+export interface AddFoodSheetProps {
   visible: boolean;
-  slot: MealSlot;
+  /**
+   * The meal to log into. `null` means the sheet was opened without one — from
+   * "Saved meals & recipes", say — and it asks before logging instead of assuming.
+   * Opening the recipe creator used to pass 'breakfast', so making a recipe at
+   * 9pm offered to log it to breakfast (UX-07).
+   */
+  slot: MealSlot | null;
   dateISO: string;
-  /** Opened from the Recipes card rather than "Add to breakfast". */
-  startOnRecipe?: boolean;
+  /** Which tab to land on. Creating a recipe and logging a meal are different jobs. */
+  start?: Tab;
   onClose: () => void;
-}) {
-  const [tab, setTab] = useState<Tab>(startOnRecipe ? 'newRecipe' : 'frequent');
-  // Re-apply on each open: useState only runs once, so opening from the Recipes card
-  // after opening from "Add to breakfast" would otherwise land on the wrong tab.
-  // Adjusted during render, on the open itself, instead of an effect a frame later.
+}
+
+/**
+ * The one food and recipe picker, and the one place either is created.
+ *
+ * Every entry point opens this: a meal's Add food, the saved-recipes link, the
+ * empty diary. What changes between them is the tab it starts on and whether a
+ * meal is already known — never the flow itself.
+ */
+export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClose }: AddFoodSheetProps) {
+  const [tab, setTab] = useState<Tab>(start);
+  // Re-apply on each open: useState only runs once, so opening from the recipes
+  // link after opening from "Add food" would otherwise land on the wrong tab.
+  // Adjusted during render, on the open itself, rather than in an effect a frame later.
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
-    if (visible) setTab(startOnRecipe ? 'newRecipe' : 'frequent');
+    if (visible) setTab(start);
   }
   const [q, setQ] = useState('');
   const [food, setFood] = useState<Food | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [servings, setServings] = useState(1);
+  const [meal, setMeal] = useState<MealSlot>(slot ?? 'breakfast');
+  /**
+   * The recipe draft lives here, above the tabs. It used to live inside the recipe
+   * form, which unmounts the moment you switch to New food — and the form itself
+   * told you to go there for a missing ingredient, so following its own advice
+   * threw away the name, the servings and every ingredient so far (UX-07).
+   */
+  const [draft, setDraft] = useState<RecipeDraft>(EMPTY_DRAFT);
 
   const close = () => {
     setFood(null);
     setRecipe(null);
     setServings(1);
     setQ('');
+    setDraft(EMPTY_DRAFT);
     onClose();
   };
 
@@ -72,33 +108,58 @@ export function AddFoodSheet({
     () => (!visible ? [] : tab === 'search' ? searchFoods(q) : tab === 'frequent' ? quickAddFoods(15) : []),
     [visible, tab, q],
   );
-  const recipes = useMemo(() => (visible && tab === 'recipes' ? listRecipes() : []), [visible, tab]);
+  const recipes = useMemo(() => (visible && tab === 'recipes' ? listRecipes() : []), [visible, tab, recipe]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* --------------------------- confirm and log --------------------------- */
   if (food || recipe) {
     const per = food ? foodMacros(food, food.servingG) : getRecipeMacros(recipe?.id ?? '');
+    const name = food?.name ?? recipe?.name ?? '';
+    const amount = food ? `${servings} × ${unit(food.servingLabel)}` : `${servings} ${servings === 1 ? 'serving' : 'servings'}`;
+    const when = dateISO === todayISO() ? '' : ` on ${fmtDayLabel(dateISO)}`;
+
+    const commit = () => {
+      const id = food
+        ? logFood({ dateISO, mealSlot: meal, foodId: food.id, grams: servings * food.servingG })
+        : recipe
+          ? logRecipe({ dateISO, mealSlot: meal, recipeId: recipe.id, servings })
+          : null;
+      // What, how much, and where it went — with a way back (UX-07).
+      if (id) toast(`${amount} ${name} → ${meal}${when}`, { label: 'Undo', onPress: () => deleteEntries([id]) });
+      close();
+    };
+
     return (
-      <Sheet visible={visible} onClose={close} title={food?.name ?? recipe?.name ?? ''}>
+      <Sheet visible={visible} onClose={close} title={name}>
         <Stepper label={food ? unit(food.servingLabel) : 'servings'} value={servings} step={0.5} min={0.5} max={20} size="gym" onChange={setServings} />
         <Text style={styles.macro}>
           {Math.round(per.kcal * servings)} kcal · {Math.round(per.protein * servings)} g protein · {Math.round(per.carb * servings)} g carbs ·{' '}
           {Math.round(per.fat * servings)} g fat
         </Text>
+        {/* Opened without a meal: ask, rather than quietly picking breakfast. */}
+        {slot === null ? (
+          <View style={styles.mealPick}>
+            <Text style={styles.label}>Which meal?</Text>
+            <ChipRow options={SLOT_CHIPS} value={meal} onChange={setMeal} fill={false} />
+            <Text style={styles.muted}>Logging to {fmtDayLabel(dateISO)}.</Text>
+          </View>
+        ) : null}
+        <PrimaryButton label={`Log to ${meal}`} size="gym" style={styles.gap} onPress={commit} />
         <PrimaryButton
-          label={`Log to ${slot}`}
-          size="gym"
+          label="Back"
+          tone="ghost"
+          style={styles.gap}
           onPress={() => {
-            if (food) logFood({ dateISO, mealSlot: slot, foodId: food.id, grams: servings * food.servingG });
-            else if (recipe) logRecipe({ dateISO, mealSlot: slot, recipeId: recipe.id, servings });
-            close();
+            setFood(null);
+            setRecipe(null);
           }}
         />
-        <PrimaryButton label="Back" tone="ghost" style={styles.gap} onPress={() => { setFood(null); setRecipe(null); }} />
       </Sheet>
     );
   }
 
+  /* ------------------------------- picker -------------------------------- */
   return (
-    <Sheet visible={visible} onClose={close} title={`Add to ${slot}`}>
+    <Sheet visible={visible} onClose={close} title={slot ? `Add to ${slot}` : 'Food & recipes'}>
       <ChipRow options={TABS} value={tab} onChange={setTab} fill={false} />
       <View style={styles.gap} />
       {tab === 'search' ? (
@@ -106,7 +167,16 @@ export function AddFoodSheet({
       ) : null}
       {(tab === 'frequent' || tab === 'search') &&
         list.map((f) => (
-          <Pressable key={f.id} style={styles.item} onPress={() => { setFood(f); setServings(1); }}>
+          <Pressable
+            key={f.id}
+            style={styles.item}
+            accessibilityRole="button"
+            accessibilityLabel={`${f.name}, ${Math.round(f.kcal)} kcal`}
+            onPress={() => {
+              setFood(f);
+              setServings(1);
+            }}
+          >
             <Text style={styles.name}>{f.name}</Text>
             <Text style={styles.muted}>
               <Text style={styles.strong}>{Math.round(f.kcal)} kcal</Text>
@@ -119,18 +189,57 @@ export function AddFoodSheet({
         ))}
       {tab === 'recipes' ? (
         recipes.length === 0 ? (
-          <Text style={styles.muted}>Save a meal you make often under “New recipe”.</Text>
+          <>
+            <Text style={styles.muted}>Nothing saved yet.</Text>
+            <PrimaryButton label="Create a recipe" tone="neutral" style={styles.gap} onPress={() => setTab('newRecipe')} />
+          </>
         ) : (
           recipes.map((r) => (
-            <Pressable key={r.id} style={styles.item} onPress={() => { setRecipe(r); setServings(1); }}>
+            <Pressable
+              key={r.id}
+              style={styles.item}
+              accessibilityRole="button"
+              accessibilityLabel={`${r.name}, ${Math.round(getRecipeMacros(r.id).kcal)} kcal per serving`}
+              onPress={() => {
+                setRecipe(r);
+                setServings(1);
+              }}
+            >
               <Text style={styles.name}>{r.name}</Text>
               <Text style={styles.muted}>{Math.round(getRecipeMacros(r.id).kcal)} kcal per serving</Text>
             </Pressable>
           ))
         )
       ) : null}
-      {tab === 'newFood' ? <NewFood onCreated={(f) => { setFood(f); setServings(1); }} /> : null}
-      {tab === 'newRecipe' ? <NewRecipe onCreated={(r) => { setRecipe(r); setServings(1); }} /> : null}
+      {tab === 'newFood' ? (
+        <NewFood
+          // Mid-recipe: the new ingredient goes back into the draft, not into a meal.
+          forRecipe={draft.items.length > 0 || draft.name.trim() !== ''}
+          onCreated={(f) => {
+            if (draft.items.length > 0 || draft.name.trim() !== '') {
+              setDraft((d) => ({ ...d, items: [...d.items, { food: f, grams: f.servingG }] }));
+              setTab('newRecipe');
+              return;
+            }
+            setFood(f);
+            setServings(1);
+          }}
+        />
+      ) : null}
+      {tab === 'newRecipe' ? (
+        <NewRecipe
+          draft={draft}
+          onDraft={setDraft}
+          onCreateIngredient={() => setTab('newFood')}
+          onCreated={(r) => {
+            setDraft(EMPTY_DRAFT);
+            // Saving a recipe is not logging a meal. It goes to the list; logging it
+            // is a separate choice, with its own meal and date.
+            toast(`Saved ${r.name}`);
+            setTab('recipes');
+          }}
+        />
+      ) : null}
     </Sheet>
   );
 }
@@ -144,16 +253,17 @@ function Field({ label, value, onChange, numeric = true }: { label: string; valu
   return (
     <View style={styles.field}>
       <Text style={styles.muted}>{label}</Text>
-      <TextInput value={value} onChangeText={onChange} keyboardType={numeric ? 'decimal-pad' : 'default'} style={styles.input} />
+      <TextInput value={value} onChangeText={onChange} keyboardType={numeric ? 'decimal-pad' : 'default'} style={styles.input} accessibilityLabel={label} />
     </View>
   );
 }
 
-function NewFood({ onCreated }: { onCreated: (f: Food) => void }) {
+function NewFood({ onCreated, forRecipe }: { onCreated: (f: Food) => void; forRecipe: boolean }) {
   const [f, setF] = useState({ name: '', servingLabel: '1 serving', servingG: '100', kcal: '', protein: '', carb: '', fat: '' });
   const set = (k: keyof typeof f) => (v: string) => setF({ ...f, [k]: v });
   return (
     <View>
+      {forRecipe ? <Text style={styles.muted}>Your recipe is kept as it was. Saving this takes you straight back to it.</Text> : null}
       <Field label="Name" value={f.name} onChange={set('name')} numeric={false} />
       <Field label='Serving, as you say it ("1 roti", "1 katori")' value={f.servingLabel} onChange={set('servingLabel')} numeric={false} />
       <View style={styles.pair}>
@@ -166,7 +276,8 @@ function NewFood({ onCreated }: { onCreated: (f: Food) => void }) {
         <Field label="Fat g" value={f.fat} onChange={set('fat')} />
       </View>
       <PrimaryButton
-        label="Save food"
+        label={forRecipe ? 'Save and add to the recipe' : 'Save food'}
+        size="gym"
         style={styles.gap}
         disabled={!f.name.trim() || num(f.servingG) <= 0}
         onPress={() =>
@@ -190,45 +301,72 @@ function NewFood({ onCreated }: { onCreated: (f: Food) => void }) {
   );
 }
 
-function NewRecipe({ onCreated }: { onCreated: (r: Recipe) => void }) {
-  const [name, setName] = useState('');
-  const [servings, setServings] = useState(1);
+function NewRecipe({
+  draft,
+  onDraft,
+  onCreateIngredient,
+  onCreated,
+}: {
+  draft: RecipeDraft;
+  onDraft: (d: RecipeDraft) => void;
+  onCreateIngredient: () => void;
+  onCreated: (r: Recipe) => void;
+}) {
   const [q, setQ] = useState('');
-  const [items, setItems] = useState<{ food: Food; grams: number }[]>([]);
   // Something to tap before you have typed anything. Requiring a search first made
   // the whole screen look broken when the search happened to match nothing.
   const results = useMemo(() => (q.trim() ? searchFoods(q, 8) : quickAddFoods(6)), [q]);
-  const add = (f: Food) => { setItems((prev) => [...prev, { food: f, grams: f.servingG }]); setQ(''); };
-  const blocker = !name.trim() ? 'Name the recipe to save it.' : items.length === 0 ? 'Add at least one ingredient.' : null;
+  const add = (f: Food) => {
+    onDraft({ ...draft, items: [...draft.items, { food: f, grams: f.servingG }] });
+    setQ('');
+  };
+  const blocker = !draft.name.trim() ? 'Name the recipe to save it.' : draft.items.length === 0 ? 'Add at least one ingredient.' : null;
 
   return (
     <View>
-      <Field label="Recipe name" value={name} onChange={setName} numeric={false} />
-      <Stepper label="Makes servings" value={servings} step={1} min={1} max={20} onChange={setServings} />
-      <Text style={[styles.muted, styles.gap]}>
-        {items.length === 0 ? 'Ingredients — none yet' : `Ingredients · ${items.length}`}
-      </Text>
-      {items.map((it, i) => (
+      <Field label="Recipe name" value={draft.name} onChange={(v) => onDraft({ ...draft, name: v })} numeric={false} />
+      <Stepper label="Makes servings" value={draft.servings} step={1} min={1} max={20} onChange={(v) => onDraft({ ...draft, servings: v })} />
+      <Text style={[styles.muted, styles.gap]}>{draft.items.length === 0 ? 'Ingredients — none yet' : `Ingredients · ${draft.items.length}`}</Text>
+      {draft.items.map((it, i) => (
         <View key={`${it.food.id}-${i}`} style={styles.pair}>
           <Text style={[styles.name, styles.flex]} numberOfLines={1}>
             {it.food.name}
           </Text>
           <View style={styles.flex}>
-            <Stepper value={it.grams} step={10} min={0} max={2000} suffix="g" onChange={(g) => setItems(items.map((x, j) => (j === i ? { ...x, grams: g } : x)))} />
+            <Stepper
+              value={it.grams}
+              step={10}
+              min={0}
+              max={2000}
+              suffix="g"
+              onChange={(g) => onDraft({ ...draft, items: draft.items.map((x, j) => (j === i ? { ...x, grams: g } : x)) })}
+            />
           </View>
+          {/* Removing an ingredient, rather than setting it to zero grams and hoping. */}
+          <IconButton
+            icon="close"
+            accessibilityLabel={`Remove ${it.food.name} from the recipe`}
+            onPress={() => onDraft({ ...draft, items: draft.items.filter((_, j) => j !== i) })}
+          />
         </View>
       ))}
-      <TextInput value={q} onChangeText={setQ} placeholder="Search for an ingredient" placeholderTextColor={color.textFaint} style={styles.input} />
-      {results.length === 0 ? (
-        <Text style={[styles.muted, styles.gap]}>Nothing matches “{q.trim()}”. Add it under New food first.</Text>
-      ) : (
-        results.map((f) => (
-          <Pressable key={f.id} style={styles.item} onPress={() => add(f)} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}>
-            <Text style={styles.name}>{f.name}</Text>
-            <Text style={styles.muted}>{f.servingLabel ?? `${f.servingG} g`}</Text>
-          </Pressable>
-        ))
-      )}
+      <TextInput
+        value={q}
+        onChangeText={setQ}
+        placeholder="Search for an ingredient"
+        placeholderTextColor={color.textFaint}
+        style={[styles.input, styles.gap]}
+        accessibilityLabel="Search for an ingredient"
+      />
+      {results.length === 0 ? <Text style={[styles.muted, styles.gap]}>Nothing matches “{q.trim()}”.</Text> : null}
+      {results.map((f) => (
+        <Pressable key={f.id} style={styles.item} onPress={() => add(f)} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}>
+          <Text style={styles.name}>{f.name}</Text>
+          <Text style={styles.muted}>{f.servingLabel ?? `${f.servingG} g`}</Text>
+        </Pressable>
+      ))}
+      <PrimaryButton label="Create a new ingredient" tone="neutral" style={styles.gap} onPress={onCreateIngredient} />
+
       {/* Says what is missing instead of leaving a grey button and no explanation. */}
       {blocker ? <Text style={[styles.muted, styles.gap]}>{blocker}</Text> : null}
       <PrimaryButton
@@ -236,7 +374,7 @@ function NewRecipe({ onCreated }: { onCreated: (r: Recipe) => void }) {
         size="gym"
         style={styles.gap}
         disabled={blocker !== null}
-        onPress={() => onCreated(createRecipe(name, servings, items.map((it) => ({ foodId: it.food.id, grams: it.grams }))))}
+        onPress={() => onCreated(createRecipe(draft.name, draft.servings, draft.items.map((it) => ({ foodId: it.food.id, grams: it.grams }))))}
       />
     </View>
   );
@@ -254,8 +392,10 @@ const styles = StyleSheet.create({
   item: { paddingVertical: space.md, borderBottomWidth: 1, borderBottomColor: color.border, minHeight: hit.default },
   name: { ...font.body, color: color.text },
   strong: { color: color.text, fontWeight: '600' },
+  label: { ...font.label, color: color.text, fontWeight: '600', marginBottom: space.sm },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   macro: { ...font.label, ...font.numeric, color: color.textMuted, marginVertical: space.lg },
+  mealPick: { marginBottom: space.md },
   gap: { marginTop: space.md },
   field: { flex: 1, marginTop: space.sm },
   pair: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
