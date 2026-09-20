@@ -17,11 +17,8 @@ import { deleteBackup, downloadBackup, listBackups, uploadBackup, type DriveFile
 /** Keep the last five, per docs/07. Older ones are pruned after a successful upload. */
 const KEEP = 5;
 const LAST_BACKUP_KEY = 'backup:lastAt';
-const AUTO_KEY = 'backup:auto';
 
 export const lastBackupAt = (): string | null => getRaw(LAST_BACKUP_KEY) ?? null;
-export const autoBackupOn = (): boolean => getRaw(AUTO_KEY) === 'true';
-export const setAutoBackup = (on: boolean): void => setRaw(AUTO_KEY, String(on));
 
 function stamp(): string {
   // iron-2026-09-12-1614.db.enc — sorts chronologically as a plain string.
@@ -72,17 +69,19 @@ export async function backupNow(): Promise<string> {
   return name;
 }
 
-/**
- * Backs up at most once a day, and only when asked to. Called on app start; any
- * failure is swallowed, because a backup must never be something the user waits for
- * or gets interrupted by (AGENTS.md §1.4).
+/*
+ * There is deliberately no backupIfDue() here any more.
+ *
+ * AGENTS.md §1 allows exactly one network call, "an optional, USER-INITIATED
+ * encrypted backup". A daily upload fired from the root layout on every cold start
+ * is not user-initiated, and connecting Drive used to switch it on by itself — so
+ * ticking a box to reach a restore also signed you up to a background upload.
+ * The switch, the startup call and the "on Wi-Fi, in the background" copy that
+ * described a Wi-Fi check nothing implemented are all gone (UX-12, UX-13).
+ *
+ * Backing up is Back up now. If scheduled backups are wanted later they need a real
+ * design — a constraint-aware job, a visible state, and words that match it.
  */
-export async function backupIfDue(): Promise<void> {
-  if (!autoBackupOn()) return;
-  const last = lastBackupAt();
-  if (last && Date.now() - Date.parse(last) < 24 * 60 * 60 * 1000) return;
-  await backupNow().catch(() => undefined);
-}
 
 export type { DriveFile };
 export { listBackups };

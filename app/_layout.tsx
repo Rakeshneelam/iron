@@ -9,14 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ToastHost } from '@/components/Toast';
 import { initDatabase } from '@/db/client';
-import { backupIfDue } from '@/services/backup';
-import {
-  ensureChannels,
-  registerCategories,
-  requestPermissions,
-  rescheduleAll,
-  useNotificationResponses,
-} from '@/services/notifications';
+import { ensureChannels, registerCategories, rescheduleAll, useNotificationResponses } from '@/services/notifications';
 import { color, font, space } from '@/theme/tokens';
 
 export const unstable_settings = { initialRouteName: '(tabs)' };
@@ -74,7 +67,15 @@ export default function RootLayout() {
   );
 }
 
-/** Notification plumbing. Failures here must never block the app. */
+/**
+ * Notification plumbing. Failures here must never block the app.
+ *
+ * Deliberately absent: the permission prompt and the daily backup that used to run
+ * here. Asking for notifications before the app has been seen at all is a request
+ * with no context attached, and the answer is usually no — for good; the ask now
+ * happens in Reminders, when a reminder is switched on. And a background upload on
+ * every cold start is not the "user-initiated" backup AGENTS.md §1 permits (UX-12).
+ */
 function AppServices() {
   useNotificationResponses();
   useEffect(() => {
@@ -82,13 +83,10 @@ function AppServices() {
       try {
         await ensureChannels();
         await registerCategories();
-        await requestPermissions();
         await rescheduleAll();
       } catch {
         /* reminders are optional */
       }
-      // Silent, at most daily, and never awaited by anything the user is doing.
-      void backupIfDue();
     })();
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'background' || s === 'active') void rescheduleAll();

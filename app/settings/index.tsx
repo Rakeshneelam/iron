@@ -95,10 +95,7 @@ export default function SettingsScreen() {
         <LinkRow title="Battery optimisation" hint="Lets the rest timer and reminders run with the screen off." />
       </Card>
 
-      <SectionHeader title="Account and data" />
-      <Card onPress={() => router.push('/settings/account')}>
-        <LinkRow title="Account" hint="Sign in on another phone, email preferences, delete your account." />
-      </Card>
+      <SectionHeader title="Your data" />
       <Card onPress={() => router.push('/settings/backup')}>
         <LinkRow title="Backup and restore" hint="Google Drive, your recovery phrase, and putting a backup back." />
       </Card>

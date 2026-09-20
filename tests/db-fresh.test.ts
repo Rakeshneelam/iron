@@ -138,6 +138,22 @@ describe('a fresh install', () => {
     setSetting('manualProteinG', null);
   });
 
+  /**
+   * UX-12: setup defaulted weight to 70 kg and wrote a weigh-in unconditionally, so
+   * every install opened with a measurement nobody took and a trend line that began
+   * at a fiction. Skipping the field must leave the history genuinely empty, and
+   * everything downstream must still work off a calculation.
+   */
+  test('with no weigh-in the history is empty and targets still work off a calculation', () => {
+    assert.deepEqual(listWeighIns(), []);
+    assert.equal(getLatestWeight(), undefined);
+
+    const t = computeTargets(todayISO());
+    assert.ok(t.kcal > 0 && t.proteinG > 0);
+    assert.equal(t.basis, 'estimated', 'a fallback is labelled an estimate, never a measurement');
+    assert.ok(hydrationTarget().ml > 0);
+  });
+
   test('the exercise catalogue is there so the library is never empty', () => {
     const ctx = suggestionContext();
     assert.deepEqual(ctx.weekly, {});

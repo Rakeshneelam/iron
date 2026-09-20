@@ -58,6 +58,16 @@ export async function ensureChannels(): Promise<void> {
   });
 }
 
+/** Asks the OS without prompting. Lets a screen show the real state before nagging. */
+export async function notificationsAllowed(): Promise<boolean> {
+  return (await Notifications.getPermissionsAsync()).granted;
+}
+
+/**
+ * Prompts if it has to. Called when someone switches a reminder ON, never at
+ * startup: a permission dialog before the app has been seen is a question with no
+ * context, and Android only lets it be asked once (UX-12).
+ */
 export async function requestPermissions(): Promise<boolean> {
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
