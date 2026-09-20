@@ -2,12 +2,12 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast, TrendChart } from '@/components';
+import { Card, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast } from '@/components';
 import { useLive } from '@/db/live';
 import { getSlot, updateSlot } from '@/db/repositories/program';
 import { activeRecommendations, dismissRecommendation, recentWorkouts, undismissRecommendation, weekInsights, weekSummary } from '@/db/repositories/progress';
 import { getRaw, setRaw, setSetting, useSettings } from '@/db/repositories/settings';
-import { buildDeloadInput, e1rmSeries, weeklySetsPerMuscle } from '@/db/repositories/stats';
+import { buildDeloadInput, weeklySetsPerMuscle } from '@/db/repositories/stats';
 import { shouldDeload } from '@/engine/progression';
 import type { Recommendation } from '@/engine/recommend';
 import { siteDef } from '@/features/body/sites';
@@ -21,6 +21,8 @@ import { color, font, hit, space } from '@/theme/tokens';
 
 /** Suggestions shown before the "All N" toggle. */
 const SHOWN_RECS = 3;
+/** Lifts shown before "View all" — which used to not exist at all (UX-09). */
+const SHOWN_LIFTS = 8;
 
 const volume = (kgTotal: number) => (kgTotal >= 1000 ? `${(kgTotal / 1000).toFixed(1)}k kg` : `${Math.round(kgTotal)} kg`);
 const change = (now: number, before: number) => (before > 0 ? `${signed(((now - before) / before) * 100, 0)}% vs last wk` : undefined);
@@ -59,19 +61,13 @@ export default function ProgressScreen() {
   const deloadSince = settings.lastDeloadDate;
   const deloadRunning = deloadSince !== null && daysBetweenISO(deloadSince, today) < 7;
 
-  const [selected, setSelected] = useState<string | null>(null);
   // Three at a time: ten stacked cards of identical shape push everything below them
   // off the screen and stop reading as advice.
   const [allRecs, setAllRecs] = useState(false);
+  const [allLifts, setAllLifts] = useState(false);
   const [showMuscles, setShowMuscles] = useState(false);
+  const [showBody, setShowBody] = useState(false);
   const { week, prev } = data;
-  const sel = week.lifts.some((l) => l.exerciseId === selected) ? selected : (week.lifts[0]?.exerciseId ?? null);
-  const series = useLive(() => (sel ? e1rmSeries(sel, 30) : []), ['exercise_session_stat'], [sel]);
-  const raw = series.map((p, i) => ({ x: i, y: p.e1rm }));
-  const trend = raw.map((p, i) => {
-    const w = raw.slice(Math.max(0, i - 2), i + 1);
-    return { x: p.x, y: w.reduce((a, b) => a + b.y, 0) / w.length };
-  });
 
   const done = week.completed + week.partial;
   // One weigh-in makes start === end, and "+0.0 kg" reads as a measured result
@@ -110,6 +106,44 @@ export default function ProgressScreen() {
         </View>
       }
     >
+      {/* Concise totals first: the week is the question this screen answers. */}
+      <SectionHeader
+        title={isThisWeek ? 'This week' : `Week of ${fmtDayLabel(weekStart)}`}
+        hint={empty && isThisWeek ? 'Nothing logged yet. Start a workout and these fill in.' : undefined}
+      />
+      <View style={styles.tiles}>
+        <StatTile
+          label="Workouts"
+          value={week.plannedDays ? `${done} / ${week.plannedDays}` : String(done)}
+          tone={week.plannedDays && done >= week.plannedDays ? 'positive' : 'default'}
+        />
+        <StatTile label="Time" value={`${week.minutes} min`} tone="muted" />
+        <StatTile label="Volume" value={volume(week.tonnage)} tone="muted" hint={change(week.tonnage, prev.tonnage)} />
+      </View>
+      {empty ? null : (
+        <Text style={styles.note}>
+          {week.sets} sets · {week.exercises} different exercises
+          {week.skipped ? ` · ${week.skipped} skipped` : ''}
+          {week.cancelled ? ` · ${week.cancelled} cancelled` : ''}
+        </Text>
+      )}
+
+      {/*
+        Always here, whether or not this particular week has anything in it. It
+        used to render only when recent workouts existed and sat at the very
+        bottom, which is the one place you would not look for "find a workout".
+      */}
+      <Card onPress={() => router.push('/history')}>
+        <View style={styles.linkRow}>
+          <Icon name="progress" size={20} color={color.accent} />
+          <View style={styles.flex1}>
+            <Text style={styles.cardTitle}>Workout history</Text>
+            <Text style={styles.muted}>Search every workout you have logged, and correct one.</Text>
+          </View>
+          <Icon name="chevronRight" size={20} color={color.textMuted} />
+        </View>
+      </Card>
+
       {insights.length ? (
         <Card>
           {insights.map((t) => (
@@ -121,25 +155,32 @@ export default function ProgressScreen() {
         </Card>
       ) : null}
 
-      {deloadRunning && deloadSince ? (
+      {/*
+        Deloading is something you do now, so its controls only exist on the
+        current week. Browsing March and being offered "Start deload week" was an
+        action about today filed under a date three months ago (UX-09).
+      */}
+      {!isThisWeek ? null : deloadRunning && deloadSince ? (
         <Card tone="positive">
           <Text style={styles.cardTitle}>Deload week in progress</Text>
           <Text style={styles.muted}>Half the sets, a bit lighter. Normal targets return {fmtDayLabel(addDays(deloadSince, 7))}.</Text>
+          {/* Reversible, so it happens at once with an Undo rather than behind an
+              "are you sure?" — confirm() is for destroying data (AGENTS §1.4). */}
           <PrimaryButton
             label="End deload now"
             tone="neutral"
             style={styles.gap}
-            onPress={() =>
-              confirm({
-                title: 'End the deload week?',
-                message: 'Normal sets and loads come back from your next workout.',
-                confirmLabel: 'End deload',
-                onConfirm: () => setSetting('lastDeloadDate', null),
-              })
-            }
+            onPress={() => {
+              const was = deloadSince;
+              setSetting('lastDeloadDate', null);
+              toast('Deload ended — normal targets from your next workout', {
+                label: 'Undo',
+                onPress: () => setSetting('lastDeloadDate', was),
+              });
+            }}
           />
         </Card>
-      ) : deload.deload && !deloadDismissed && isThisWeek ? (
+      ) : deload.deload && !deloadDismissed ? (
         <Card tone="warning">
           <Text style={styles.cardTitle}>A lighter week might help</Text>
           {deload.reasons.map((r) => (
@@ -148,7 +189,15 @@ export default function ProgressScreen() {
             </Text>
           ))}
           <View style={styles.row}>
-            <PrimaryButton label="Start deload week" style={styles.flex1} onPress={() => setSetting('lastDeloadDate', today)} />
+            <PrimaryButton
+              label="Start deload week"
+              style={styles.flex1}
+              onPress={() => {
+                const was = settings.lastDeloadDate;
+                setSetting('lastDeloadDate', today);
+                toast('Deload week started', { label: 'Undo', onPress: () => setSetting('lastDeloadDate', was) });
+              }}
+            />
             <PrimaryButton label="Not now" tone="neutral" onPress={() => setRaw(dismissKey, 'true')} />
           </View>
         </Card>
@@ -160,11 +209,7 @@ export default function ProgressScreen() {
             title="Suggestions"
             right={
               recs.length > SHOWN_RECS ? (
-                <PrimaryButton
-                  label={allRecs ? 'Show fewer' : `All ${recs.length}`}
-                  tone="ghost"
-                  onPress={() => setAllRecs(!allRecs)}
-                />
+                <PrimaryButton label={allRecs ? 'Show fewer' : `All ${recs.length}`} tone="ghost" onPress={() => setAllRecs(!allRecs)} />
               ) : undefined
             }
           />
@@ -186,69 +231,80 @@ export default function ProgressScreen() {
         </>
       ) : null}
 
-      <SectionHeader
-        title="Consistency"
-        hint={empty && isThisWeek ? 'Nothing logged yet. Start a workout and these fill in.' : undefined}
-      />
-      <View style={styles.tiles}>
-        <StatTile label="Workouts" value={week.plannedDays ? `${done} / ${week.plannedDays}` : String(done)} tone={week.plannedDays && done >= week.plannedDays ? 'positive' : 'default'} />
-        <StatTile label="Skipped" value={String(week.skipped)} tone="muted" hint={week.cancelled ? `${week.cancelled} cancelled` : undefined} />
-        <StatTile label="Time" value={`${week.minutes} min`} tone="muted" />
-      </View>
-
-      {empty ? null : (
+      {week.lifts.length ? (
         <>
-          <SectionHeader title="Training" />
-          <View style={styles.tiles}>
-            <StatTile label="Sets" value={String(week.sets)} hint={change(week.sets, prev.sets)} />
-            <StatTile label="Reps" value={String(week.reps)} hint={change(week.reps, prev.reps)} />
-            <StatTile label="Volume" value={volume(week.tonnage)} hint={change(week.tonnage, prev.tonnage)} />
-          </View>
-          <Text style={styles.note}>{week.exercises} different exercises.</Text>
-
-          {week.lifts.length ? (
-            <>
-              <SectionHeader title="Lifts" />
-              <Card style={styles.list}>
-                {week.lifts.slice(0, 8).map((l, i) => {
-                  const d = l.prevBestE1rm === null ? null : l.bestE1rm - l.prevBestE1rm;
-                  const w = l.prevTopWeight === null ? null : l.topWeight - l.prevTopWeight;
-                  return (
-                    <Pressable key={l.exerciseId} style={[styles.liftRow, i > 0 && styles.divider]} onPress={() => setSelected(l.exerciseId)}>
-                      <Text style={[styles.body, styles.flex1, l.exerciseId === sel && styles.accent]} numberOfLines={1}>
-                        {l.name}
-                      </Text>
-                      <Text style={styles.value}>{kgNum(l.topWeight)} kg</Text>
-                      <Text style={[styles.delta, { color: d !== null && d > 0.05 ? color.positive : color.textMuted }]}>
-                        {w === null ? 'new' : w !== 0 ? `${signed(w)} kg` : d !== null && d > 0.05 ? 'more reps' : '='}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </Card>
-              {sel && raw.length > 1 ? (
-                <Card>
-                  <Text style={styles.caption}>{week.lifts.find((l) => l.exerciseId === sel)?.name} · estimated 1-rep max</Text>
-                  <TrendChart trend={trend} raw={raw} height={140} format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`} />
-                </Card>
-              ) : null}
-            </>
-          ) : null}
+          <SectionHeader
+            title="Lifts"
+            hint={isThisWeek ? 'This week. Tap one for its full history.' : `Week of ${fmtDayLabel(weekStart)}. Tap one for its full history.`}
+            right={
+              week.lifts.length > SHOWN_LIFTS ? (
+                <PrimaryButton
+                  label={allLifts ? 'Show fewer' : `View all ${week.lifts.length}`}
+                  tone="ghost"
+                  onPress={() => setAllLifts(!allLifts)}
+                />
+              ) : undefined
+            }
+          />
+          <Card style={styles.list}>
+            {(allLifts ? week.lifts : week.lifts.slice(0, SHOWN_LIFTS)).map((l, i) => {
+              const d = l.prevBestE1rm === null ? null : l.bestE1rm - l.prevBestE1rm;
+              const w = l.prevTopWeight === null ? null : l.topWeight - l.prevTopWeight;
+              const delta = w === null ? 'new' : w !== 0 ? `${signed(w)} kg` : d !== null && d > 0.05 ? 'more reps' : '=';
+              return (
+                <Pressable
+                  key={l.exerciseId}
+                  style={[styles.liftRow, i > 0 && styles.divider]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${l.name}: top set ${kgNum(l.topWeight)} kg, ${delta}. Opens its history.`}
+                  /*
+                   * Straight to the exercise page, which already owns the full
+                   * e1RM chart and every session of it. Progress used to draw a
+                   * second chart of its own underneath this list (UX-09).
+                   */
+                  onPress={() => router.push(`/exercise/${l.exerciseId}`)}
+                >
+                  <Text style={[styles.body, styles.flex1]} numberOfLines={1}>
+                    {l.name}
+                  </Text>
+                  <Text style={styles.value}>{kgNum(l.topWeight)} kg</Text>
+                  <Text style={[styles.delta, { color: d !== null && d > 0.05 ? color.positive : color.textMuted }]}>{delta}</Text>
+                  <Icon name="chevronRight" size={16} color={color.textMuted} />
+                </Pressable>
+              );
+            })}
+          </Card>
         </>
-      )}
+      ) : null}
 
-      <SectionHeader title="Body & water" />
-      <Card style={styles.list}>
-        <Row label="Bodyweight trend" value={bw === null ? '—' : `${signed(bw, 1)} kg`} />
-        {week.measurements.map((m) => {
-          const def = siteDef(m.site);
-          return <Row key={m.site} label={def.label} value={`${kgNum(m.value)} ${def.unit}${m.prev !== null ? `  (${signed(m.value - m.prev)})` : ''}`} />;
-        })}
-        <Row label="Water target hit" value={week.water.days ? `${week.water.daysHit} / ${week.water.days} days` : '—'} />
-        {week.water.daysLogged ? <Row label="Average water" value={ml(week.water.avgMl)} /> : null}
-      </Card>
+      {/* Detail, collapsed. Open it when you want it; it is not the headline. */}
+      <Pressable
+        style={styles.toggle}
+        onPress={() => setShowBody(!showBody)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: showBody }}
+      >
+        <SectionHeader title="Body & water" />
+        <Icon name={showBody ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
+      </Pressable>
+      {showBody ? (
+        <Card style={styles.list}>
+          <Row label="Bodyweight trend" value={bw === null ? '—' : `${signed(bw, 1)} kg`} />
+          {week.measurements.map((m) => {
+            const def = siteDef(m.site);
+            return <Row key={m.site} label={def.label} value={`${kgNum(m.value)} ${def.unit}${m.prev !== null ? `  (${signed(m.value - m.prev)})` : ''}`} />;
+          })}
+          <Row label="Water target hit" value={week.water.days ? `${week.water.daysHit} / ${week.water.days} days` : '—'} />
+          {week.water.daysLogged ? <Row label="Average water" value={ml(week.water.avgMl)} /> : null}
+        </Card>
+      ) : null}
 
-      <Pressable style={styles.toggle} onPress={() => setShowMuscles(!showMuscles)} accessibilityRole="button">
+      <Pressable
+        style={styles.toggle}
+        onPress={() => setShowMuscles(!showMuscles)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: showMuscles }}
+      >
         <SectionHeader title="Sets per muscle" />
         <Icon name={showMuscles ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
       </Pressable>
@@ -256,13 +312,16 @@ export default function ProgressScreen() {
 
       {workouts.length ? (
         <>
-          <SectionHeader
-            title="Recent workouts"
-            right={<PrimaryButton label="See all" tone="ghost" onPress={() => router.push('/history')} />}
-          />
+          <SectionHeader title="Recent workouts" right={<PrimaryButton label="See all" tone="ghost" onPress={() => router.push('/history')} />} />
           <Card style={styles.list}>
             {workouts.map((w, i) => (
-              <Pressable key={w.session.id} style={[styles.liftRow, i > 0 && styles.divider]} onPress={() => router.push(`/session/summary/${w.session.id}`)}>
+              <Pressable
+                key={w.session.id}
+                style={[styles.liftRow, i > 0 && styles.divider]}
+                accessibilityRole="button"
+                accessibilityLabel={`${w.dayLabel ?? 'Workout'}, ${fmtDayLabel(w.session.date)}, ${STATUS_LABEL[w.session.status]}`}
+                onPress={() => router.push(`/session/summary/${w.session.id}`)}
+              >
                 <View style={styles.flex1}>
                   <Text style={styles.body} numberOfLines={1}>
                     {w.dayLabel ?? 'Workout'}
@@ -278,6 +337,7 @@ export default function ProgressScreen() {
           </Card>
         </>
       ) : null}
+
     </Screen>
   );
 }
@@ -311,7 +371,8 @@ const styles = StyleSheet.create({
   value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
   delta: { ...font.label, ...font.numeric, minWidth: 64, textAlign: 'right' },
   kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, gap: space.md },
-  toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: hit.default },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   insight: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start', paddingVertical: space.xs },
   insightDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.accent, marginTop: 8 },
 });

@@ -306,6 +306,47 @@ export function deleteSet(id: string): void {
   db.delete(schema.setLog).where(eq(schema.setLog.id, id)).run();
 }
 
+/**
+ * Corrects a set in a workout that is already finished, and brings the derived
+ * aggregates back in line with it.
+ *
+ * Fixing yesterday used to mean reopening yesterday's session, which rewrote its
+ * endedAt and status, put it back on Today as the active workout, and — if you were
+ * mid-workout — refused outright (UX-09). `exercise_session_stat` is derived and
+ * regenerable by design (docs/03), so a correction is: change the row, recompute
+ * that session's stats, done. The session's own timestamps, status and place in the
+ * plan are never touched, and today's workout is not involved at all.
+ */
+export function correctSet(
+  id: string,
+  patch: Partial<{ weight: number; reps: number; rir: number; painFlag: boolean; isWarmup: boolean }>,
+): void {
+  const row = db.select({ sessionId: schema.setLog.sessionId }).from(schema.setLog).where(eq(schema.setLog.id, id)).get();
+  if (!row) return;
+  db.transaction(() => {
+    updateSet(id, patch);
+    writeSessionStats(row.sessionId);
+  });
+}
+
+/** Removes a set from a finished workout and rebuilds that session's aggregates. */
+export function deleteSetCorrecting(id: string): void {
+  const row = db.select({ sessionId: schema.setLog.sessionId }).from(schema.setLog).where(eq(schema.setLog.id, id)).get();
+  if (!row) return;
+  db.transaction(() => {
+    deleteSet(id);
+    writeSessionStats(row.sessionId);
+  });
+}
+
+/** Undo for a corrected delete: the exact row back, aggregates with it. */
+export function restoreSetCorrecting(row: SetRow): void {
+  db.transaction(() => {
+    restoreSet(row);
+    writeSessionStats(row.sessionId);
+  });
+}
+
 export function getSessionSets(sessionId: string): SetRow[] {
   // rowid breaks ties: two sets can share a millisecond, and insertion order is the truth.
   return db.select().from(schema.setLog).where(eq(schema.setLog.sessionId, sessionId)).orderBy(asc(schema.setLog.loggedAt), asc(sql`rowid`)).all();
@@ -397,7 +438,12 @@ export interface SessionSummary {
     isPR: boolean;
     tonnage: number;
     sets: number;
-    topSet: string;
+    /** The top working set's raw numbers. The screen formats them in the exercise's
+     *  own unit — 600 stored against a plank is ten minutes, not a rep count. */
+    topWeight: number;
+    topReps: number;
+    /** Every row, warm-ups included, so history can expand and correct them (UX-09). */
+    rows: SetRow[];
   }[];
 }
 
@@ -441,7 +487,9 @@ export function getSessionSummary(sessionId: string): SessionSummary | undefined
       isPR: allTimeBest !== null && best > allTimeBest + 0.05,
       tonnage,
       sets: work.length,
-      topSet: `${top.weight}×${top.reps}`,
+      topWeight: top.weight,
+      topReps: top.reps,
+      rows: group,
     });
   }
 

@@ -7,22 +7,35 @@ import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
 import { Stepper } from '@/components/Stepper';
 import { toast } from '@/components/Toast';
-import { deleteSet, restoreSet, updateSet, type SetRow } from '@/db/repositories/sessions';
+import { correctSet, deleteSet, deleteSetCorrecting, restoreSet, restoreSetCorrecting, updateSet, type SetRow } from '@/db/repositories/sessions';
 import { space } from '@/theme/tokens';
 
 import { RIR_OPTIONS } from './SetControls';
 
+export interface EditSetSheetProps {
+  set: SetRow | null;
+  step: number;
+  /**
+   * The set belongs to a workout that is already finished. Writes then also
+   * recompute that session's derived stats, so a correction made in history shows
+   * up in Progress and the next prescription without reopening the session (UX-09).
+   * During a live workout the stats are written at close, so this stays off.
+   */
+  correcting?: boolean;
+  onClose: () => void;
+}
+
 /** Tap a logged set to fix it. Delete is instant and undoable. */
-export function EditSetSheet({ set, step, onClose }: { set: SetRow | null; step: number; onClose: () => void }) {
+export function EditSetSheet({ set, step, correcting = false, onClose }: EditSetSheetProps) {
   return (
-    <Sheet visible={set !== null} onClose={onClose} title="Edit set">
+    <Sheet visible={set !== null} onClose={onClose} title={correcting ? 'Correct set' : 'Edit set'}>
       {/* Keyed by the set, so each opening starts from that set without an effect. */}
-      {set ? <EditSetForm key={set.id} set={set} step={step} onClose={onClose} /> : null}
+      {set ? <EditSetForm key={set.id} set={set} step={step} correcting={correcting} onClose={onClose} /> : null}
     </Sheet>
   );
 }
 
-function EditSetForm({ set, step, onClose }: { set: SetRow; step: number; onClose: () => void }) {
+function EditSetForm({ set, step, correcting, onClose }: { set: SetRow; step: number; correcting: boolean; onClose: () => void }) {
   const [weight, setWeight] = useState(set.weight);
   const [reps, setReps] = useState(set.reps);
   const [rir, setRir] = useState(set.rir);
@@ -58,7 +71,9 @@ function EditSetForm({ set, step, onClose }: { set: SetRow; step: number; onClos
           size="gym"
           style={styles.flex}
           onPress={() => {
-            updateSet(set.id, { weight, reps, rir, painFlag: pain, isWarmup: warmup });
+            const patch = { weight, reps, rir, painFlag: pain, isWarmup: warmup };
+            if (correcting) correctSet(set.id, patch);
+            else updateSet(set.id, patch);
             onClose();
           }}
         />
@@ -67,8 +82,9 @@ function EditSetForm({ set, step, onClose }: { set: SetRow; step: number; onClos
           tone="danger"
           size="gym"
           onPress={() => {
-            deleteSet(set.id);
-            toast('Set deleted', { label: 'Undo', onPress: () => restoreSet(set) });
+            if (correcting) deleteSetCorrecting(set.id);
+            else deleteSet(set.id);
+            toast('Set deleted', { label: 'Undo', onPress: () => (correcting ? restoreSetCorrecting(set) : restoreSet(set)) });
             onClose();
           }}
         />

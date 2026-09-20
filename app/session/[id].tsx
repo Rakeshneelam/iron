@@ -328,7 +328,7 @@ export default function SessionScreen() {
       toast('Nothing was logged, so the workout was discarded.');
       router.replace('/');
     } else {
-      router.replace(`/session/summary/${id}`);
+      router.replace(`/session/summary/${id}?just=1`);
     }
   };
 
