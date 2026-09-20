@@ -40,6 +40,7 @@ import { ExerciseInfoSheet } from '@/features/exercises/ExerciseInfoSheet';
 import { ExercisePicker } from '@/features/exercises/ExercisePicker';
 import { drillKit, toolsOf } from '@/features/profile';
 import { cancelWorkout } from '@/features/session/cancel';
+import { allSettled, isSettled, nextPendingIndex, type ExState } from '@/features/session/order';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { Elapsed } from '@/features/session/Elapsed';
 import { PlateSheet } from '@/features/session/PlateSheet';
@@ -53,7 +54,6 @@ import { kg, kgNum } from '@/lib/format';
 import { cancelRest, startRest, useRestTimer } from '@/services/restTimer';
 import { color, font, hit, layout, radius, space } from '@/theme/tokens';
 
-type ExState = 'done' | 'partial' | 'todo' | 'skipped';
 const STATE_COLOR: Record<ExState, string> = {
   done: color.positive,
   partial: color.accent,
@@ -94,6 +94,8 @@ export default function SessionScreen() {
   const [showWarmups, setShowWarmups] = useState(false);
   const [warmupOpen, setWarmupOpen] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
+  /** Set by "Add another set": keeps the inputs open past the target sets. */
+  const [addingExtra, setAddingExtra] = useState(false);
 
   const counts = useMemo(() => {
     const m = new Map<string, number>();
@@ -111,7 +113,7 @@ export default function SessionScreen() {
 
   // Resume where you were: the first exercise neither skipped nor finished.
   const firstOpen = useMemo(() => {
-    const i = plan.findIndex((p) => stateOf(p) === 'todo' || stateOf(p) === 'partial');
+    const i = plan.findIndex((p) => !isSettled(stateOf(p)));
     return i < 0 ? Math.max(0, plan.length - 1) : i;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.length]);
@@ -182,6 +184,7 @@ export default function SessionScreen() {
   if (prefilledFor !== suggestion) {
     setPrefilledFor(suggestion);
     setWhyOpen(false);
+    setAddingExtra(false);
     prefill();
   }
 
@@ -210,13 +213,22 @@ export default function SessionScreen() {
   }
 
   const day = session.routineDayId ? getDay(session.routineDayId) : undefined;
-  const doneCount = plan.filter((p) => stateOf(p) === 'done' || stateOf(p) === 'skipped').length;
+  const doneCount = plan.filter((p) => isSettled(stateOf(p))).length;
   const totalWork = sets.filter((s) => s.isWarmup === 0).length;
   const step = current?.exercise.loadStep ?? 2.5;
   const target = current ? targetOf(current) : 3;
   const currentState = current ? stateOf(current) : 'todo';
-  const next = plan.slice(idx + 1).find((p) => stateOf(p) !== 'done' && stateOf(p) !== 'skipped');
-  const nextIdx = next ? plan.indexOf(next) : -1;
+  /**
+   * The next exercise with work left — anywhere in the session, wrapping past the
+   * end. It used to search only after the selected one, so jumping to the last
+   * exercise, finishing it, and having three unfinished ones above left the primary
+   * action offering to end the workout (UX-04).
+   */
+  const exStates = plan.map(stateOf);
+  const nextIdx = nextPendingIndex(exStates, idx);
+  const next = nextIdx >= 0 ? plan[nextIdx] : undefined;
+  /** Everything is done or deliberately skipped: only now is Finish the normal end. */
+  const settled = allSettled(exStates);
 
   const entry = current ? CATALOG_BY_ID.get(current.exerciseId) : undefined;
   // Added-today exercises have no slot: a compound needs far more rest than a curl.
@@ -378,6 +390,29 @@ export default function SessionScreen() {
       ? `${suggestion.sets} ${suggestion.sets === 1 ? 'round' : 'sets'}${suggestion.weight > 0 ? ` · ${kg(suggestion.weight)}` : ''}`
       : `${suggestion.sets} × ${suggestion.repTarget[0]}–${suggestion.repTarget[1]}, leaving ${suggestion.targetRIR} in reserve`;
 
+  /**
+   * The line immediately above the inputs: what you did last time, what today's
+   * target is, and — when the entry has drifted off it — why, with one tap back to
+   * the planned prescription. Caption-sized on purpose: the numbers you are about
+   * to log are 34px, and the suggestion must never be louder than the entry (UX-04).
+   */
+  const lastWork = last?.sets.filter((sr) => sr.isWarmup === 0) ?? [];
+  const dockContext = current && suggestion && !current.skipped ? (
+    <View style={styles.dockContext}>
+      <Text style={styles.dockLine} numberOfLines={1}>
+        <Text style={styles.dockLabel}>{lastWork.length ? `Last ${fmtDayLabel(last?.date ?? '')}  ` : 'First time  '}</Text>
+        {lastWork.length ? lastWork.map((sr) => setText(sr.weight, sr.reps)).join('  ') : '—'}
+      </Text>
+      <View style={styles.dockTargetRow}>
+        <Text style={[styles.dockLine, styles.flex1]} numberOfLines={2}>
+          <Text style={styles.dockLabel}>{`Target  `}</Text>
+          {calibrating ? 'your pick' : `${setText(suggestion.weight, suggestion.repTarget[0])} · ${suggestion.reason}`}
+        </Text>
+        {differs ? <PrimaryButton label="Use target" tone="neutral" onPress={useSuggestion} /> : null}
+      </View>
+    </View>
+  ) : null;
+
   return (
     <View style={[styles.flex, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -391,18 +426,25 @@ export default function SessionScreen() {
             <Elapsed since={session.startedAt} />
           </Text>
         </View>
-        <IconButton icon="more" accessibilityLabel="Workout menu: exercises, finish, cancel" onPress={() => setMenuOpen(true)} />
+        {/* One clearly labelled way into the list. A 4dp segment was never a control. */}
+        <PrimaryButton
+          label={`Exercises · ${doneCount}/${plan.length}`}
+          tone="neutral"
+          size="gym"
+          accessibilityLabel={`Exercises: ${doneCount} of ${plan.length} done. Opens the list, where you can also add, reorder, finish early or cancel.`}
+          onPress={() => setMenuOpen(true)}
+        />
       </View>
 
-      <View style={styles.strip}>
+      {/* An indicator, not a row of 4dp tap targets. The list above is the control. */}
+      <View
+        style={styles.strip}
+        accessibilityRole="progressbar"
+        accessibilityLabel={`${doneCount} of ${plan.length} exercises done`}
+        importantForAccessibility="no-hide-descendants"
+      >
         {plan.map((p, i) => (
-          <Pressable
-            key={p.exerciseId}
-            onPress={() => goTo(i)}
-            hitSlop={{ top: 12, bottom: 12 }}
-            accessibilityLabel={`${p.exercise.name}: ${stateOf(p)}`}
-            style={[styles.stripSeg, { backgroundColor: STATE_COLOR[stateOf(p)] }, i === idx && styles.stripOn]}
-          />
+          <View key={p.exerciseId} style={[styles.stripSeg, { backgroundColor: STATE_COLOR[stateOf(p)] }, i === idx && styles.stripOn]} />
         ))}
       </View>
 
@@ -432,18 +474,26 @@ export default function SessionScreen() {
           <EmptyState message="No exercises yet." hint="Add one and you can start logging sets." actionLabel="Add exercise" onAction={() => setPicker({ mode: 'add' })} />
         ) : (
           <>
+            {/*
+              The chevrons are gone: the Exercises list and the dock's one primary
+              action own navigation now, and two more controls beside the name only
+              made the name smaller (UX-04).
+            */}
             <View style={styles.exHead}>
-              <IconButton icon="chevronLeft" accessibilityLabel="Previous exercise" disabled={idx === 0} onPress={() => goTo(idx - 1)} />
-              <Pressable style={styles.exTitle} onPress={() => setInfo(current.exercise)} accessibilityRole="button" accessibilityHint="Shows how to do it">
-                <View style={styles.exNameRow}>
-                  <Text style={styles.exName} numberOfLines={2}>
-                    {current.exercise.name}
-                  </Text>
-                  <Icon name="info" size={18} color={color.textMuted} />
-                </View>
+              <View style={styles.exTitle}>
+                <Text style={styles.exName} numberOfLines={2}>
+                  {current.exercise.name}
+                </Text>
                 <Text style={styles.meta}>{meta}</Text>
-              </Pressable>
-              <IconButton icon="chevronRight" accessibilityLabel="Next exercise" disabled={idx >= plan.length - 1} onPress={() => goTo(idx + 1)} />
+              </View>
+              <IconButton
+                icon="info"
+                size="gym"
+                tone="neutral"
+                label="How-to"
+                accessibilityLabel={`How to do ${current.exercise.name}`}
+                onPress={() => setInfo(current.exercise)}
+              />
             </View>
 
             {notes.get(current.exerciseId) ? (
@@ -565,43 +615,27 @@ export default function SessionScreen() {
               </View>
             ) : null}
 
-            <Text style={styles.last}>
-              <Text style={styles.lastLabel}>{last ? `Last time, ${fmtDayLabel(last.date)}   ` : ''}</Text>
-              {last
-                ? last.sets
-                    .filter((s) => s.isWarmup === 0)
-                    .map((s) => setText(s.weight, s.reps))
-                    .join('   ')
-                : 'First time on this exercise.'}
-            </Text>
-
+            {/* A status line. The button that used to live here is the dock's. */}
             {currentState === 'done' ? (
-              <Card tone="positive">
-                <View style={styles.rowBetween}>
-                  <View style={styles.flex1}>
-                    <Text style={styles.body}>All {target} sets done</Text>
-                    <Text style={styles.caption}>{next ? `Next: ${next.exercise.name}` : 'That was the last one.'}</Text>
-                  </View>
-                  {next ? (
-                    <PrimaryButton label="Next" icon={<Icon name="chevronRight" size={18} color={color.onAccent} />} onPress={() => goTo(nextIdx)} />
-                  ) : (
-                    <PrimaryButton label="Finish" onPress={finish} />
-                  )}
-                </View>
-              </Card>
+              <Text style={styles.doneLine}>
+                All {target} sets done{next ? ` · next: ${next.exercise.name}` : ' · that was the last one'}
+              </Text>
             ) : null}
 
+            {/*
+              Only what belongs to THIS exercise. Add exercise moved into the
+              Exercises sheet, How-to sits beside the name, and every one of these
+              is a gym-sized target (UX-04).
+            */}
             <View style={styles.actions}>
-              <IconButton icon="swap" label="Swap" accessibilityLabel="Swap this exercise for today" tone="neutral" onPress={() => setPicker({ mode: 'swap', from: current })} />
+              <IconButton icon="swap" size="gym" label="Swap" accessibilityLabel="Swap this exercise for today" tone="neutral" onPress={() => setPicker({ mode: 'swap', from: current })} />
               {current.adHoc ? (
-                <IconButton icon="trash" label="Remove" accessibilityLabel="Remove this exercise from today" tone="neutral" onPress={() => remove(current)} />
+                <IconButton icon="trash" size="gym" label="Remove" accessibilityLabel="Remove this exercise from today" tone="neutral" onPress={() => remove(current)} />
               ) : current.skipped ? (
-                <IconButton icon="undo" label="Un-skip" accessibilityLabel="Un-skip this exercise" tone="neutral" onPress={() => unskipExercise(id, current.exerciseId)} />
+                <IconButton icon="undo" size="gym" label="Un-skip" accessibilityLabel="Un-skip this exercise" tone="neutral" onPress={() => unskipExercise(id, current.exerciseId)} />
               ) : (
-                <IconButton icon="skip" label="Skip" accessibilityLabel="Skip this exercise today" tone="neutral" onPress={() => skip(current)} />
+                <IconButton icon="skip" size="gym" label="Skip" accessibilityLabel="Skip this exercise today" tone="neutral" onPress={() => skip(current)} />
               )}
-              <IconButton icon="info" label="How-to" accessibilityLabel="How to do this exercise" tone="neutral" onPress={() => setInfo(current.exercise)} />
-              <IconButton icon="plus" label="Add" accessibilityLabel="Add an exercise" tone="neutral" onPress={() => setPicker({ mode: 'add' })} />
             </View>
           </>
         )}
@@ -621,11 +655,19 @@ export default function SessionScreen() {
             weightLabel={weightLabel}
             showEffort={!cardio}
             logLabel={`Log set ${exWork.length + 1}`}
+            context={dockContext}
+            expanded={addingExtra}
+            onExpand={() => setAddingExtra(true)}
+            /*
+             * One primary action, in one place: Log set until the target is met,
+             * then the next exercise with work left, then — only once everything is
+             * done or skipped — Finish workout.
+             */
             advance={
               currentState !== 'done'
                 ? undefined
                 : next
-                  ? { label: next.exercise.name, onPress: () => goTo(nextIdx) }
+                  ? { label: `Next: ${next.exercise.name}`, onPress: () => goTo(nextIdx) }
                   : { label: 'Finish workout', onPress: finish }
             }
             onWeight={setWeight}
@@ -638,7 +680,7 @@ export default function SessionScreen() {
         </View>
       ) : null}
 
-      <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)} title="Workout">
+      <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={`Exercises · ${doneCount}/${plan.length}`}>
         {plan.map((p, i) => {
           const st = stateOf(p);
           return (
@@ -659,14 +701,15 @@ export default function SessionScreen() {
                   {p.adHoc ? ' · added' : ''}
                 </Text>
               </Pressable>
-              <IconButton icon="chevronUp" accessibilityLabel={`Move ${p.exercise.name} up`} disabled={i === 0} onPress={() => move(i, -1)} />
-              <IconButton icon="chevronDown" accessibilityLabel={`Move ${p.exercise.name} down`} disabled={i === plan.length - 1} onPress={() => move(i, 1)} />
+              <IconButton icon="chevronUp" size="gym" accessibilityLabel={`Move ${p.exercise.name} up`} disabled={i === 0} onPress={() => move(i, -1)} />
+              <IconButton icon="chevronDown" size="gym" accessibilityLabel={`Move ${p.exercise.name} down`} disabled={i === plan.length - 1} onPress={() => move(i, 1)} />
             </View>
           );
         })}
         <PrimaryButton
           label="Add exercise"
           tone="neutral"
+          size="gym"
           icon={<Icon name="plus" size={18} />}
           style={styles.gapTop}
           onPress={() => {
@@ -686,9 +729,19 @@ export default function SessionScreen() {
             }}
           />
         ) : null}
+        {/*
+          Ending the workout lives here, deliberately. The dock offers Finish only
+          once everything is done or skipped; leaving early is a decision, and it
+          belongs with the list that shows what is being left (UX-04).
+        */}
         <View style={styles.menuEnd}>
-          <PrimaryButton label="Finish workout" size="gym" icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={finish} />
-          <PrimaryButton label="Cancel workout" tone="ghost" onPress={cancel} />
+          <PrimaryButton
+            label={settled ? 'Finish workout' : 'Finish early'}
+            size="gym"
+            icon={<Icon name="check" size={20} color={color.onAccent} />}
+            onPress={finish}
+          />
+          <PrimaryButton label="Cancel workout" size="gym" tone="ghost" onPress={cancel} />
           <Text style={styles.captionCenter}>Finish saves what you did — unfinished exercises count as partial. Cancel never counts as done.</Text>
         </View>
       </Sheet>
@@ -758,7 +811,6 @@ const styles = StyleSheet.create({
   cardTitle: { ...font.body, color: color.text, fontWeight: '700' },
   exHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   exTitle: { flex: 1, alignItems: 'center', paddingVertical: space.xs },
-  exNameRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   exName: { ...font.heading, color: color.text, textAlign: 'center', flexShrink: 1 },
   meta: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: space.xs, textAlign: 'center' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
@@ -789,8 +841,11 @@ const styles = StyleSheet.create({
   setSub: { ...font.caption, color: color.textMuted },
   setTodo: { ...font.caption, color: color.textFaint },
   pressed: { opacity: 0.7 },
-  last: { ...font.label, ...font.numeric, color: color.text },
-  lastLabel: { color: color.textMuted },
+  dockContext: { gap: 2, paddingBottom: space.xs },
+  dockTargetRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  dockLine: { ...font.caption, ...font.numeric, color: color.text },
+  dockLabel: { color: color.textMuted },
+  doneLine: { ...font.label, color: color.positive, textAlign: 'center' },
   actions: { flexDirection: 'row', justifyContent: 'space-around', marginTop: space.sm },
   body: { ...font.body, color: color.text },
   caption: { ...font.caption, color: color.textMuted, marginTop: 2 },
