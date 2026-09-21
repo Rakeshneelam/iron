@@ -2,10 +2,16 @@
  * Exercise demonstrations: a minimal stick figure moving between two poses, drawn in
  * the app from joint angles — no image assets, nothing to license, a few KB total.
  *
- * Open exercise-media sets were checked first (free-exercise-db, wger, exercises-
- * dataset, anatome): the photos/GIFs are unlicensed, of unverified origin, or
- * explicitly not cleared for redistribution. Real artwork can be added later by
- * returning an image from `demoViews()` — nothing else depends on this module.
+ * This is the FALLBACK now, not the only option. `features/exercises/media` renders
+ * real artwork whenever any is bundled for a movement and drops back to this figure
+ * when none is; `npm run media:import` fills that registry from a licensed local
+ * copy of an exercise-media set.
+ *
+ * The figure stays because Iron itself ships no artwork. Every open media set worth
+ * having (free-exercise-db, wger, exercises-dataset, anatome) turns out to be
+ * unlicensed, of unverified origin, or — as with the Gym visual frames in
+ * exercises-dataset — explicitly not cleared for redistribution. Deleting this
+ * would leave an empty box for everyone who has not bought their own licence.
  *
  * Angles are degrees: 0 = up, 90 = forward (right), 180 = down, 270 = back.
  * Each segment angle is absolute, measured from its proximal joint. Optional

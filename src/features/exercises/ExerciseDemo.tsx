@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -16,9 +16,10 @@ import Svg, { Circle, Line } from 'react-native-svg';
 import { ChipRow } from '@/components/ChipRow';
 import { IconButton } from '@/components/IconButton';
 import { useReducedMotion } from '@/components/Screen';
-import { color, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
 import { demoViews, FRONT_PARTS, PART_MUSCLES, SEGMENTS, SIDE_PARTS, solveFrame, type DemoPattern } from './demo';
+import { exerciseMedia, mediaCredit } from './media';
 
 const AnimatedLine = Animated.createAnimatedComponent(Line);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -93,12 +94,55 @@ export function FigureDemo({ pattern, size = 200, primary = [], secondary = [], 
 }
 
 /** Figure with pause / replay and a view switch when the exercise has more than one angle. */
+/**
+ * The demonstration for one exercise.
+ *
+ * Bundled artwork wins when there is any for this movement; the drawn figure is
+ * the fallback. Iron ships no artwork — the obvious source for it (the Gym visual
+ * frames in hasaneyldrm/exercises-dataset) is not licensed for redistribution, so
+ * the registry is empty until someone imports their own. See ./media/index.ts.
+ */
 export function ExerciseDemo({
   exercise,
   size = 200,
 }: {
-  exercise: { id: string; primaryMuscles: readonly string[]; secondaryMuscles?: readonly string[] | null };
+  exercise: { id: string; name?: string; primaryMuscles: readonly string[]; secondaryMuscles?: readonly string[] | null };
   size?: number;
+}) {
+  const media = exerciseMedia(exercise.id);
+  if (media) return <MediaDemo media={media} fallbackName={exercise.name} size={size} />;
+  return <FigureFallback exercise={exercise} size={size} />;
+}
+
+/**
+ * A looping frame. Never upscaled past the artwork's own pixel size: the licence
+ * that covers this media distributes it at 180×180, and stretching it to 230
+ * would only make a blurry picture out of a sharp one.
+ */
+function MediaDemo({ media, fallbackName, size }: { media: ReturnType<typeof exerciseMedia> & object; fallbackName?: string; size: number }) {
+  const box = Math.min(size, media.size);
+  const credit = mediaCredit();
+  return (
+    <View style={styles.wrap}>
+      <Image
+        source={media.source}
+        style={[styles.media, { width: box, height: box }]}
+        resizeMode="contain"
+        accessibilityRole="image"
+        accessibilityLabel={`Demonstration of ${media.name || fallbackName || 'the movement'}`}
+      />
+      {/* Required by the media licence, and rendered only when media actually is. */}
+      {credit ? <Text style={styles.credit}>{credit}</Text> : null}
+    </View>
+  );
+}
+
+function FigureFallback({
+  exercise,
+  size,
+}: {
+  exercise: { id: string; primaryMuscles: readonly string[]; secondaryMuscles?: readonly string[] | null };
+  size: number;
 }) {
   const views = useMemo(() => demoViews(exercise), [exercise]);
   const [viewIdx, setViewIdx] = useState(0);
@@ -194,6 +238,8 @@ function Cable({ frame, anchor }: { frame: SharedValue<number[]>; anchor: readon
 }
 
 const styles = StyleSheet.create({
+  media: { borderRadius: radius.md, backgroundColor: color.surface },
+  credit: { ...font.caption, color: color.textMuted, textAlign: 'center' },
   wrap: { alignItems: 'center', gap: space.lg },
   controls: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   views: { marginLeft: space.sm },
