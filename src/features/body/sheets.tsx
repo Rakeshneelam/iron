@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -22,6 +21,7 @@ import {
 import { WeightField, weightDraftFor, type WeightDraft } from '@/features/body/WeightField';
 import { addDays, daysBetweenISO, fmtDayLabel, todayISO } from '@/lib/date';
 import { kgNum, signed } from '@/lib/format';
+import { success } from '@/lib/haptics';
 import { color, font, hit, space } from '@/theme/tokens';
 
 import { GROUP_LABEL, siteDef, SITES, type SiteGroup } from './sites';
@@ -72,7 +72,7 @@ function WeighInForm({ entry, onClose }: { entry: WeighEntry; onClose: () => voi
         onPress={() => {
           if (draft.existing && from !== date) moveWeighIn(from, date, draft.kg);
           else upsertWeighIn(date, draft.kg);
-          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          success();
           onClose();
         }}
       />

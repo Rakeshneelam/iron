@@ -1,8 +1,8 @@
 import { Redirect, router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, Icon, IconButton, PrimaryButton, Screen, toast } from '@/components';
+import { Card, ChipRow, Icon, IconButton, PrimaryButton, Screen, setToastObstruction, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { getActiveRoutine, getDay, getDays, getSlots, resolveNextDay } from '@/db/repositories/program';
@@ -82,6 +82,8 @@ export default function Today() {
   const [budget, setBudget] = useState(0);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [checkIn, setCheckIn] = useState(false);
+  /** Measured, so the scroll clears the real dock and Undo lands above it (UX-11). */
+  const [dock, setDock] = useState(0);
   const day = state.days.find((d) => d.id === pickedDayId) ?? state.next;
 
   const preview = useLive(
@@ -140,7 +142,7 @@ export default function Today() {
     const p = state.activeProgress;
     return (
       <View style={styles.flex}>
-        <Screen title={title} subtitle={subtitle} right={gear}>
+        <Screen title={title} subtitle={subtitle} right={gear} footer={dock}>
           <Card tone="accent">
             <Text style={styles.eyebrow}>In progress</Text>
             <Text style={styles.dayTitle}>{state.activeDay?.label ?? 'Workout'}</Text>
@@ -162,7 +164,7 @@ export default function Today() {
           {weekStrip}
           {checkInSheet}
         </Screen>
-        <ActionBar>
+        <ActionBar onHeight={setDock}>
           <PrimaryButton label="Resume workout" size="gym" icon={<Icon name="play" size={18} color={color.onAccent} />} onPress={() => router.push(`/session/${a.id}`)} />
         </ActionBar>
       </View>
@@ -174,7 +176,7 @@ export default function Today() {
     const routine = state.routine;
     return (
       <View style={styles.flex}>
-        <Screen title={title} subtitle={subtitle} right={gear}>
+        <Screen title={title} subtitle={subtitle} right={gear} footer={dock}>
           <Card>
             <Text style={styles.cardTitle}>{routine ? `${routine.name} has no days yet` : 'No active plan'}</Text>
             <Text style={styles.muted}>{routine ? 'Add a day and some exercises to get started.' : 'Pick a ready-made plan or build your own.'}</Text>
@@ -187,7 +189,7 @@ export default function Today() {
           {recoverySheet}
           {checkInSheet}
         </Screen>
-        <ActionBar>
+        <ActionBar onHeight={setDock}>
           <PrimaryButton label="Start an empty workout" size="gym" icon={<Icon name="plus" size={18} color={color.onAccent} />} onPress={startEmpty} />
         </ActionBar>
       </View>
@@ -220,7 +222,7 @@ export default function Today() {
 
   return (
     <View style={styles.flex}>
-      <Screen title={title} subtitle={subtitle} right={gear}>
+      <Screen title={title} subtitle={subtitle} right={gear} footer={dock}>
         {/* What you are doing, above everything else. */}
         <Card>
           <Text style={styles.eyebrow}>{eyebrow}</Text>
@@ -322,7 +324,7 @@ export default function Today() {
         {recoverySheet}
         {checkInSheet}
       </Screen>
-      <ActionBar>
+      <ActionBar onHeight={setDock}>
         <PrimaryButton
           label={startLabel}
           size="gym"
@@ -376,8 +378,20 @@ function WeekStrip({ today, sessions, trainingDays }: { today: string; sessions:
   );
 }
 
-function ActionBar({ children }: { children: React.ReactNode }) {
-  return <View style={styles.actionBar}>{children}</View>;
+function ActionBar({ children, onHeight }: { children: React.ReactNode; onHeight: (h: number) => void }) {
+  useEffect(() => () => setToastObstruction(0), []);
+  return (
+    <View
+      style={styles.actionBar}
+      onLayout={(e) => {
+        const h = e.nativeEvent.layout.height;
+        onHeight(h);
+        setToastObstruction(h);
+      }}
+    >
+      {children}
+    </View>
+  );
 }
 
 function Stat({ value, label }: { value: React.ReactNode; label: string }) {

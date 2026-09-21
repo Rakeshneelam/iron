@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -11,6 +10,7 @@ import { deleteCheckIn, getCheckIn, getWeighIn, saveCheckIn, upsertWeighIn } fro
 import { syncReadiness } from '@/db/repositories/sessions';
 import { WeightField, weightDraftFor, type WeightDraft } from '@/features/body/WeightField';
 import { fmtDayLabel, todayISO } from '@/lib/date';
+import { success } from '@/lib/haptics';
 import { color, font, space } from '@/theme/tokens';
 
 const SLEEP = [
@@ -81,7 +81,7 @@ function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker
     if (weight.given) upsertWeighIn(day, weight.kg);
     saveCheckIn({ date: day, sleepHours: sleep, soreness, stress });
     syncReadiness();
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    success();
   };
 
   /** Tapping the selected chip again clears it — an answer you can't take back isn't optional. */

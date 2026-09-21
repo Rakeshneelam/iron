@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -9,6 +8,7 @@ import { useLive } from '@/db/live';
 import { deleteEntry, getDayEntries, getDayTotal, historyMl, logWater, restoreEntry, updateEntry, type WaterEntry } from '@/db/repositories/water';
 import { fmtClockOfDay } from '@/features/settings/time';
 import { fmtDayLabel, minutesSinceMidnight, parseISODate, todayISO } from '@/lib/date';
+import { success } from '@/lib/haptics';
 import { ml } from '@/lib/format';
 import { hydrationPlan } from '@/services/hydration';
 import { rescheduleAll } from '@/services/notifications';
@@ -48,7 +48,7 @@ export default function WaterScreen() {
 
   const log = (amount: number) => {
     const row = logWater(amount, date);
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    success();
     // Only today's total can move today's schedule; a back-dated drink cannot.
     if (isToday) void rescheduleAll();
     if (!row) return;

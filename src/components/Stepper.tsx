@@ -1,7 +1,7 @@
-import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { selection } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 export interface StepperProps {
@@ -21,6 +21,7 @@ export interface StepperProps {
   suffix?: string;
   /** Replaces the built-in keyboard entry on long-press of the value. */
   onLongPress?: () => void;
+  /** Opt out per instance; the user's Haptics setting already gates it globally. */
   haptics?: boolean;
 }
 
@@ -70,7 +71,7 @@ export function Stepper({
     const next = clampRound(valueRef.current + dir * step);
     if (next === valueRef.current) return;
     valueRef.current = next;
-    if (haptics) void Haptics.selectionAsync();
+    if (haptics) selection();
     onChange(next);
   };
 

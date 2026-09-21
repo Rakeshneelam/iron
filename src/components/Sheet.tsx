@@ -2,8 +2,9 @@ import type { ReactNode } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { color, font, radius, space } from '@/theme/tokens';
+import { color, font, hit, radius, space } from '@/theme/tokens';
 
+import { Icon } from './Icon';
 import { ToastHost } from './Toast';
 
 export interface SheetProps {
@@ -14,27 +15,49 @@ export interface SheetProps {
 }
 
 /**
- * Bottom sheet. Dismiss by tapping the backdrop or the handle — there is no
- * confirm button, and this is never used as an "are you sure" (AGENTS.md §1.4).
- * The rest timer keeps running underneath: its truth is a timestamp, not this view.
+ * Bottom sheet. Dismiss by tapping the backdrop, the handle, or the Close button —
+ * there is no confirm here, and this is never used as an "are you sure"
+ * (AGENTS.md §1.4). The rest timer keeps running underneath: its truth is a
+ * timestamp, not this view.
+ *
+ * The handle was the only visible way out and it announced nothing; a labelled
+ * Close sits beside the title now, at a full touch target, and the title is a
+ * header so a screen reader lands on it rather than on the first stepper (UX-11).
  */
 export function Sheet({ visible, onClose, title, children }: SheetProps) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" accessibilityRole="button" />
         <View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg }]}>
-          <Pressable onPress={onClose} style={styles.handleHit} accessibilityLabel="Close">
+          <Pressable onPress={onClose} style={styles.handleHit} accessibilityLabel="Close" accessibilityRole="button">
             <View style={styles.handle} />
           </Pressable>
-          {title ? <Text style={styles.title}>{title}</Text> : null}
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.titleRow}>
+            {title ? (
+              <Text style={styles.title} accessibilityRole="header" numberOfLines={2}>
+                {title}
+              </Text>
+            ) : (
+              <View style={styles.flex} />
+            )}
+            <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel="Close" style={styles.close} hitSlop={space.xs}>
+              <Icon name="close" size={22} color={color.textMuted} />
+            </Pressable>
+          </View>
+          {/*
+            keyboardShouldPersistTaps so the first tap on a primary action commits
+            instead of being spent dismissing the keyboard, and the content can
+            always scroll clear of it.
+          */}
+          <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false}>
             {children}
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
-      {/* A Modal covers the root toast host; Undo must stay reachable from inside a sheet. */}
+      {/* A Modal covers the root toast host; Undo must stay reachable from inside a
+          sheet. ToastHost itself makes sure only the topmost one draws. */}
       <ToastHost />
     </Modal>
   );
@@ -54,5 +77,7 @@ const styles = StyleSheet.create({
   },
   handleHit: { alignItems: 'center', paddingVertical: space.md },
   handle: { width: space.xxxl, height: space.xs, borderRadius: radius.pill, backgroundColor: color.border },
-  title: { ...font.heading, color: color.text, marginBottom: space.md },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
+  title: { ...font.heading, color: color.text, flex: 1 },
+  close: { width: hit.default, height: hit.default, alignItems: 'center', justifyContent: 'center' },
 });

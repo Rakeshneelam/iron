@@ -1,6 +1,6 @@
-import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { selection } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 export interface ChipOption<T extends string | number> {
@@ -35,7 +35,7 @@ export function ChipRow<T extends string | number>({
         accessibilityRole="button"
         accessibilityState={{ selected }}
         onPress={() => {
-          if (haptics) void Haptics.selectionAsync();
+          if (haptics) selection();
           onChange(o.value);
         }}
         style={({ pressed }) => [

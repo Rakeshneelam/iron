@@ -18,6 +18,6 @@ export { StatTile, type StatTileProps, type StatTone } from './StatTile';
 export { TargetField, type TargetFieldProps } from './TargetField';
 export { TextField, type TextFieldProps } from './TextField';
 export { Stepper, type StepperProps } from './Stepper';
-export { dismissToast, toast, ToastHost } from './Toast';
+export { dismissToast, setToastObstruction, toast, ToastHost } from './Toast';
 export { ToggleChips } from './ToggleChips';
 export { TrendChart, type TrendChartProps } from './TrendChart';

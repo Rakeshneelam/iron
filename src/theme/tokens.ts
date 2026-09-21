@@ -9,12 +9,31 @@ export const color = {
   surfaceHigh: '#1D1D22',
   border: '#2A2A31',
 
-  text: '#F2F2F4',
-  textMuted: '#9A9AA5',
-  textFaint: '#5C5C68',
+  text: '#F2F2F4',        // 17.6 : 1 on bg
+  textMuted: '#9A9AA5',   // 6.0 : 1 on surfaceHigh, the worst ground
+  /**
+   * Was #5C5C68, which measured 2.79 : 1 on surface and 2.55 : 1 on surfaceHigh —
+   * under half the 4.5 : 1 readability target, on text that was carrying real
+   * content: "+2.5 kg since Mon 3 Mar", set counts, timestamps. Now 4.60 : 1 at
+   * its worst, and still visibly quieter than textMuted so the two tokens still
+   * mean different things (UX-11).
+   */
+  textFaint: '#85858F',
 
-  accent: '#E8552E',      // the primary action. Log set. Quick add.
+  /**
+   * Accent is for text, icons and strokes ON a dark ground, where it measures
+   * 5.40 : 1. It is NOT a background for white text: #E8552E under #FFFFFF is
+   * 3.64 : 1, which is what every filled button was.
+   */
+  accent: '#E8552E',
   accentPressed: '#C4441F',
+  /**
+   * The filled-action pairing: white on #C4441F is 5.01 : 1. A separate token
+   * rather than darkening `accent` everywhere — doing that would dim every chart
+   * line, ring and icon to fix a problem only filled buttons have.
+   */
+  accentFill: '#C4441F',
+  accentFillPressed: '#A8380F',   // white 6.49 : 1
   accentSoft: 'rgba(232,85,46,0.55)', // secondary muscles in demos and maps
   onAccent: '#FFFFFF',
 
@@ -66,8 +85,14 @@ export const font = {
   caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
 } as const;
 
-/** Minimum tap targets. The logging screen uses `gym`; everything else `default`. */
-export const hit = { gym: 56, default: 44 } as const;
+/**
+ * Minimum tap targets. The logging screen uses `gym`; everything else `default`.
+ *
+ * `default` was 44 — the iOS figure. Android's guidance is 48, this app's primary
+ * target is Android, and both exceed the 44 the repo used to floor at (UX-11).
+ * Icon artwork size is not the target: these are the box, not the glyph.
+ */
+export const hit = { gym: 56, default: 48 } as const;
 
 export const motion = {
   fast: 150,
@@ -79,6 +104,16 @@ export const motion = {
 
 export const layout = {
   screenPadding: space.lg,
+  /**
+   * What a scroll leaves clear at the bottom when the screen has NO fixed dock —
+   * just enough that the last row is not flush against the tab bar.
+   *
+   * Screen used to reserve `actionBarHeight` (96) on every screen whether or not
+   * one existed, so screens without a dock ended in 96dp of nothing and screens
+   * with a taller one still clipped. A dock reports its measured height instead
+   * (UX-11).
+   */
+  scrollTail: space.xxl,
   /** Primary actions live in the bottom third; nothing critical in top corners. */
   actionBarHeight: 96,
 } as const;

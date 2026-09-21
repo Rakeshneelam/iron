@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -9,6 +8,7 @@ import type { RoutineItem } from '@/engine/warmup';
 import { drillDemo } from '@/features/exercises/demo';
 import { FigureDemo } from '@/features/exercises/ExerciseDemo';
 import { fmtClock } from '@/lib/date';
+import { success } from '@/lib/haptics';
 import { color, font, radius, space } from '@/theme/tokens';
 
 import { PHASE_LABEL } from './labels';
@@ -49,7 +49,7 @@ export function DrillPlayer({ items, onFinish, onExit }: { items: readonly Routi
       }
       setEndsAt(null);
       setLeft(0);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      success();
     }, 250);
     return () => clearInterval(t);
   }, [endsAt]);

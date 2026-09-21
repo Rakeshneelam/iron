@@ -19,6 +19,7 @@ const STUBS: Record<string, string> = {
   react: support('react-stub.ts'),
   'expo-constants': support('expo-misc-stub.ts'),
   'expo-file-system': support('expo-misc-stub.ts'),
+  'expo-haptics': support('expo-haptics-stub.ts'),
 };
 
 /** `./foo` and `@/foo` are written without an extension; find the real file. */

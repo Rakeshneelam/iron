@@ -1,11 +1,10 @@
-import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, ChipRow, EmptyState, Icon, IconButton, Pill, PrimaryButton, ReasonLine, Sheet, toast } from '@/components';
+import { Card, ChipRow, EmptyState, Icon, IconButton, Pill, PrimaryButton, ReasonLine, setToastObstruction, Sheet, toast } from '@/components';
 import { CATALOG, CATALOG_BY_ID, type Stress } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import type { Exercise } from '@/db/repositories/exercises';
@@ -51,6 +50,7 @@ import { minutesLabel, MODE_OPTIONS } from '@/features/warmup/labels';
 import { RoutineSheet } from '@/features/warmup/RoutineSheet';
 import { fmtClock, fmtDayLabel } from '@/lib/date';
 import { kg, kgNum } from '@/lib/format';
+import { success } from '@/lib/haptics';
 import { cancelRest, startRest, useRestTimer } from '@/services/restTimer';
 import { color, font, hit, layout, radius, space } from '@/theme/tokens';
 
@@ -83,6 +83,8 @@ export default function SessionScreen() {
   // Subscribed here, not inside the bar: rest keeps running whatever the exercise
   // list is doing, so the dock must be able to mount without a current exercise.
   const rest = useRestTimer(id);
+  // The dock is this screen's; leaving takes its reservation with it.
+  useEffect(() => () => setToastObstruction(0), []);
   const ctx = useMemo(() => suggestionContext(), []);
 
   const [index, setIndex] = useState<number | null>(null);
@@ -267,7 +269,7 @@ export default function SessionScreen() {
     });
     setIndex(idx); // stay here, even once the target is reached
     if (warmupState === 'pending' && !asWarmup) setWarmupState(id, 'skipped');
-    if (settings.hapticsEnabled) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    success(); // gated centrally now — lib/haptics reads the user's setting
     setPain(false);
     if (asWarmup) {
       // A warm-up is a persisted row like any other, so it gets the same Undo.
@@ -642,7 +644,12 @@ export default function SessionScreen() {
       </ScrollView>
 
       {rest.running || (current && !current.skipped) ? (
-        <View style={[styles.controls, { paddingBottom: insets.bottom + space.sm }]}>
+        <View
+          style={[styles.controls, { paddingBottom: insets.bottom + space.sm }]}
+          // Undo has to sit above Log set, not on it. Measured, because this dock
+          // changes height with the rest bar, the effort chips and text size (UX-11).
+          onLayout={(e) => setToastObstruction(e.nativeEvent.layout.height)}
+        >
           <RestTimerBar timer={rest} />
           {current && !current.skipped ? (
           <SetControls

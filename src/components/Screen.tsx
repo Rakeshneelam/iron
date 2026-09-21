@@ -45,6 +45,14 @@ export interface ScreenProps {
   padded?: boolean;
   /** Trailing header slot — secondary only; nothing critical lives in the top corners. */
   right?: ReactNode;
+  /**
+   * Height of a fixed dock this screen renders over the scroll, in dp.
+   *
+   * Screen used to reserve `layout.actionBarHeight` (96) unconditionally, so
+   * screens with no dock ended in 96dp of nothing while screens with a taller one
+   * still had their last row clipped. Measure the dock and pass it (UX-11).
+   */
+  footer?: number;
   children?: ReactNode;
 }
 
@@ -59,14 +67,15 @@ export function Screen({
   scroll = true,
   padded = true,
   right,
+  footer = 0,
   children,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const hasHeader = title !== undefined || right !== undefined;
 
   const body = padded ? styles.padded : undefined;
-  /** Keeps the last row clear of the bottom-third action bar and the tab bar. */
-  const bottomPad = insets.bottom + layout.actionBarHeight;
+  /** Whatever this screen actually puts at the bottom, plus a little air. */
+  const bottomPad = insets.bottom + footer + layout.scrollTail;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>

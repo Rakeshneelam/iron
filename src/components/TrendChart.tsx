@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
@@ -20,6 +20,8 @@ export interface TrendChartProps {
   readout?: boolean;
 }
 
+/** A drag has to mean it before the page loses its scroll. */
+const SCRUB_SLOP = 12;
 const PAD = space.md;
 const MAX_POINTS = 200;
 
@@ -59,9 +61,23 @@ export function TrendChart({ trend, raw = [], markers = [], height = 180, onScru
     onScrub?.(null);
   };
 
+  /**
+   * Everything the picture says, in words — the only version of it a screen reader
+   * or anyone who cannot scrub can read (UX-11).
+   */
+  /** Where the current touch began, so a drag's direction can be judged. */
+  const startedAt = useRef<{ x: number; y: number } | null>(null);
+  const first = t[0];
+  const last = t[t.length - 1];
+  const summary =
+    t.length === 0
+      ? 'No data yet'
+      : t.length === 1 || !first
+        ? `${fmt(last?.y ?? 0)}${last && formatX ? ` on ${formatX(last.x)}` : ''}`
+        : `${t.length} points, from ${fmt(first.y)}${formatX ? ` on ${formatX(first.x)}` : ''} to ${fmt(last?.y ?? 0)}${last && formatX ? ` on ${formatX(last.x)}` : ''}`;
+
   const sx = (v: number) => scaleX(v, domain.minX, domain.maxX, width, PAD);
   const sy = (v: number) => scaleY(v, domain.minY, domain.maxY, height, PAD);
-  const last = t[t.length - 1];
   const shown = scrub ?? last ?? null;
 
   return (
@@ -75,8 +91,27 @@ export function TrendChart({ trend, raw = [], markers = [], height = 180, onScru
       <View
         style={{ height }}
         onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={summary}
+        /*
+         * The chart used to claim every touch that started on it
+         * (onStartShouldSetResponder -> true), so a vertical swipe beginning over a
+         * chart scrolled nothing and the page appeared stuck. It claims nothing on
+         * touch-down now, and only takes over for a deliberate horizontal drag;
+         * anything vertical belongs to the page (UX-11).
+         */
+        onStartShouldSetResponderCapture={(e) => {
+          startedAt.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY };
+          return false;
+        }}
+        onMoveShouldSetResponder={(e) => {
+          const from = startedAt.current;
+          if (!from) return false;
+          const dx = Math.abs(e.nativeEvent.pageX - from.x);
+          const dy = Math.abs(e.nativeEvent.pageY - from.y);
+          return dx > SCRUB_SLOP && dx > dy * 1.5;
+        }}
         onResponderGrant={(e) => pick(e.nativeEvent.locationX)}
         onResponderMove={(e) => pick(e.nativeEvent.locationX)}
         onResponderRelease={end}
