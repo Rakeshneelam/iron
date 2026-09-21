@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "lint": "expo lint",
     "media:import": "node scripts/import-exercise-media.mjs",
-    "media:import:wger": "node scripts/import-wger-media.mjs"
+    "media:import:wger": "node scripts/import-wger-media.mjs",
+    "import:catalog": "node scripts/import-catalog.mjs"
   },
   "//": "NATIVE DEPS: managed by `npx expo install`. Do not hand-edit native versions.",
   "dependencies": {
