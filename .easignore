@@ -1,0 +1,22 @@
+# What EAS Build uploads. When this file exists it REPLACES .gitignore for that
+# decision, which is the whole point of having it.
+#
+# assets/exercise-media/ is deliberately absent from this list. It is git-ignored
+# (© Gym visual, not redistributable, must never be committed) but it does have to
+# reach the builder, or the app ships with the drawn stick figures and none of the
+# 1,305 demonstrations. Without this file EAS reads .gitignore, skips the folder,
+# and produces a build that is missing 163 MB of the thing you asked for.
+#
+# Keep this in step with .gitignore for everything EXCEPT that folder.
+
+node_modules/
+.expo/
+dist/
+/android/
+/ios/
+*.log
+.env*
+*.db
+*.db-journal
+backups/
+.DS_Store
