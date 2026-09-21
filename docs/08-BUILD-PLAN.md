@@ -17,7 +17,8 @@ Phases 1–3 alone already beat every commercial app for this user's specific ca
   `src/db/schema.ts`. Run migrations on start.
 - **1.3** Seed on first launch: exercise catalogue, equipment, the Upper/Lower
   routine, the Indian food staples. Idempotent — re-running must not duplicate.
-- **1.4** Theme tokens + tab shell (six tabs, empty screens).
+- **1.4** Theme tokens + tab shell (five tabs, empty screens — Today, Food, Body,
+  Plans, Progress; see `02-ARCHITECTURE.md` §Navigation).
 - **1.5** Repositories with the queries phases 2–3 will need, plus their indexes.
 
 **Done when:** app opens on the device, DB file exists, seeded routine is queryable.
@@ -51,7 +52,11 @@ and reopens exactly where it was, and the timer survives the screen going off.
 
 ## Phase 4 — Bodyweight (1 evening)
 
-- **4.1** Weigh-in entry, one tap from Today, remembers the last value.
+Lives in **Body → Weight** and **Body → Recovery**. (Written when there was a
+separate `Daily` tab; that tab is gone — the work is the same, the home changed.)
+
+- **4.1** Weigh-in entry, one tap from Today, remembers the last value — but never
+  saves it unless the user confirms it. An untouched default is not a weigh-in.
 - **4.2** Trend chart: EWMA line prominent, raw dots faint.
 - **4.3** Weekly rate as % bodyweight, phase selector, `phaseCheck()` card.
 

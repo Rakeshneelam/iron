@@ -33,7 +33,7 @@ Never colour a missed day red. Never use red for bodyweight going up.
 
 ## Gym usability rules (non-negotiable)
 
-- Minimum tap target 56dp on the logging screen, 44dp elsewhere
+- Minimum tap target 56dp on the logging screen, 48dp elsewhere
 - Primary actions in the **bottom third**; nothing critical in the top corners
 - One-handed: the whole log-a-set flow completes with a right thumb without
   repositioning the phone
