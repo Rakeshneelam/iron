@@ -2,9 +2,11 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Card, ChipRow, PrimaryButton, Screen, SectionHeader, Stepper } from '@/components';
+import { Card, ChipRow, PrimaryButton, Screen, SectionHeader, Stepper, ToggleChips } from '@/components';
 import { useLive } from '@/db/live';
 import { addEquipment, deleteEquipment, listEquipment, updateEquipment, type EquipmentKind } from '@/db/repositories/equipment';
+import { setSetting, useSettings } from '@/db/repositories/settings';
+import { PRESET_OPTIONS, toggle, toolsOf, TOOL_OPTIONS } from '@/features/profile';
 import { kgNum } from '@/lib/format';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
@@ -15,7 +17,15 @@ const KINDS: { label: string; value: EquipmentKind }[] = [
   { label: 'Stacks', value: 'machine_stack' },
 ];
 
+/**
+ * Everything about what you can train with, in one place: where you train, what
+ * is there, and the exact weights you can load. The first two used to be a
+ * section of the Settings index, which is how that page came to be twelve
+ * sections long (UX-10).
+ */
 export default function EquipmentScreen() {
+  const s = useSettings();
+  const tools = toolsOf(s);
   const items = useLive(listEquipment, ['equipment']);
   const [kind, setKind] = useState<EquipmentKind>('plate');
   const [value, setValue] = useState(2.5);
@@ -23,7 +33,28 @@ export default function EquipmentScreen() {
   const [name, setName] = useState('');
 
   return (
-    <Screen title="Gym inventory" subtitle="Suggestions snap to what you can actually load." right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
+    <Screen
+      title="Equipment"
+      subtitle="Suggestions only offer what you can actually do."
+      right={<PrimaryButton label="Back" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/settings'))} />}
+    >
+      <SectionHeader title="Where you train" />
+      <Card>
+        <ChipRow
+          options={PRESET_OPTIONS}
+          value={s.tools.length ? null : s.equipmentPreset}
+          onChange={(v) => {
+            setSetting('equipmentPreset', v);
+            setSetting('tools', []);
+          }}
+          fill={false}
+        />
+        <Text style={styles.label}>What you have{s.tools.length ? ' (custom)' : ''}</Text>
+        <ToggleChips options={TOOL_OPTIONS} values={[...tools]} onToggle={(t) => setSetting('tools', toggle([...tools], t))} />
+        <Text style={styles.hint}>Swaps, new plans and the exercise picker only suggest what you can do here.</Text>
+      </Card>
+
+      <SectionHeader title="Gym inventory" hint="Suggestions snap to what you can actually load." />
       {KINDS.map((k) => {
         const rows = items.filter((i) => i.kind === k.value);
         return (
@@ -82,6 +113,7 @@ const styles = StyleSheet.create({
   count: { width: 170 },
   del: { width: hit.default, height: hit.default, alignItems: 'center', justifyContent: 'center' },
   delText: { ...font.label, color: color.textMuted },
+  label: { ...font.label, color: color.text, fontWeight: '600', marginTop: space.lg, marginBottom: space.sm },
   hint: { ...font.caption, color: color.textMuted },
   pair: { flexDirection: 'row', gap: space.md, marginTop: space.md },
   input: {

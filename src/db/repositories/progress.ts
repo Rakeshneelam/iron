@@ -12,6 +12,7 @@ import { CATALOG_BY_ID, type Pattern } from '@/data/catalog';
 import { weeklyInsights, type LiftRegion, type WeekFacts } from '@/engine/insights';
 import { recommend, type RecExercise, type RecInput, type Recommendation } from '@/engine/recommend';
 import { detectRecords, type RecordEvent } from '@/engine/records';
+import { weeklyTarget } from '@/features/program/schedule';
 import { addDays, daysBetweenISO, todayISO } from '@/lib/date';
 
 import { listMeasurements, listWeighIns } from './body';
@@ -131,7 +132,14 @@ export function weekSummary(weekStart: string, waterTargetMl: number): WeekSumma
   return {
     weekStart,
     weekEnd,
-    plannedDays: getSettings().trainingDays.length || (getActiveRoutine()?.daysPerWeek ?? 0),
+    // The same resolver Today, Plans and Settings display from, so "planned this
+    // week" cannot drift away from what those screens say (UX-10). Imported from
+    // features because the rule is pure policy with no dependencies, and the
+    // alternative is the second copy of it that caused the drift.
+    plannedDays: weeklyTarget({
+      scheduledDays: getSettings().trainingDays.length,
+      rotation: getActiveRoutine()?.daysPerWeek ?? 0,
+    }),
     completed: count('completed'),
     partial: count('partial'),
     skipped: count('skipped'),

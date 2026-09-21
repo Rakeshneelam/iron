@@ -10,6 +10,7 @@ import { archiveRoutine, createPlan, deleteRoutine, getActiveRoutine, getDays, g
 import { useSettings } from '@/db/repositories/settings';
 import { adaptTemplate, recommendTemplates } from '@/engine/planner';
 import { profileOf } from '@/features/profile';
+import { rotationLabel, scheduleLabel } from '@/features/program/schedule';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 const LEVEL = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' } as const;
@@ -30,6 +31,10 @@ export default function PlansScreen() {
   const [creating, setCreating] = useState(false);
   const [preview, setPreview] = useState<PlanTemplate | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+
+  // Active first: it is the one being trained, and the one you came to check.
+  const ordered = useMemo(() => [...plans].sort((a, b) => Number(b.routine.active) - Number(a.routine.active)), [plans]);
+  const activeRotation = plans.find((p) => p.routine.active)?.days.length ?? 0;
 
   const profile = useMemo(() => profileOf(settings), [settings]);
   const ranked = useMemo(() => recommendTemplates(profile, PLAN_TEMPLATES, CATALOG_BY_ID), [profile]);
@@ -57,11 +62,26 @@ export default function PlansScreen() {
       title="Plans"
       right={
         <View style={styles.headerBtns}>
-          <IconButton icon="book" accessibilityLabel="Exercise library" onPress={() => router.push('/library')} />
           <IconButton icon="plus" tone="neutral" accessibilityLabel="New plan" onPress={() => setCreating(true)} />
         </View>
       }
     >
+      {/*
+        The schedule, and the two numbers that were being used as one. A plan's
+        rotation is how many workouts it cycles through; the scheduled days are
+        which weekdays you mean to train. Plans printed the rotation length as
+        "days a week" and plan/[id] edited daysPerWeek separately (UX-10).
+      */}
+      <Card onPress={() => router.push('/plan/schedule')}>
+        <View style={styles.linkRow}>
+          <Icon name="progress" size={20} color={color.accent} />
+          <View style={styles.flex1}>
+            <Text style={styles.name}>Training schedule</Text>
+            <Text style={styles.muted}>{scheduleLabel({ rotation: activeRotation, scheduledDays: settings.trainingDays.length })}</Text>
+          </View>
+          <Icon name="chevronRight" size={20} color={color.textMuted} />
+        </View>
+      </Card>
       {plans.length === 0 ? (
         <Card>
           <Text style={styles.name}>No plans yet</Text>
@@ -70,7 +90,7 @@ export default function PlansScreen() {
         </Card>
       ) : null}
 
-      {plans.map(({ routine: r, days, exercises }) => (
+      {ordered.map(({ routine: r, days, exercises }) => (
         <Card key={r.id} tone={r.active ? 'accent' : 'default'} onPress={() => router.push(`/plan/${r.id}`)}>
           <View style={styles.rowBetween}>
             <Text style={styles.name} numberOfLines={1}>
@@ -78,8 +98,10 @@ export default function PlansScreen() {
             </Text>
             {r.active ? <Pill label="Active" tone="accent" /> : <Icon name="chevronRight" size={20} color={color.textMuted} />}
           </View>
+          {/* "4 days a week" for a four-workout rotation was simply not what the
+              number meant, and contradicted the schedule two cards up. */}
           <Text style={styles.muted}>
-            {days.length} {days.length === 1 ? 'day' : 'days'} a week, {exercises} {exercises === 1 ? 'exercise' : 'exercises'}
+            {rotationLabel(days.length)}, {exercises} {exercises === 1 ? 'exercise' : 'exercises'}
           </Text>
           {days.length ? (
             <Text style={styles.days} numberOfLines={1}>
@@ -121,6 +143,17 @@ export default function PlansScreen() {
             : null}
         </>
       ) : null}
+
+      <Card onPress={() => router.push('/library')}>
+        <View style={styles.linkRow}>
+          <Icon name="book" size={20} color={color.textMuted} />
+          <View style={styles.flex1}>
+            <Text style={styles.name}>Exercise library</Text>
+            <Text style={styles.muted}>Every exercise Iron knows, with how to do it.</Text>
+          </View>
+          <Icon name="chevronRight" size={20} color={color.textMuted} />
+        </View>
+      </Card>
 
       <Sheet visible={creating && !preview} onClose={() => setCreating(false)} title="New plan">
         <Text style={styles.muted}>Ranked for your goal, days, time and equipment. Templates are copied — edit anything afterwards.</Text>
@@ -187,6 +220,7 @@ export default function PlansScreen() {
 const styles = StyleSheet.create({
   mutedFaint: { color: color.textFaint },
   flex1: { flex: 1 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   headerBtns: { flexDirection: 'row', gap: space.xs },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
   name: { ...font.heading, color: color.text, flexShrink: 1 },

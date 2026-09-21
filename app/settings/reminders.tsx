@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, PrimaryButton, Screen } from '@/components';
+import { Card, ChipRow, PrimaryButton, Screen, SectionHeader } from '@/components';
 import { setSetting, useSettings } from '@/db/repositories/settings';
 import type { ReminderPrefs } from '@/engine/reminders';
 import { WEEKDAYS } from '@/features/profile';
@@ -53,9 +53,35 @@ export default function RemindersScreen() {
 
   return (
     <Screen title="Reminders" right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
-      <Text style={styles.quiet}>
-        Quiet hours {fmtClockOfDay(s.sleepMinutes)}–{fmtClockOfDay(s.wakeMinutes)} · change them in Settings.
-      </Text>
+      {/*
+        Quiet hours belong to the thing they silence. They sat in the Settings
+        index, three sections away from every switch they govern (UX-10).
+      */}
+      <SectionHeader title="Quiet hours" hint={`Nothing fires between ${fmtClockOfDay(s.sleepMinutes)} and ${fmtClockOfDay(s.wakeMinutes)}.`} />
+      <Card>
+        <Row label="Wake">
+          <TimeAdjuster
+            value={s.wakeMinutes}
+            max={s.sleepMinutes - 60}
+            onChange={(v) => {
+              setSetting('wakeMinutes', v);
+              void rescheduleAll();
+            }}
+          />
+        </Row>
+        <Row label="Sleep">
+          <TimeAdjuster
+            value={s.sleepMinutes}
+            min={s.wakeMinutes + 60}
+            onChange={(v) => {
+              setSetting('sleepMinutes', v);
+              void rescheduleAll();
+            }}
+          />
+        </Row>
+      </Card>
+
+      <SectionHeader title="What to send" />
       {denied ? (
         <Card>
           <Text style={styles.denied}>Iron cannot post notifications yet, so these switches have nothing to send.</Text>
