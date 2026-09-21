@@ -112,7 +112,7 @@ export function planReminders(p: ReminderPrefs, s: ReminderState, days = 7): Rem
     }
     const weighDay = p.weight.frequency === 'daily' || (p.weight.frequency === 'training' ? training : weekday === 1);
     if (p.weight.on && weighDay && !(today && s.weighedToday)) {
-      push({ type: 'weight', dayOffset: d, minutes: s.wake + 15, title: 'Morning weigh-in', body: 'Before breakfast. One number — the trend does the rest.', url: '/body' });
+      push({ type: 'weight', dayOffset: d, minutes: s.wake + 15, title: 'Morning weigh-in', body: 'Before breakfast. One number — the trend does the rest.', url: '/daily' });
     }
     if (p.measurements.on && weekday === p.measurements.weekday) {
       const since = s.daysSinceMeasurement === null ? null : s.daysSinceMeasurement + d;

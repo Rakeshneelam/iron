@@ -32,7 +32,9 @@ export function TextField({ value, onCommit, onType, trim = true, onFocus, onBlu
   /** Typed but not yet written; null once written. */
   const pending = useRef<string | null>(null);
   const commit = useRef(onCommit);
-  commit.current = onCommit;
+  useEffect(() => {
+    commit.current = onCommit;
+  });
 
   useEffect(() => {
     if (!editing.current) setDraft(value);

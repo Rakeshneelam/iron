@@ -3,12 +3,17 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Bar } from '@/components/Bar';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { fmtClock } from '@/lib/date';
-import { useRestTimer } from '@/services/restTimer';
+import type { RestTimerView } from '@/services/restTimer';
 import { color, font, radius, space } from '@/theme/tokens';
 
-/** Visible, never blocking. The number is endsAt - now, recomputed every render. */
-export function RestTimerBar({ sessionId }: { sessionId: string }) {
-  const t = useRestTimer(sessionId);
+/**
+ * Visible, never blocking. The number is endsAt - now, recomputed every render.
+ *
+ * The timer is passed in rather than subscribed to here: the bar has to survive the
+ * current exercise being skipped, removed or absent, so the screen owns the one
+ * subscription and decides where the bar is mounted.
+ */
+export function RestTimerBar({ timer: t }: { timer: RestTimerView }) {
   if (!t.running) return null;
   return (
     <View style={styles.wrap}>

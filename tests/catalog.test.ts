@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { CATALOG, CATALOG_BY_ID } from '../src/data/catalog/index.ts';
+import { CATALOG, CATALOG_BY_ID, CURATED } from '../src/data/catalog/index.ts';
 import { DRILLS } from '../src/data/drills.ts';
 import { PLAN_TEMPLATES } from '../src/data/templates.ts';
 import { substitutes } from '../src/engine/substitute.ts';
@@ -18,8 +18,24 @@ describe('catalogue integrity', () => {
     for (const e of CATALOG) for (const id of [...(e.easier ?? []), ...(e.harder ?? []), ...(e.alts ?? [])]) assert.ok(CATALOG_BY_ID.has(id), `${e.id} → ${id}`);
   });
 
-  test('every entry has setup, steps and mistakes', () => {
-    for (const e of CATALOG) assert.ok(e.setup && e.steps.length && e.mistakes.length, e.id);
+  /**
+   * Two tiers, two standards. Everything in the library has to be able to explain
+   * itself — a set-up and the movement — because that is what the how-to renders.
+   * Common mistakes are hand-written coaching and only the curated 95 have them:
+   * the imported set has instructions but no corrections, and inventing them would
+   * be worse than leaving the section out.
+   */
+  test('every entry has a setup and steps', () => {
+    for (const e of CATALOG) assert.ok(e.setup && e.steps.length, e.id);
+  });
+
+  test('every curated entry also has common mistakes', () => {
+    assert.ok(CURATED.length >= 90, 'the hand-written catalogue is still here');
+    for (const e of CURATED) assert.ok(e.mistakes.length, e.id);
+  });
+
+  test('the imported tier never shadows a curated id', () => {
+    for (const e of CURATED) assert.equal(CATALOG_BY_ID.get(e.id), e, `${e.id} was overwritten by an import`);
   });
 
   test('every template exercise exists and rep ranges are sane', () => {

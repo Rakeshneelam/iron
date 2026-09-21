@@ -15,6 +15,7 @@ import { e1RM, type SessionLog } from '@/engine/progression';
 import { nowISO, todayISO } from '@/lib/date';
 import { newId } from '@/lib/ids';
 
+import { getCheckIn, getWeighIn } from './body';
 import { getExercise, getLinkedSources, type Exercise } from './exercises';
 import { groupBy, parseIdList, toEngineSet } from './mappers';
 import { getSlots, type Targets } from './program';
@@ -73,17 +74,15 @@ function planRows(sessionId: string, routineDayId: string): SessionExerciseRow[]
 export function startSession(routineDayId: string | null, opts: { fit?: readonly { exerciseId: string; sets: number }[] } = {}): Session {
   const open = getActiveSession();
   if (open) return open;
+  const date = todayISO();
   const row: Session = {
     id: newId(),
     routineDayId,
-    date: todayISO(),
+    date,
     startedAt: nowISO(),
     endedAt: null,
     status: 'active',
-    bodyweightKg: null,
-    sleepHours: null,
-    soreness: null,
-    stress: null,
+    ...readinessOn(date),
     sessionRpe: null,
     notes: null,
   };
@@ -128,8 +127,12 @@ export function setWarmupState(sessionId: string, state: WarmupState): void {
   else setRaw(`session:${sessionId}:warmup`, state);
 }
 
-/** Any set at all, warm-ups included — a session with logged warm-ups is not empty. */
-function loggedSetCount(sessionId: string): number {
+/**
+ * Any set at all, warm-ups included — a session with logged warm-ups is not empty.
+ * Exported because the screens have to ask the same question before offering to
+ * throw a workout away: counting only working sets there silently deleted warm-ups.
+ */
+export function savedSetCount(sessionId: string): number {
   const row = db
     .select({ n: sql<number>`count(*)` })
     .from(schema.setLog)
@@ -155,7 +158,7 @@ function close(sessionId: string, status: SessionStatus): void {
  * the work, and deleting it without asking is worse than a partial on the record.
  */
 export function finishSession(sessionId: string): { discarded: boolean; status: SessionStatus | null } {
-  if (loggedSetCount(sessionId) === 0) {
+  if (savedSetCount(sessionId) === 0) {
     deleteSession(sessionId);
     return { discarded: true, status: null };
   }
@@ -173,7 +176,7 @@ export function finishSession(sessionId: string): { discarded: boolean; status: 
  * the whole workout is deleted.
  */
 export function cancelSession(sessionId: string, keepSets: boolean): void {
-  if (keepSets && loggedSetCount(sessionId) > 0) close(sessionId, 'cancelled');
+  if (keepSets && savedSetCount(sessionId) > 0) close(sessionId, 'cancelled');
   else deleteSession(sessionId);
 }
 
@@ -199,28 +202,25 @@ export function reopenSession(sessionId: string): boolean {
   return true;
 }
 
-export function setReadiness(
-  sessionId: string,
-  r: { bodyweightKg?: number; sleepHours?: number; soreness?: number; stress?: number },
-): void {
-  const patch: Partial<Session> = {};
-  if (r.bodyweightKg !== undefined) patch.bodyweightKg = r.bodyweightKg;
-  if (r.sleepHours !== undefined) patch.sleepHours = r.sleepHours;
-  if (r.soreness !== undefined) patch.soreness = r.soreness;
-  if (r.stress !== undefined) patch.stress = r.stress;
-  if (Object.keys(patch).length) db.update(schema.session).set(patch).where(eq(schema.session.id, sessionId)).run();
-  markReadinessDone(sessionId);
+/** The day's check-in and weigh-in, in the session's readiness columns. */
+function readinessOn(date: string): Pick<Session, 'bodyweightKg' | 'sleepHours' | 'soreness' | 'stress'> {
+  const c = getCheckIn(date);
+  return {
+    bodyweightKg: getWeighIn(date)?.kg ?? null,
+    sleepHours: c?.sleepHours ?? null,
+    soreness: c?.soreness ?? null,
+    stress: c?.stress ?? null,
+  };
 }
 
-export function markReadinessDone(sessionId: string): void {
-  db.insert(schema.setting)
-    .values({ key: `session:${sessionId}:readinessDone`, value: 'true' })
-    .onConflictDoNothing()
-    .run();
-}
-
-export function isReadinessDone(sessionId: string): boolean {
-  return getRaw(`session:${sessionId}:readinessDone`) === 'true';
+/**
+ * A check-in saved after Start still counts, up to the first logged set. After that
+ * the targets on screen stay put: readiness never moves a weight mid-workout.
+ */
+export function syncReadiness(): void {
+  const open = getActiveSession();
+  if (!open || savedSetCount(open.id) > 0) return;
+  db.update(schema.session).set(readinessOn(open.date)).where(eq(schema.session.id, open.id)).run();
 }
 
 /** Post-workout feedback: effort (session RPE 1–10) and free-text notes. */
@@ -239,8 +239,17 @@ export function insertSet(input: {
   isWarmup?: boolean;
   painFlag?: boolean;
   wasOverride?: boolean;
-  restTakenSeconds?: number;
 }): SetRow {
+  // Rest is measured at the write, from the session's previous set: one clock,
+  // however the screen got here.
+  const prev = db
+    .select({ at: schema.setLog.loggedAt })
+    .from(schema.setLog)
+    .where(eq(schema.setLog.sessionId, input.sessionId))
+    .orderBy(desc(schema.setLog.loggedAt))
+    .limit(1)
+    .get();
+  const loggedAt = nowISO();
   const next = db
     .select({ n: sql<number>`coalesce(max(${schema.setLog.setIndex}), -1)` })
     .from(schema.setLog)
@@ -256,8 +265,8 @@ export function insertSet(input: {
     rir: input.rir,
     isWarmup: input.isWarmup ? 1 : 0,
     painFlag: input.painFlag ? 1 : 0,
-    restTakenSeconds: input.restTakenSeconds ?? null,
-    loggedAt: nowISO(),
+    restTakenSeconds: prev ? Math.round((Date.parse(loggedAt) - Date.parse(prev.at)) / 1000) : null,
+    loggedAt,
     // Denormalised at insert (docs/03): charts and trends never recompute it.
     e1rm: e1RM(input.weight, input.reps, input.rir),
     wasOverride: input.wasOverride ? 1 : 0,
@@ -295,6 +304,47 @@ export function updateSet(
 
 export function deleteSet(id: string): void {
   db.delete(schema.setLog).where(eq(schema.setLog.id, id)).run();
+}
+
+/**
+ * Corrects a set in a workout that is already finished, and brings the derived
+ * aggregates back in line with it.
+ *
+ * Fixing yesterday used to mean reopening yesterday's session, which rewrote its
+ * endedAt and status, put it back on Today as the active workout, and — if you were
+ * mid-workout — refused outright (UX-09). `exercise_session_stat` is derived and
+ * regenerable by design (docs/03), so a correction is: change the row, recompute
+ * that session's stats, done. The session's own timestamps, status and place in the
+ * plan are never touched, and today's workout is not involved at all.
+ */
+export function correctSet(
+  id: string,
+  patch: Partial<{ weight: number; reps: number; rir: number; painFlag: boolean; isWarmup: boolean }>,
+): void {
+  const row = db.select({ sessionId: schema.setLog.sessionId }).from(schema.setLog).where(eq(schema.setLog.id, id)).get();
+  if (!row) return;
+  db.transaction(() => {
+    updateSet(id, patch);
+    writeSessionStats(row.sessionId);
+  });
+}
+
+/** Removes a set from a finished workout and rebuilds that session's aggregates. */
+export function deleteSetCorrecting(id: string): void {
+  const row = db.select({ sessionId: schema.setLog.sessionId }).from(schema.setLog).where(eq(schema.setLog.id, id)).get();
+  if (!row) return;
+  db.transaction(() => {
+    deleteSet(id);
+    writeSessionStats(row.sessionId);
+  });
+}
+
+/** Undo for a corrected delete: the exact row back, aggregates with it. */
+export function restoreSetCorrecting(row: SetRow): void {
+  db.transaction(() => {
+    restoreSet(row);
+    writeSessionStats(row.sessionId);
+  });
 }
 
 export function getSessionSets(sessionId: string): SetRow[] {
@@ -388,7 +438,12 @@ export interface SessionSummary {
     isPR: boolean;
     tonnage: number;
     sets: number;
-    topSet: string;
+    /** The top working set's raw numbers. The screen formats them in the exercise's
+     *  own unit — 600 stored against a plank is ten minutes, not a rep count. */
+    topWeight: number;
+    topReps: number;
+    /** Every row, warm-ups included, so history can expand and correct them (UX-09). */
+    rows: SetRow[];
   }[];
 }
 
@@ -432,7 +487,9 @@ export function getSessionSummary(sessionId: string): SessionSummary | undefined
       isPR: allTimeBest !== null && best > allTimeBest + 0.05,
       tonnage,
       sets: work.length,
-      topSet: `${top.weight}×${top.reps}`,
+      topWeight: top.weight,
+      topReps: top.reps,
+      rows: group,
     });
   }
 

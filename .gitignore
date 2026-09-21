@@ -9,3 +9,7 @@ dist/
 *.db-journal
 backups/
 .DS_Store
+
+# Exercise demonstration artwork, imported by scripts/import-exercise-media.mjs.
+# © Gym visual and NOT redistributable — see src/features/exercises/media/index.ts.
+assets/exercise-media/

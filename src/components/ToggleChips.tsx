@@ -1,6 +1,6 @@
-import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { selection } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 import type { ChipOption } from './ChipRow';
@@ -31,7 +31,7 @@ export function ToggleChips<T extends string | number>({
             accessibilityRole="checkbox"
             accessibilityState={{ checked: on }}
             onPress={() => {
-              void Haptics.selectionAsync();
+              selection();
               onToggle(o.value);
             }}
             style={({ pressed }) => [styles.chip, on && styles.on, pressed && !on && styles.pressed]}

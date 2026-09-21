@@ -12,6 +12,7 @@ import { CATALOG_BY_ID, type Pattern } from '@/data/catalog';
 import { weeklyInsights, type LiftRegion, type WeekFacts } from '@/engine/insights';
 import { recommend, type RecExercise, type RecInput, type Recommendation } from '@/engine/recommend';
 import { detectRecords, type RecordEvent } from '@/engine/records';
+import { weeklyTarget } from '@/features/program/schedule';
 import { addDays, daysBetweenISO, todayISO } from '@/lib/date';
 
 import { listMeasurements, listWeighIns } from './body';
@@ -131,7 +132,14 @@ export function weekSummary(weekStart: string, waterTargetMl: number): WeekSumma
   return {
     weekStart,
     weekEnd,
-    plannedDays: getSettings().trainingDays.length || (getActiveRoutine()?.daysPerWeek ?? 0),
+    // The same resolver Today, Plans and Settings display from, so "planned this
+    // week" cannot drift away from what those screens say (UX-10). Imported from
+    // features because the rule is pure policy with no dependencies, and the
+    // alternative is the second copy of it that caused the drift.
+    plannedDays: weeklyTarget({
+      scheduledDays: getSettings().trainingDays.length,
+      rotation: getActiveRoutine()?.daysPerWeek ?? 0,
+    }),
     completed: count('completed'),
     partial: count('partial'),
     skipped: count('skipped'),
@@ -187,6 +195,23 @@ export interface HistoryRow {
 }
 
 /**
+ * The row after which to continue — a stable cursor, not an offset.
+ *
+ * startedAt alone is not unique enough to page on (two sessions can share a
+ * timestamp), so the id breaks the tie in the same order the sort does.
+ */
+export interface HistoryCursor {
+  startedAt: string;
+  id: string;
+}
+
+/** A page of history, plus where the next one starts. `next` is null at the end. */
+export interface HistoryPage {
+  rows: HistoryRow[];
+  next: HistoryCursor | null;
+}
+
+/**
  * Past workouts, newest first, narrowed by a lift name and/or a start date.
  *
  * One list and one field rather than a mode switch: people arrive here asking either
@@ -194,10 +219,29 @@ export interface HistoryRow {
  * search mode first serves neither. When a lift is named, each row carries that
  * lift's top set, because that number is the actual question.
  */
-export function searchWorkouts(opts: { text?: string; sinceISO?: string; limit?: number } = {}): HistoryRow[] {
+export function searchWorkouts(opts: { text?: string; sinceISO?: string; limit?: number; after?: HistoryCursor | null } = {}): HistoryRow[] {
+  return searchWorkoutsPage(opts).rows;
+}
+
+/**
+ * One page of history, with a cursor for the next.
+ *
+ * The screen used to ask for 200 rows and print "narrow the search to see older
+ * ones" underneath — which, for someone with 250 sessions and no idea what to
+ * search for, meant the oldest workouts were simply unreachable (UX-09).
+ */
+export function searchWorkoutsPage(opts: { text?: string; sinceISO?: string; limit?: number; after?: HistoryCursor | null } = {}): HistoryPage {
   const text = opts.text?.trim() ?? '';
+  const limit = opts.limit ?? 40;
   const conds = [isNotNull(schema.session.endedAt)];
   if (opts.sinceISO) conds.push(gte(schema.session.date, opts.sinceISO));
+  // Strictly after the cursor in the sort's own order: (startedAt, id) descending.
+  if (opts.after) {
+    const a = opts.after;
+    conds.push(
+      sql`(${schema.session.startedAt} < ${a.startedAt} OR (${schema.session.startedAt} = ${a.startedAt} AND ${schema.session.id} < ${a.id}))`,
+    );
+  }
   if (text) {
     conds.push(
       inArray(
@@ -211,17 +255,23 @@ export function searchWorkouts(opts: { text?: string; sinceISO?: string; limit?:
     );
   }
 
+  // One more than asked for, purely to learn whether another page exists.
   const rows = db
     .select({ session: schema.session, dayLabel: schema.routineDay.label })
     .from(schema.session)
     .leftJoin(schema.routineDay, eq(schema.session.routineDayId, schema.routineDay.id))
     .where(and(...conds))
-    .orderBy(desc(schema.session.startedAt))
-    .limit(opts.limit ?? 100)
+    .orderBy(desc(schema.session.startedAt), desc(schema.session.id))
+    .limit(limit + 1)
     .all();
 
+  const more = rows.length > limit;
+  if (more) rows.length = limit;
+  const last = rows[rows.length - 1];
+  const next = more && last ? { startedAt: last.session.startedAt, id: last.session.id } : null;
+
   const ids = rows.map((r) => r.session.id);
-  if (ids.length === 0) return [];
+  if (ids.length === 0) return { rows: [], next: null };
 
   const counts = new Map(
     db
@@ -253,12 +303,15 @@ export function searchWorkouts(opts: { text?: string; sinceISO?: string; limit?:
     }
   }
 
-  return rows.map((r) => ({
-    session: r.session,
-    dayLabel: r.dayLabel,
-    sets: counts.get(r.session.id) ?? 0,
-    top: tops.get(r.session.id) ?? null,
-  }));
+  return {
+    rows: rows.map((r) => ({
+      session: r.session,
+      dayLabel: r.dayLabel,
+      sets: counts.get(r.session.id) ?? 0,
+      top: tops.get(r.session.id) ?? null,
+    })),
+    next,
+  };
 }
 
 /* ============================ recommendations =========================== */

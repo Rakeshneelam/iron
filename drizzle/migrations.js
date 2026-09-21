@@ -3,12 +3,14 @@
 import journal from './meta/_journal.json';
 import m0000 from './0000_illegal_ultragirl.sql';
 import m0001 from './0001_session_status_plans.sql';
+import m0002 from './0002_check_in.sql';
 
   export default {
     journal,
     migrations: {
       m0000,
-m0001
+m0001,
+m0002
     }
   }
   

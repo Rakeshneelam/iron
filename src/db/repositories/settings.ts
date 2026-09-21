@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import type { Level } from '@/data/catalog';
 import type { EquipmentPreset, Goal } from '@/data/templates';
 import { db } from '@/db/client';
+import { setHapticsEnabled } from '@/lib/haptics';
 import { useLive } from '@/db/live';
 import * as schema from '@/db/schema';
 import type { Phase, Sex } from '@/engine/metabolic';
@@ -140,7 +141,11 @@ export function getSettings(): AppSettings {
     const v = parseValue(key, text);
     if (v !== undefined) out[key] = v;
   }
-  return out as unknown as AppSettings;
+  const settings = out as unknown as AppSettings;
+  // Push the preference down to the shared primitives, which fire haptics from tap
+  // handlers and cannot reach a repository themselves (lib/haptics.ts, UX-11).
+  setHapticsEnabled(settings.hapticsEnabled);
+  return settings;
 }
 
 export function setSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {

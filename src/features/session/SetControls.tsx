@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
@@ -17,13 +18,17 @@ export interface SetControlsProps {
   step: number;
   logLabel: string;
   /**
-   * Set once the target sets are done. The big orange button then advances, and
-   * logging another set becomes the quieter option — because with three of three
-   * sets logged, "Log set 4" was the loudest thing on screen while a card directly
-   * above it said "All 3 sets done", so tapping the obvious button logged a set
-   * nobody wanted and took two taps to get to the next exercise.
+   * The one primary action when the target sets are done: the next unfinished
+   * exercise, or finishing the workout. The inputs collapse behind "Add another
+   * set" — with three of three logged, "Log set 4" was the loudest thing on screen
+   * directly under a card saying "All 3 sets done" (UX-04).
    */
   advance?: { label: string; onPress: () => void };
+  /** Collapsed inputs expanded again by "Add another set". */
+  expanded?: boolean;
+  onExpand?: () => void;
+  /** Last session and today's target, right above the numbers they explain. */
+  context?: ReactNode;
   /** What the reps field counts: reps, seconds, or minutes (stored as seconds). */
   unit?: 'reps' | 'sec' | 'min';
   /** Label for the load field; null hides it (cardio). */
@@ -41,54 +46,83 @@ export interface SetControlsProps {
 export function SetControls(p: SetControlsProps) {
   const unit = p.unit ?? 'reps';
   const weightLabel = p.weightLabel === undefined ? 'kg' : p.weightLabel;
+  // Done with this exercise and not deliberately adding another: one action.
+  const collapsed = p.advance !== undefined && p.expanded === false;
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.pair}>
-        {weightLabel !== null ? (
-          <Stepper label={weightLabel} value={p.weight} step={p.step} min={0} max={500} size="gym" onChange={p.onWeight} />
-        ) : null}
-        {unit === 'min' ? (
-          <Stepper label="min" value={Math.round(p.reps / 60)} step={1} min={1} max={180} size="gym" onChange={(v) => p.onReps(v * 60)} />
-        ) : (
-          <Stepper label={unit === 'sec' ? 'sec' : 'reps'} value={p.reps} step={unit === 'sec' ? 5 : 1} min={0} max={unit === 'sec' ? 600 : 100} size="gym" onChange={p.onReps} />
-        )}
-      </View>
-      {p.showEffort === false ? null : (
+      {p.context}
+
+      {collapsed ? (
+        <View style={styles.pair}>
+          <PrimaryButton label="Add another set" tone="neutral" size="gym" style={styles.flex1} onPress={() => p.onExpand?.()} />
+          <PrimaryButton
+            label={p.advance?.label ?? ''}
+            size="gym"
+            style={styles.flex1}
+            icon={<Icon name="chevronRight" size={20} color={color.onAccent} />}
+            onPress={() => p.advance?.onPress()}
+          />
+        </View>
+      ) : (
         <>
-          <Text style={styles.caption}>{unit === 'reps' ? 'Reps left in the tank' : 'How much more could you have done?'}</Text>
-          <ChipRow options={RIR_CHIPS} value={p.rir} onChange={p.onRir} size="gym" />
+          <View style={styles.pair}>
+            {weightLabel !== null ? (
+              <Stepper label={weightLabel} value={p.weight} step={p.step} min={0} max={500} size="gym" onChange={p.onWeight} />
+            ) : null}
+            {unit === 'min' ? (
+              <Stepper label="min" value={Math.round(p.reps / 60)} step={1} min={1} max={180} size="gym" onChange={(v) => p.onReps(v * 60)} />
+            ) : (
+              <Stepper
+                label={unit === 'sec' ? 'sec' : 'reps'}
+                value={p.reps}
+                step={unit === 'sec' ? 5 : 1}
+                min={0}
+                max={unit === 'sec' ? 600 : 100}
+                size="gym"
+                onChange={p.onReps}
+              />
+            )}
+          </View>
+
+          {p.showEffort === false ? null : (
+            <>
+              <Text style={styles.caption}>{unit === 'reps' ? 'Reps left in the tank' : 'How much more could you have done?'}</Text>
+              <ChipRow options={RIR_CHIPS} value={p.rir} onChange={p.onRir} size="gym" />
+            </>
+          )}
+
+          <View style={styles.pair}>
+            <PrimaryButton
+              label="Pain"
+              accessibilityLabel={p.pain ? 'Pain flagged — tap to clear' : 'Flag pain on this set'}
+              icon={<Icon name="flag" size={18} color={p.pain ? color.onAccent : color.textMuted} />}
+              tone={p.pain ? 'danger' : 'neutral'}
+              size="gym"
+              onPress={() => p.onPain(!p.pain)}
+            />
+            <PrimaryButton label={p.logLabel} size="gym" style={styles.flex1} icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={p.onLog} />
+          </View>
+
+          {/* Expanded past the target: the way on stays one tap away. */}
+          {p.advance ? (
+            <PrimaryButton
+              label={p.advance.label}
+              tone="neutral"
+              size="gym"
+              icon={<Icon name="chevronRight" size={18} />}
+              onPress={p.advance.onPress}
+            />
+          ) : null}
         </>
       )}
-      <View style={styles.pair}>
-        <PrimaryButton
-          label="Pain"
-          accessibilityLabel={p.pain ? 'Pain flagged — tap to clear' : 'Flag pain on this set'}
-          icon={<Icon name="flag" size={18} color={p.pain ? color.onAccent : color.textMuted} />}
-          tone={p.pain ? 'danger' : 'neutral'}
-          size="gym"
-          onPress={() => p.onPain(!p.pain)}
-        />
-        {p.advance ? (
-          <PrimaryButton
-            label={p.advance.label}
-            size="gym"
-            style={styles.log}
-            icon={<Icon name="chevronRight" size={20} color={color.onAccent} />}
-            onPress={p.advance.onPress}
-          />
-        ) : (
-          <PrimaryButton label={p.logLabel} size="gym" style={styles.log} icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={p.onLog} />
-        )}
-      </View>
-      {/* Still reachable, just no longer the thing you hit by reflex. */}
-      {p.advance ? <PrimaryButton label={p.logLabel} tone="neutral" onPress={p.onLog} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: space.sm },
+  flex1: { flex: 1 },
   pair: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
   caption: { ...font.caption, color: color.textMuted, textAlign: 'center' },
-  log: { flex: 1 },
 });

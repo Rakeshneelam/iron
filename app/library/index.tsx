@@ -134,8 +134,8 @@ const styles = StyleSheet.create({
   name: { ...font.body, color: color.text, fontWeight: '600' },
   sub: { ...font.caption, color: color.textMuted, marginTop: 2 },
   empty: { ...font.label, color: color.textMuted, textAlign: 'center', marginTop: space.xl },
-  drill: { gap: space.sm, paddingBottom: space.lg },
-  stage: { alignItems: 'center', backgroundColor: color.bg, borderRadius: radius.lg, paddingVertical: space.sm },
+  drill: { gap: space.md, paddingBottom: space.lg },
+  stage: { alignItems: 'center', backgroundColor: color.bg, borderRadius: radius.lg, paddingVertical: space.lg, marginBottom: space.sm },
   dose: { ...font.body, color: color.accent, fontWeight: '600' },
   cue: { ...font.body, color: color.text },
 });

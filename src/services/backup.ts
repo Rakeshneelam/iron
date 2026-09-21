@@ -8,7 +8,7 @@
 import { File, Paths } from 'expo-file-system';
 
 import { expoDb, openKeyedDatabaseFile } from '@/db/client';
-import { restoreBackup, BACKUP_TABLES } from '@/db/repositories/restore';
+import { inspectTables, BACKUP_TABLES, type Inspection } from '@/db/repositories/restore';
 import { getRaw, setRaw } from '@/db/repositories/settings';
 import { nowISO } from '@/lib/date';
 
@@ -17,11 +17,8 @@ import { deleteBackup, downloadBackup, listBackups, uploadBackup, type DriveFile
 /** Keep the last five, per docs/07. Older ones are pruned after a successful upload. */
 const KEEP = 5;
 const LAST_BACKUP_KEY = 'backup:lastAt';
-const AUTO_KEY = 'backup:auto';
 
 export const lastBackupAt = (): string | null => getRaw(LAST_BACKUP_KEY) ?? null;
-export const autoBackupOn = (): boolean => getRaw(AUTO_KEY) === 'true';
-export const setAutoBackup = (on: boolean): void => setRaw(AUTO_KEY, String(on));
 
 function stamp(): string {
   // iron-2026-09-12-1614.db.enc — sorts chronologically as a plain string.
@@ -72,59 +69,85 @@ export async function backupNow(): Promise<string> {
   return name;
 }
 
-/**
- * Backs up at most once a day, and only when asked to. Called on app start; any
- * failure is swallowed, because a backup must never be something the user waits for
- * or gets interrupted by (AGENTS.md §1.4).
+/*
+ * There is deliberately no backupIfDue() here any more.
+ *
+ * AGENTS.md §1 allows exactly one network call, "an optional, USER-INITIATED
+ * encrypted backup". A daily upload fired from the root layout on every cold start
+ * is not user-initiated, and connecting Drive used to switch it on by itself — so
+ * ticking a box to reach a restore also signed you up to a background upload.
+ * The switch, the startup call and the "on Wi-Fi, in the background" copy that
+ * described a Wi-Fi check nothing implemented are all gone (UX-12, UX-13).
+ *
+ * Backing up is Back up now. If scheduled backups are wanted later they need a real
+ * design — a constraint-aware job, a visible state, and words that match it.
  */
-export async function backupIfDue(): Promise<void> {
-  if (!autoBackupOn()) return;
-  const last = lastBackupAt();
-  if (last && Date.now() - Date.parse(last) < 24 * 60 * 60 * 1000) return;
-  await backupNow().catch(() => undefined);
-}
 
 export type { DriveFile };
 export { listBackups };
 
 /**
- * Restores a Drive backup into the live database.
+ * Downloads a Drive backup and reads it with the phrase the user typed. Changes
+ * NOTHING: it stages the file in the cache, opens it on its own connection, copies
+ * the rows out, validates them against the live schema and hands back a preview.
  *
- * The downloaded file is encrypted with the key this install already holds, so it is
- * opened as its own keyed connection and its rows are copied across — rather than
- * swapped in as a file, which would need a restart the app has no way to perform.
- * Everything below reuses the same validated, transactional apply as a file restore.
+ * This is the whole of UX-13. Restore advertised "put it back on another phone" and
+ * then opened the staged file with the key THIS install holds — which by definition
+ * is not the key that encrypted a backup from another phone — so the one case the
+ * feature existed for could not work, and the screen only said so afterwards. The
+ * phrase now decrypts the staged copy and nothing else: the live database and the
+ * key in this phone's keystore are untouched whatever happens here.
+ *
+ * There is no new crypto. `openKeyedDatabaseFile` is the same helper the app opens
+ * itself with, and SQLCipher does its own PBKDF2 over the phrase.
  */
-export async function restoreFromDrive(fileId: string): Promise<number> {
-  const bytes = await downloadBackup(fileId);
+export async function inspectDriveBackup(file: DriveFile, phrase: string): Promise<Inspection> {
   const staged = new File(Paths.cache, 'iron-restore-staging.db');
+  const clear = () => {
+    try {
+      staged.delete();
+    } catch {
+      /* cache; nothing there, or it will go anyway */
+    }
+  };
+
+  let bytes: Uint8Array;
   try {
-    staged.delete();
+    bytes = await downloadBackup(file.id);
   } catch {
-    /* nothing there */
+    return { ok: false, reason: 'That backup could not be downloaded. Nothing on this phone was touched.' };
   }
+
+  clear();
   staged.create();
   staged.write(bytes);
-
-  const tables = readTables(staged);
-  const n = restoreBackup(tables);
   try {
-    staged.delete();
-  } catch {
-    /* cache */
+    // A wrong phrase throws on the first read, not on open: SQLCipher cannot tell a
+    // bad key from a corrupt file until it tries to decrypt a page.
+    const tables = readTables(staged, phrase);
+    return inspectTables(tables, { exportedAt: file.createdTime });
+  } catch (e) {
+    return { ok: false, reason: phraseProblem(e) };
+  } finally {
+    clear();
   }
-  return n;
+}
+
+/** decodePhrase's messages are already written for the person typing. */
+function phraseProblem(e: unknown): string {
+  const message = e instanceof Error ? e.message : '';
+  if (message.includes('recovery phrase')) return message;
+  return 'That phrase does not open this backup. Check it against the one shown on the phone that made it.';
 }
 
 type Row = Record<string, unknown>;
 
 /**
- * Reads every backed-up table out of a database file. Opened through the same keyed
- * path the app uses, so a file from another install — encrypted with a different
- * phrase — simply fails to read rather than importing nonsense.
+ * Reads every backed-up table out of a database file, with the given phrase or —
+ * when none is supplied — this install's own key.
  */
-function readTables(file: File): Record<string, Row[]> {
-  const handle = openKeyedDatabaseFile(file.uri.replace('file://', ''));
+function readTables(file: File, phrase?: string): Record<string, Row[]> {
+  const handle = openKeyedDatabaseFile(file.uri.replace('file://', ''), phrase);
   try {
     const out: Record<string, Row[]> = {};
     for (const t of BACKUP_TABLES) out[t] = handle.getAllSync<Row>(`SELECT * FROM "${t}"`);
@@ -133,4 +156,3 @@ function readTables(file: File): Record<string, Row[]> {
     handle.closeSync();
   }
 }
-

@@ -3,17 +3,13 @@ import { StyleSheet, Text } from 'react-native';
 import { ChipRow } from '@/components/ChipRow';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
+import { TargetField } from '@/components/TargetField';
+import { useLive } from '@/db/live';
 import { setSetting, useSettings } from '@/db/repositories/settings';
+import { ml } from '@/lib/format';
+import { automaticHydrationTarget } from '@/services/hydration';
 import { rescheduleAll } from '@/services/notifications';
 import { color, font, space } from '@/theme/tokens';
-
-const TARGETS = [
-  { label: 'Auto', value: 0 },
-  { label: '2.5 L', value: 2500 },
-  { label: '3 L', value: 3000 },
-  { label: '3.5 L', value: 3500 },
-  { label: '4 L', value: 4000 },
-];
 
 const HEAT = [
   { label: 'Off', value: 0 },
@@ -25,25 +21,31 @@ const HEAT = [
 /**
  * How much water to aim for — configured from the screen that shows the number.
  *
- * This lived in Settings, which meant the figure at the top of Water was set three
- * screens away from where you read it. Reminders reschedule on change, because a
- * new target makes the old schedule wrong.
+ * Same Automatic/Custom model as the food targets (UX-08): the automatic figure is
+ * shown with the sum behind it, and Custom starts from that figure instead of from
+ * a fixed menu of round litres. Reminders reschedule on change, because a new
+ * target makes the old schedule wrong.
  */
 export function WaterTargetSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const s = useSettings();
+  const auto = useLive(() => automaticHydrationTarget(), ['setting', 'weigh_in', 'session', 'water_log']);
+
   return (
     <Sheet visible={visible} onClose={onClose} title="Daily target">
-      <Text style={styles.label}>How much</Text>
-      <ChipRow
-        options={TARGETS}
-        value={s.hydrationOverrideMl ?? 0}
+      <TargetField
+        label="Water"
+        value={s.hydrationOverrideMl}
+        auto={auto.ml}
+        basis={`${auto.breakdown}. Recalculated on training days and hot days.`}
+        step={100}
+        min={500}
+        max={6000}
+        format={ml}
         onChange={(v) => {
-          setSetting('hydrationOverrideMl', v === 0 ? null : v);
+          setSetting('hydrationOverrideMl', v);
           void rescheduleAll();
         }}
-        fill={false}
       />
-      <Text style={styles.hint}>Auto works out 33 ml per kg of bodyweight, then adds for training and heat.</Text>
 
       <Text style={styles.label}>Hot weather</Text>
       <ChipRow
@@ -55,7 +57,7 @@ export function WaterTargetSheet({ visible, onClose }: { visible: boolean; onClo
         }}
         fill={false}
       />
-      <Text style={styles.hint}>Adds to the automatic target on hot days. Ignored if you set a fixed amount above.</Text>
+      <Text style={styles.hint}>Adds to the automatic target on hot days. Ignored while the target above is custom.</Text>
 
       <PrimaryButton label="Done" size="gym" style={styles.done} onPress={onClose} />
     </Sheet>

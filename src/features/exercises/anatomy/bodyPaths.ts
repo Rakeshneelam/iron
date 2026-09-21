@@ -1,4 +1,3 @@
-/* eslint-disable */
 /**
  * Anatomical front/back body paths, vendored (data only) from
  * react-native-body-highlighter v3.2.0 — https://github.com/HichamELBSI/react-native-body-highlighter

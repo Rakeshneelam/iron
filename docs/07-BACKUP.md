@@ -7,8 +7,17 @@ app must be fully usable by someone who never signs in.
 
 The local SQLite file is the source of truth. Backup writes an encrypted copy of it
 to the user's own Google Drive `appDataFolder` — a hidden, per-application folder
-only this app can read. Nothing is uploaded automatically without an explicit action
-or an explicit "back up weekly on Wi-Fi" toggle.
+only this app can read. **Nothing is ever uploaded without an explicit tap.**
+
+That "back up weekly on Wi-Fi" toggle this document used to allow was built, and
+it was wrong twice over: connecting Drive switched it on by itself, so ticking a
+box to reach a *restore* also signed you up to background uploads, and the Wi-Fi
+in the label described a check nothing implemented. Both are gone, along with the
+`backupIfDue()` that ran on every cold start. AGENTS.md §1 permits exactly one
+network call and calls it *user-initiated*; backing up is `Back up now`.
+
+Scheduled backups can come back, but they need a real design first: a
+constraint-aware job, a visible state, and words that match what it does.
 
 ## Auth
 
@@ -46,8 +55,21 @@ clever.
 ## Restore
 
 Restore is the feature, backup is just the prerequisite. On a fresh install:
-Settings → Restore → sign in → pick a backup → decrypt → validate schema version →
-replace the DB → restart.
+Settings → Restore → authorise Drive → pick a backup → **type the recovery phrase
+of the phone that made it** → decrypt → validate against the live schema → preview
+what is in it → one destructive confirmation → replace.
+
+That phrase step is not optional and was, for a while, missing: restore opened the
+staged file with the key *this* install happens to hold, which is by definition not
+the key that encrypted a backup from another phone — so the one case the feature
+exists for could not work, and the screen only said so afterwards. The phrase now
+decrypts the staged copy and nothing else; a wrong phrase, a corrupt file, a failed
+download or backing out all leave this phone's database and key untouched.
+
+Both routes in — a JSON file and an encrypted database from Drive — meet at
+`repositories/restore.inspectTables`, so both get the same schema validation and
+the same transactional apply. Nothing goes from `SELECT *` straight into the live
+database.
 
 Validate before replacing. Never overwrite a populated DB without a confirmation
 that names the date of the backup being restored and the date of the local data.

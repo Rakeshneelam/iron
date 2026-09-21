@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipRow, Icon, PrimaryButton, Screen, Stepper, toast, ToggleChips } from '@/components';
@@ -14,28 +14,27 @@ import { adaptTemplate, PRESET_TOOLS, recommendTemplates, type TrainingProfile }
 import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle, WEEKDAYS } from '@/features/profile';
 import { GOALS } from '@/features/settings/goals';
 import { todayISO } from '@/lib/date';
-import { currentUser, isAccountsConfigured, loadProfile, watchAccount } from '@/services/account';
+import { kg } from '@/lib/format';
 import { rescheduleAll } from '@/services/notifications';
 import { color, font, hit, layout, radius, space } from '@/theme/tokens';
 
 const OWN = 'own';
 const MINUTES = [20, 30, 45, 60, 75].map((m) => ({ label: `${m}`, value: m }));
-
-/** Account, then you, then training, then a plan. One decision per screen. */
-const STEPS = ['account', 'you', 'training', 'plan'] as const;
-const LAST = STEPS.length - 1;
+/** Only used to place the stepper somewhere sensible — never recorded on its own. */
+const WEIGHT_ANCHOR_KG = 75;
 
 /**
- * First run on a fresh install.
+ * First run on a fresh install. One screen, no account, no network.
  *
- * Staged rather than one long form: a single screen asking fourteen questions is
- * where people put the phone down. Each stage asks one thing, says how far through
- * you are, and refuses to advance only when it genuinely cannot continue.
+ * It used to be four stages with a welcome screen wired to Firebase sign-in, which
+ * contradicted the two hard rules this app is built on: no backend, and ONE setup
+ * screen (AGENTS.md §1.1, §1.2). The staging was defensible on its own terms — a
+ * single screen asking fourteen questions is where people put the phone down — so
+ * the questions that change nothing for most people are folded behind "More
+ * training detail" instead of behind a Next button.
  *
- * The account stage comes first because that is the decision everything else hangs
- * off — and it is skippable, because AGENTS.md §1.2 is explicit that the app must be
- * fully usable by someone who never signs in. Skipping costs nothing and can be
- * reversed later from Settings.
+ * Google is not here at all. Drive authorisation is a backup permission, asked for
+ * in Backup by someone who wants a backup; it was never an Iron account.
  */
 export default function Setup() {
   const insets = useSafeAreaInsets();
@@ -44,7 +43,14 @@ export default function Setup() {
   const [sex, setSex] = useState<Sex>(initial.sex);
   const [age, setAge] = useState(initial.age);
   const [height, setHeight] = useState(initial.heightCm);
-  const [weight, setWeight] = useState(() => getLatestWeight() ?? 70);
+  const [weight, setWeight] = useState(() => getLatestWeight() ?? WEIGHT_ANCHOR_KG);
+  /**
+   * Whether the number above is a reading or just where the stepper happens to sit.
+   * Setup used to default to 70 kg and write a weigh-in unconditionally, so every
+   * install began its weight history with a measurement nobody took, and the trend
+   * line started from a fiction (UX-12).
+   */
+  const [weightGiven, setWeightGiven] = useState(false);
   const [phase, setPhase] = useState<Phase>(initial.phase);
   const [goal, setGoal] = useState<Goal>(initial.goalFocus);
   const [level, setLevel] = useState<Level>('beginner');
@@ -54,45 +60,22 @@ export default function Setup() {
   const [limits, setLimits] = useState<Stress[]>([]);
   const [picked, setPicked] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [moreTraining, setMoreTraining] = useState(false);
+  // Screen reserves a fixed allowance at the bottom; this bar is taller than that,
+  // more so once the gate line appears. Measured, so it stays right.
+  const [barHeight, setBarHeight] = useState(0);
 
   const profile: TrainingProfile = useMemo(
     () => ({ goal, level, daysPerWeek: days.length || 3, minutes, tools: new Set(PRESET_TOOLS[preset]), disliked: new Set(), limitations: new Set(limits) }),
     [goal, level, days.length, minutes, preset, limits],
   );
   const ranked = useMemo(() => recommendTemplates(profile, PLAN_TEMPLATES, CATALOG_BY_ID), [profile]);
+
   const choice = picked ?? ranked[0]?.template.id ?? OWN;
   const shown = showAll ? ranked : ranked.slice(0, 3);
 
-  const [step, setStep] = useState(0);
-
-  // Signed in from the account screen: take what it already knows rather than
-  // asking the same questions twice, and move on.
-  useEffect(() => {
-    if (!isAccountsConfigured()) return;
-    return watchAccount((u) => {
-      if (!u) return;
-      void loadProfile().then((pr) => {
-        if (pr?.name) setName(pr.name);
-        if (pr?.age) setAge(pr.age);
-        if (pr?.sex) setSex(pr.sex);
-      });
-      setStep((current) => (current === 0 ? 1 : current));
-    });
-  }, []);
-
-  const signedIn = isAccountsConfigured() && currentUser() !== null;
-
   /** Why the button is off, or null when it is on. Never a dead control. */
-  const blocker =
-    step === 1 && !name.trim() ? 'Enter your name to continue.'
-    : step === 2 && days.length === 0 ? 'Pick the days you can train.'
-    : null;
-  const ready = blocker === null;
-
-  // Screen reserves layout.actionBarHeight at the bottom, but this bar is taller than
-  // that — more so once the gate line appears — which was hiding the last question
-  // behind it. Measured, so it stays right whatever the bar ends up containing.
-  const [barHeight, setBarHeight] = useState(0);
+  const blocker = !name.trim() ? 'Enter your name to finish.' : days.length === 0 ? 'Pick the days you can train.' : null;
   const clearance = Math.max(0, barHeight - layout.actionBarHeight);
 
   const finish = () => {
@@ -109,7 +92,9 @@ export default function Setup() {
     setSetting('tools', []);
     setSetting('limitations', limits);
     setSetting('warmupMode', minutes <= 30 ? 'quick' : 'standard');
-    upsertWeighIn(todayISO(), weight);
+    // Only an explicitly confirmed number becomes a weigh-in. Skipped, the targets
+    // fall back to a calculation — which is never dressed up as a measurement.
+    if (weightGiven) upsertWeighIn(todayISO(), weight);
     const t = PLAN_TEMPLATES.find((x) => x.id === choice);
     if (t) {
       const adapted = adaptTemplate(t, profile, CATALOG_BY_ID);
@@ -117,105 +102,92 @@ export default function Setup() {
       if (adapted.swaps.length) toast(`Plan ready — ${adapted.swaps.length} ${adapted.swaps.length === 1 ? 'exercise' : 'exercises'} swapped for your equipment`);
     }
     setSetting('setupDone', true);
+    // Reminders are off until asked for; this only lays down the channels.
     void rescheduleAll();
     router.replace(t ? '/' : '/program');
   };
 
-  const TITLES = ['Welcome to Iron', 'About you', 'Your training', 'Your plan'];
-  const SUBS = [
-    'Everything stays on this phone.',
-    'Used for calorie and water targets.',
-    'Only what changes the plan we suggest.',
-    'Fully editable, and you can switch any time.',
-  ];
-
   return (
     <View style={styles.flex}>
-      <Screen title={TITLES[step]} subtitle={`Step ${step + 1} of ${STEPS.length} · ${SUBS[step]}`}>
-        {step === 0 ? (
-          <>
-            {/* Three short promises instead of a paragraph. Someone deciding whether
-                to hand over an email reads a list; they skim prose. */}
-            <View style={styles.promises}>
-              {[
-                'Your workouts, weight and food never leave this phone.',
-                'No account needed — Iron works fully without one.',
-                'An account only saves your name and email, so you can sign in elsewhere.',
-              ].map((line) => (
-                <View key={line} style={styles.promise}>
-                  <Icon name="check" size={16} color={color.accent} />
-                  <Text style={styles.promiseText}>{line}</Text>
-                </View>
-              ))}
-            </View>
+      <Screen title="Set up Iron" subtitle="Everything stays on this phone. No account, no sign-in.">
+        <View style={styles.brand}>
+          <Image source={require('../assets/icon.png')} style={styles.logo} accessibilityLabel="Iron" />
+        </View>
 
-            {/* One primary action. Everything else is visibly secondary, so the screen
-                reads as a decision rather than a menu of four equal buttons. */}
-            <View style={styles.choices}>
-              {isAccountsConfigured() ? (
-                <PrimaryButton label="Continue with Google" size="gym" onPress={() => router.push('/account')} />
-              ) : null}
-              <PrimaryButton
-                label={isAccountsConfigured() ? 'Set up without an account' : 'Get started'}
-                tone={isAccountsConfigured() ? 'neutral' : 'accent'}
-                size="gym"
-                onPress={() => setStep(1)}
-              />
-            </View>
+        <Text style={styles.label}>Your name</Text>
+        <TextInput
+          value={name}
+          onChangeText={setName}
+          placeholder="Your name"
+          placeholderTextColor={color.textFaint}
+          style={styles.input}
+          autoCapitalize="words"
+          accessibilityLabel="Your name, required"
+        />
 
-            <View style={styles.quiet}>
-              {isAccountsConfigured() ? (
-                <PrimaryButton label="Sign up with email" tone="ghost" onPress={() => router.push('/account')} />
-              ) : null}
-              <PrimaryButton label="Restore a backup" tone="ghost" onPress={() => router.push('/settings/restore')} />
-            </View>
-          </>
-        ) : null}
+        <Text style={styles.label}>Sex</Text>
+        <ChipRow
+          options={[
+            { label: 'Male', value: 'male' },
+            { label: 'Female', value: 'female' },
+          ]}
+          value={sex}
+          onChange={setSex}
+        />
 
-        {step === 1 ? (
-          <>
-            <Text style={styles.label}>Your name</Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Your name"
-              placeholderTextColor={color.textFaint}
-              style={styles.input}
-              autoCapitalize="words"
-              accessibilityLabel="Your name, required"
-            />
-            {signedIn ? <Text style={styles.hint}>Taken from your account. Change it if you like.</Text> : null}
-            <Text style={styles.label}>Sex</Text>
-            <ChipRow
-              options={[
-                { label: 'Male', value: 'male' },
-                { label: 'Female', value: 'female' },
-              ]}
-              value={sex}
-              onChange={setSex}
-            />
-            <View style={styles.pair}>
-              <Stepper label="Age" value={age} step={1} min={14} max={99} onChange={setAge} />
-              <Stepper label="Height" suffix="cm" value={height} step={1} min={120} max={230} onChange={setHeight} />
-            </View>
-            <View style={styles.pair}>
-              <Stepper label="Weight" suffix="kg" value={weight} step={0.5} min={30} max={250} onChange={setWeight} />
-            </View>
-            <Text style={styles.label}>Body-weight goal</Text>
-            <ChipRow options={GOALS} value={phase} onChange={setPhase} fill={false} />
-            <Text style={styles.hint}>Height and weight stay on this phone. Long-press a number to type it.</Text>
-          </>
-        ) : null}
+        <View style={styles.pair}>
+          <Stepper label="Age" value={age} step={1} min={14} max={99} onChange={setAge} />
+          <Stepper label="Height" suffix="cm" value={height} step={1} min={120} max={230} onChange={setHeight} />
+        </View>
 
-        {step === 2 ? (
+        <Text style={styles.label}>Weight today (optional)</Text>
+        <Stepper
+          suffix="kg"
+          value={weight}
+          step={0.5}
+          min={30}
+          max={250}
+          onChange={(v) => {
+            setWeight(v);
+            setWeightGiven(true);
+          }}
+        />
+        {weightGiven ? (
+          <View style={styles.row}>
+            <Text style={[styles.hint, styles.flex1]}>Saved as today&apos;s weigh-in when you finish.</Text>
+            <PrimaryButton label="Don't record" tone="ghost" onPress={() => setWeightGiven(false)} />
+          </View>
+        ) : (
+          <View style={styles.row}>
+            <Text style={[styles.hint, styles.flex1]}>Skip it and no weigh-in is created. Targets use a calculation until you weigh in.</Text>
+            {/* Explicit, because the number happening to equal the default is not an answer. */}
+            <PrimaryButton label={`Use ${kg(weight)}`} tone="neutral" onPress={() => setWeightGiven(true)} />
+          </View>
+        )}
+
+        <Text style={styles.label}>Body-weight goal</Text>
+        <ChipRow options={GOALS} value={phase} onChange={setPhase} fill={false} />
+
+        <Text style={styles.label}>Which days can you train?</Text>
+        <ToggleChips options={WEEKDAYS} values={days} onToggle={(d) => setDays(toggle(days, d))} />
+        <Text style={styles.hint}>Your plan runs in order whatever the day — these only set reminders.</Text>
+
+        <Pressable
+          onPress={() => setMoreTraining(!moreTraining)}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: moreTraining }}
+          style={styles.disclosure}
+        >
+          <Text style={styles.disclosureText}>More training detail</Text>
+          <Icon name={moreTraining ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
+        </Pressable>
+
+        {moreTraining ? (
           <>
             <Text style={styles.label}>Main goal</Text>
             <ChipRow options={GOAL_OPTIONS} value={goal} onChange={setGoal} fill={false} />
             <Text style={styles.label}>Lifting experience</Text>
             <ChipRow options={LEVEL_OPTIONS} value={level} onChange={setLevel} fill={false} />
-            <Text style={styles.label}>Which days can you train?</Text>
-            <ToggleChips options={WEEKDAYS} values={days} onToggle={(d) => setDays(toggle(days, d))} />
-            <Text style={styles.hint}>Your plan runs in order whatever the day — these only set reminders.</Text>
             <Text style={styles.label}>Minutes per session</Text>
             <ChipRow options={MINUTES} value={minutes} onChange={setMinutes} fill={false} />
             <Text style={styles.label}>Where do you train?</Text>
@@ -224,53 +196,39 @@ export default function Setup() {
             <ToggleChips options={LIMITATION_OPTIONS} values={limits} onToggle={(v) => setLimits(toggle(limits, v))} />
             <Text style={styles.hint}>Only used to avoid exercises that load these areas, and it never leaves this phone. Not medical advice.</Text>
           </>
-        ) : null}
+        ) : (
+          <Text style={styles.hint}>Goal, experience, session length, equipment and anything to go easy on. All editable later.</Text>
+        )}
 
-        {step === 3 ? (
-          <>
-            <Text style={styles.lead}>Start from a plan we suggest, or build your own from scratch.</Text>
+        <Text style={styles.sectionLabel}>Your plan</Text>
+        <Text style={styles.hint}>Fully editable, and you can switch any time.</Text>
+        <View style={styles.planGap}>
+          <Choice title="Build my own" subtitle="Start empty and add your own days and exercises" selected={choice === OWN} onPress={() => setPicked(OWN)} />
+          {shown.map((m, i) => (
             <Choice
-              title="Build my own"
-              subtitle="Start empty and add your own days and exercises"
-              selected={choice === OWN}
-              onPress={() => setPicked(OWN)}
+              key={m.template.id}
+              title={m.template.name}
+              subtitle={`${m.template.daysPerWeek} days, about ${m.template.minutes} min. ${m.reasons.slice(0, 2).join(', ')}`}
+              badge={i === 0 && !showAll ? 'Best match' : undefined}
+              selected={choice === m.template.id}
+              onPress={() => setPicked(m.template.id)}
             />
-            <Text style={styles.orLabel}>Or pick a ready-made plan</Text>
-            {shown.map((m, i) => (
-              <Choice
-                key={m.template.id}
-                title={m.template.name}
-                subtitle={`${m.template.daysPerWeek} days · ~${m.template.minutes} min · ${m.reasons.slice(0, 2).join(' · ')}`}
-                badge={i === 0 && !showAll ? 'Best match' : undefined}
-                selected={choice === m.template.id}
-                onPress={() => setPicked(m.template.id)}
-              />
-            ))}
-            {!showAll ? <PrimaryButton label="See all plans" tone="ghost" onPress={() => setShowAll(true)} /> : null}
-            <Text style={styles.hint}>Every plan is fully editable, and you can keep several and switch any time.</Text>
-          </>
-        ) : null}
+          ))}
+          {!showAll ? <PrimaryButton label="See all plans" tone="ghost" onPress={() => setShowAll(true)} /> : null}
+        </View>
+
+        {/* Secondary, and clearly not part of setting up: this is for a new phone. */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Coming from another phone?</Text>
+          <PrimaryButton label="Restore a backup" tone="ghost" onPress={() => router.push('/settings/restore')} />
+        </View>
 
         <View style={{ height: clearance }} />
       </Screen>
 
-      <View
-        style={[styles.actionBar, { paddingBottom: insets.bottom + space.md }]}
-        onLayout={(e) => setBarHeight(e.nativeEvent.layout.height)}
-      >
+      <View style={[styles.actionBar, { paddingBottom: insets.bottom + space.md }]} onLayout={(e) => setBarHeight(e.nativeEvent.layout.height)}>
         {blocker ? <Text style={styles.gate}>{blocker}</Text> : null}
-        <View style={styles.barRow}>
-          {step > 0 ? <PrimaryButton label="Back" tone="ghost" onPress={() => setStep(step - 1)} /> : null}
-          {step === 0 ? null : (
-            <PrimaryButton
-              label={step === LAST ? "Let's go" : 'Next'}
-              size="gym"
-              style={styles.flex1}
-              disabled={!ready}
-              onPress={() => (step === LAST ? finish() : setStep(step + 1))}
-            />
-          )}
-        </View>
+        <PrimaryButton label="Finish setup" size="gym" disabled={blocker !== null} onPress={finish} />
       </View>
     </View>
   );
@@ -292,23 +250,31 @@ function Choice({ title, subtitle, selected, badge, onPress }: { title: string; 
 }
 
 const styles = StyleSheet.create({
+  brand: { alignItems: 'center', marginBottom: space.lg },
+  logo: { width: 72, height: 72, borderRadius: radius.lg },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: space.sm,
+    marginTop: space.xxl,
+    paddingTop: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.border,
+  },
+  footerText: { ...font.label, color: color.textMuted },
   gate: { ...font.caption, color: color.textMuted, textAlign: 'center', marginBottom: space.xs },
-  lead: { ...font.body, color: color.text },
-  gapSm: { marginTop: space.sm },
-  gapLg: { marginTop: space.lg },
-  barRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  orLabel: { ...font.label, color: color.textMuted, marginTop: space.xl, marginBottom: space.sm },
-  promises: { gap: space.md, marginTop: space.md, marginBottom: space.xl },
-  promise: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
-  promiseText: { ...font.body, color: color.text, flex: 1 },
-  choices: { gap: space.sm },
-  quiet: { marginTop: space.xl, gap: space.xs },
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs },
   input: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.gym },
   label: { ...font.label, color: color.text, fontWeight: '600', marginTop: space.lg, marginBottom: space.sm },
+  sectionLabel: { ...font.heading, color: color.text, marginTop: space.xxl },
+  planGap: { marginTop: space.md },
   pair: { flexDirection: 'row', gap: space.md, marginTop: space.md },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
+  disclosure: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.default, marginTop: space.lg },
+  disclosureText: { ...font.label, color: color.text, fontWeight: '600' },
   choice: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, backgroundColor: color.surface, marginBottom: space.sm },
   choiceOn: { borderColor: color.accent },
   pressed: { backgroundColor: color.surfaceHigh },

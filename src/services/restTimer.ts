@@ -7,7 +7,6 @@
  * date trigger.
  */
 import { and, eq } from 'drizzle-orm';
-import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
@@ -19,6 +18,7 @@ import { useLive } from '@/db/live';
 import { getRaw, setRaw } from '@/db/repositories/settings';
 import * as schema from '@/db/schema';
 import { toISOInstant } from '@/lib/date';
+import { success } from '@/lib/haptics';
 
 import { CHANNELS } from './notifications';
 
@@ -116,7 +116,8 @@ export async function addSeconds(delta: number): Promise<void> {
 /** Clears only the timer that actually expired, never a newer one. */
 function expire(endsAt: string, freshlyExpired: boolean): void {
   db.delete(schema.timerState).where(and(eq(schema.timerState.id, ROW_ID), eq(schema.timerState.endsAt, endsAt))).run();
-  if (freshlyExpired) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  // Rest ending is a commit like any other: one switch silences it too (UX-11).
+  if (freshlyExpired) success();
 }
 
 export interface RestTimerView {
@@ -137,12 +138,15 @@ export function useRestTimer(sessionId: string | null = null): RestTimerView {
 
   useEffect(() => {
     if (endsAtMs === null) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 250);
+    const tick = () => setNow(Date.now());
+    // First tick straight away rather than 250 ms late, but from a callback, not the effect body.
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, 250);
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') setNow(Date.now());
+      if (s === 'active') tick();
     });
     return () => {
+      clearTimeout(first);
       clearInterval(id);
       sub.remove();
     };

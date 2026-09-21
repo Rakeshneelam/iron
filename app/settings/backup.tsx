@@ -9,17 +9,11 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, confirm, Icon, PrimaryButton, Screen, SectionHeader } from '@/components';
+import { Card, confirm, Icon, PrimaryButton, Screen, SectionHeader } from '@/components';
 import { recoveryPhrase } from '@/db/client';
-import { Row } from '@/features/settings/Row';
-import { autoBackupOn, backupNow, lastBackupAt, setAutoBackup } from '@/services/backup';
+import { backupNow, lastBackupAt } from '@/services/backup';
 import { connect, currentAccount, disconnect, isConfigured } from '@/services/drive';
 import { color, font, space } from '@/theme/tokens';
-
-const ON_OFF = [
-  { label: 'On', value: 1 },
-  { label: 'Off', value: 0 },
-] as const;
 
 /** "2 hours ago" beats a timestamp for something you only want reassurance about. */
 function fmtWhen(iso: string): string {
@@ -37,7 +31,6 @@ export default function BackupSettings() {
   const [account, setAccount] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [backingUp, setBackingUp] = useState(false);
-  const [auto, setAuto] = useState(autoBackupOn);
   const [lastAt, setLastAt] = useState(lastBackupAt);
 
   useEffect(() => {
@@ -61,9 +54,7 @@ export default function BackupSettings() {
               {lastAt ? `Last backed up ${fmtWhen(lastAt)}.` : 'Not backed up yet.'} Only Iron can read this folder, and
               the file is encrypted with your recovery phrase.
             </Text>
-            <Row label="Back up daily" hint="On Wi-Fi, in the background. Never interrupts a workout.">
-              <ChipRow options={ON_OFF} value={auto ? 1 : 0} onChange={(v) => { setAutoBackup(v === 1); setAuto(v === 1); }} fill={false} />
-            </Row>
+            <Text style={styles.hint}>Backups happen when you tap Back up now. Nothing is uploaded on its own.</Text>
             <PrimaryButton
               label={backingUp ? 'Backing up…' : 'Back up now'}
               tone="neutral"
@@ -87,9 +78,9 @@ export default function BackupSettings() {
               onPress={() =>
                 confirm({
                   title: 'Disconnect Google Drive?',
-                  message: 'Iron stops backing up. Backups already in Drive are left alone.',
+                  message: 'Iron can no longer reach Drive. Backups already there are left alone.',
                   confirmLabel: 'Disconnect',
-                  onConfirm: () => void disconnect().then(() => { setAccount(null); setAutoBackup(false); setAuto(false); }),
+                  onConfirm: () => void disconnect().then(() => setAccount(null)),
                 })
               }
             />
@@ -97,7 +88,8 @@ export default function BackupSettings() {
         ) : (
           <>
             <Text style={styles.hint}>
-              Backs up to a private folder only Iron can see. You need your recovery phrase to read it on a new phone.
+              Authorises Iron to use a private folder only it can see — this is a Drive permission, not an Iron account.
+              Backups only happen when you ask for one, and you need your recovery phrase to read one on a new phone.
             </Text>
             <PrimaryButton
               label="Connect Google Drive"
@@ -105,8 +97,9 @@ export default function BackupSettings() {
               style={styles.gap}
               onPress={() => {
                 setMessage(null);
+                // Authorisation only. Connecting does not start uploading anything.
                 void connect().then(
-                  (email) => { if (email) { setAccount(email); setAutoBackup(true); setAuto(true); } },
+                  (email) => { if (email) setAccount(email); },
                   (e: unknown) => setMessage(`Could not connect: ${e instanceof Error ? e.message : String(e)}`),
                 );
               }}

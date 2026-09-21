@@ -38,16 +38,24 @@ If you read only one file, read this one. Everything else is detail in `/docs`.
 
 ## 2. What it does
 
-Six surfaces, in priority order:
+**Five tabs: Today · Food · Body · Plans · Progress.** Water and Settings are
+screens off them, not tabs.
 
 | # | Surface | Purpose |
 |---|---|---|
-| 1 | **Today** | The workout for today, logged set by set, with next-set suggestions |
-| 2 | **Plans** | Any number of plans (templates or custom), one active; days → exercises |
-| 3 | **Body** | Morning bodyweight before training; smoothed trend, not raw dots |
-| 4 | **Food** | Calories/macros with one-tap repeats of his real meals |
-| 5 | **Water** | Daily target, quick log, debt-based reminders |
-| 6 | **Progress** | Weekly summary + plan suggestions the user approves (`src/engine/recommend.ts`) |
+| 1 | **Today** | The workout for today, logged set by set, with next-set suggestions. Opens with the workout — the check-in is one optional row, and Start starts |
+| 2 | **Food** | Calories/macros with one-tap repeats of his real meals, plus a compact Water row for the day on screen |
+| 3 | **Body** | Three sections in one tab: **Weight** (smoothed trend, not raw dots), **Recovery** (check-in, sleep, correctable history), **Measurements**. Each has exactly one primary action |
+| 4 | **Plans** | Any number of plans (templates or custom), one active; days → exercises. Owns the training schedule |
+| 5 | **Progress** | Weekly summary + plan suggestions the user approves (`src/engine/recommend.ts`), and the way into workout history |
+| — | **Water** | Daily target, quick log, debt-based reminders. A screen off Today and Food |
+
+> **There used to be a sixth tab, `Daily`.** It owned the check-in, weight and
+> sleep while Body owned measurements and a profile editor — so Today and Daily
+> both opened with the same check-in card, and the one body measurement taken
+> daily was the one Body excluded. Its content moved into Body as reusable
+> sections; `/daily` survives only as a redirect, because reminders scheduled by
+> older versions carry it. Do not reintroduce it. See `docs/02-ARCHITECTURE.md`.
 
 The core intelligence is already written and tested in `src/engine/`. **Do not
 rewrite it.** Wire it up.

@@ -1,244 +1,86 @@
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, TrendChart } from '@/components';
-import { useLive } from '@/db/live';
-import { getLatestWeight, listMeasurements, listWeighIns, type Measurement } from '@/db/repositories/body';
-import { PHASES, setSetting, useSettings } from '@/db/repositories/settings';
-import { phaseCheck, weeklyRateKg, weightTrend } from '@/engine/metabolic';
-import { DetailsSheet } from '@/features/body/DetailsSheet';
-import { MeasureSheet, readingBefore, SiteSheet, WeighInSheet, type WeighEntry } from '@/features/body/sheets';
-import { SITES } from '@/features/body/sites';
-import { GOALS } from '@/features/settings/goals';
-import { addDays, daysBetweenISO, fmtDayLabel, todayISO } from '@/lib/date';
-import { kg, kgNum, signed } from '@/lib/format';
-import { DEFAULT_WEIGHT_KG } from '@/services/hydration';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { Card, ChipRow, Icon, Screen } from '@/components';
+import { useSettings } from '@/db/repositories/settings';
+import { MeasurementsSection } from '@/features/body/MeasurementsSection';
+import { RecoverySection } from '@/features/body/RecoverySection';
+import { WeightSection } from '@/features/body/WeightSection';
+import { color, font, gap, space } from '@/theme/tokens';
 
-const RANGES = [
-  { label: '1M', value: 30 },
-  { label: '3M', value: 90 },
-  { label: '1Y', value: 365 },
-  { label: 'All', value: 0 },
+const SECTIONS = [
+  { label: 'Weight', value: 'weight' as const },
+  { label: 'Recovery', value: 'recovery' as const },
+  { label: 'Measurements', value: 'measurements' as const },
 ];
+export type BodySection = (typeof SECTIONS)[number]['value'];
 
-/** The trend is the signal; a single morning is noise. Never red for weight going up. */
+const SUBTITLE: Record<BodySection, string> = {
+  weight: 'Your trend, not this morning’s number',
+  recovery: 'Sleep, soreness and stress',
+  measurements: 'Every 2–4 weeks',
+};
+
+const isSection = (v: unknown): v is BodySection => SECTIONS.some((s) => s.value === v);
+
+/**
+ * Body: how your body is changing, and how you feel.
+ *
+ * Three sections in one tab rather than three tabs, because they are asked at
+ * completely different rates — weight most mornings, recovery most days,
+ * measurements every few weeks — and each has exactly one primary action: Log
+ * weight, Check in, Log measurements (UX-01).
+ *
+ * The section can come from the route, so a notification or deep link lands on the
+ * thing it was about (/body?section=measurements). Without a parameter the tab
+ * opens on Weight the first time and then stays where it was left, because an
+ * ordinary tab switch is not a request to go back to the start.
+ */
 export default function BodyScreen() {
+  const params = useLocalSearchParams<{ section?: string }>();
   const settings = useSettings();
-  const today = todayISO();
-  const weighIns = useLive(() => listWeighIns(), ['weigh_in']);
-  const measurements = useLive(() => listMeasurements(), ['measurement']);
+  const [chosen, setChosen] = useState<BodySection>('weight');
+  // The parameter wins while it is on the URL; clearing it returns to the
+  // remembered section rather than snapping back to Weight.
+  const section = isSection(params.section) ? params.section : chosen;
 
-  const [range, setRange] = useState(90);
-  const [weigh, setWeigh] = useState<WeighEntry | null>(null);
-  const [measuring, setMeasuring] = useState(false);
-  const [site, setSite] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
-  const [details, setDetails] = useState(false);
-
-  const todays = weighIns.find((w) => w.date === today);
-  const trend = useMemo(() => weightTrend(weighIns), [weighIns]);
-  const lastTrend = trend[trend.length - 1]?.trend ?? null;
-  const rate = weeklyRateKg(weighIns);
-  const pctWk = lastTrend ? (rate / lastTrend) * 100 : 0;
-  const check = lastTrend !== null && trend.length >= 7 ? phaseCheck(settings.phase, lastTrend, rate) : null;
-
-  const shown = range ? trend.filter((t) => t.date >= addDays(today, -range)) : trend;
-  const first = shown[0]?.date ?? today;
-  const trendPts = shown.map((t) => ({ x: daysBetweenISO(first, t.date), y: t.trend }));
-  const rawPts = shown.map((t) => ({ x: daysBetweenISO(first, t.date), y: t.raw }));
-
-  const bySite = useMemo(() => {
-    const m = new Map<string, Measurement[]>();
-    for (const r of measurements) m.set(r.site, [...(m.get(r.site) ?? []), r]);
-    return m;
-  }, [measurements]);
-  const latestBySite = useMemo(() => new Map([...bySite].map(([k, rows]) => [k, rows[0]?.cm ?? 0])), [bySite]);
-  const measured = SITES.filter((s) => bySite.has(s.key));
-  const waist = bySite.get('waist')?.[0];
-  const whtr = waist && settings.heightCm > 0 ? waist.cm / settings.heightCm : null;
-
-  const recent = [...weighIns].reverse().slice(0, showAll ? 60 : 5);
-  const hasMeasurements = measurements.length > 0;
-  /** One point is not a trend. Below this the card shows a weight, not a trend. */
-  const hasTrend = trend.length >= 2;
+  const select = (next: BodySection) => {
+    setChosen(next);
+    // Drop the parameter, or it would keep overriding the taps that follow it.
+    if (params.section !== undefined) router.setParams({ section: undefined });
+  };
 
   return (
-    <Screen
-      title="Body"
-      right={
-        <IconButton
-          icon="edit"
-          tone="neutral"
-          accessibilityLabel="Edit your name, sex, age and height"
-          onPress={() => setDetails(true)}
-        />
-      }
-    >
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.hero}>
-            {lastTrend === null ? '—' : kgNum(Math.round(lastTrend * 10) / 10)}
-            <Text style={styles.unit}> kg</Text>
-          </Text>
-          {trend.length >= 7 ? <Pill label={`${signed(rate, 2)} kg/wk · ${signed(pctWk, 2)}%`} /> : null}
-        </View>
-        {/* Edit sits with the number it edits, and says "edit" rather than "plus" —
-            the header button that used to do this looked like adding a new reading.
-            The value itself is only repeated once there is a trend to distinguish
-            it from; with one reading the hero already IS today's weight. */}
-        <View style={styles.todayRow}>
-          <Text style={styles.muted}>
-            {!todays ? 'Not weighed today' : hasTrend ? `Today ${kg(todays.kg)}` : 'Weighed today'}
-          </Text>
-          {todays ? (
-            <IconButton
-              icon="edit"
-              tone="neutral"
-              accessibilityLabel={`Edit today's weight, ${kg(todays.kg)}`}
-              onPress={() => setWeigh({ date: today, kg: todays.kg, existing: true })}
-            />
-          ) : null}
-        </View>
-        {trend.length >= 2 ? (
-          <View style={styles.chart}>
-            <TrendChart
-              trend={trendPts}
-              raw={rawPts}
-              height={150}
-              format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`}
-              formatX={(x) => fmtDayLabel(addDays(first, x))}
-            />
-            <ChipRow options={RANGES} value={range} onChange={setRange} />
+    <Screen title="Body" subtitle={SUBTITLE[section]}>
+      <View style={styles.selector}>
+        <ChipRow options={SECTIONS} value={section} onChange={select} />
+      </View>
+
+      {section === 'weight' ? <WeightSection /> : null}
+      {section === 'recovery' ? <RecoverySection /> : null}
+      {section === 'measurements' ? <MeasurementsSection /> : null}
+
+      {/* A link, not a second profile editor. Profile & goals owns these (UX-03). */}
+      <Card onPress={() => router.push('/settings/profile')}>
+        <View style={styles.linkRow}>
+          <View style={styles.flex1}>
+            <Text style={styles.body}>Profile & goals</Text>
+            <Text style={styles.hint}>
+              {settings.name || 'Your details'} · {settings.age}, {settings.heightCm} cm — used for calorie and water targets.
+            </Text>
           </View>
-        ) : (
-          <Text style={styles.hint}>Log a few mornings and your trend line appears here.</Text>
-        )}
+          <Icon name="chevronRight" size={20} color={color.textMuted} />
+        </View>
       </Card>
-
-      {!todays ? (
-        <PrimaryButton
-          label="Log today's weight"
-          size="gym"
-          icon={<Icon name="plus" size={18} color={color.onAccent} />}
-          onPress={() => setWeigh({ date: today, kg: getLatestWeight() ?? DEFAULT_WEIGHT_KG, existing: false })}
-        />
-      ) : null}
-
-      <SectionHeader title="Goal" hint="Sets your calorie and water targets." />
-      <Card>
-        <ChipRow
-          options={GOALS.filter((g) => PHASES.includes(g.value))}
-          value={settings.phase}
-          onChange={(v) => setSetting('phase', v)}
-          fill={false}
-        />
-        {check ? (
-          <Text style={[styles.body, styles.checkNote, check.onTrack ? styles.onTrack : styles.offTrack]}>{check.message}</Text>
-        ) : (
-          <Text style={styles.hint}>
-            {trend.length >= 7
-              ? 'Weigh in a few more mornings and Iron will tell you whether this is working.'
-              : `A weekly check against this goal starts once you have seven weigh-ins. ${trend.length} so far.`}
-          </Text>
-        )}
-      </Card>
-
-      {recent.length > 1 ? (
-        <>
-          <SectionHeader title="Weigh-ins" />
-          <Card style={styles.list}>
-            {recent.map((w, i) => (
-              <Pressable
-                key={w.date}
-                style={[styles.row, i > 0 && styles.divider]}
-                onPress={() => setWeigh({ date: w.date, kg: w.kg, existing: true })}
-                accessibilityHint="Tap to edit or delete"
-              >
-                <Text style={styles.body}>{fmtDayLabel(w.date)}</Text>
-                <Text style={styles.value}>{kg(w.kg)}</Text>
-              </Pressable>
-            ))}
-          </Card>
-          {weighIns.length > 5 ? <PrimaryButton label={showAll ? 'Show fewer' : 'Show all'} tone="ghost" onPress={() => setShowAll(!showAll)} /> : null}
-        </>
-      ) : null}
-
-      <SectionHeader
-        title="Measurements"
-        right={hasMeasurements ? <PrimaryButton label="Log" tone="neutral" icon={<Icon name="ruler" size={16} />} onPress={() => setMeasuring(true)} /> : undefined}
-      />
-      {measured.length === 0 ? (
-        <EmptyState
-          message="Measure every 2–4 weeks."
-          hint="Waist and arms show changes the scale hides."
-          actionLabel="Log measurements"
-          onAction={() => setMeasuring(true)}
-        />
-      ) : (
-        <>
-          {whtr !== null ? (
-            <Card>
-              <View style={styles.rowBetween}>
-                <Text style={styles.body}>Waist-to-height</Text>
-                <Text style={[styles.value, { color: whtr < 0.5 ? color.positive : color.text }]}>{whtr.toFixed(2)}</Text>
-              </View>
-              <Text style={styles.hint}>Below 0.50 is the healthy range for most adults.</Text>
-            </Card>
-          ) : null}
-          <View style={styles.grid}>
-            {measured.map((s) => {
-              const rows = bySite.get(s.key) ?? [];
-              const latest = rows[0];
-              if (!latest) return null;
-              const month = readingBefore(rows, addDays(latest.date, -28));
-              const prev = month && month.id !== latest.id ? month : rows[1];
-              return (
-                <Pressable key={s.key} style={({ pressed }) => [styles.tile, pressed && styles.pressed]} onPress={() => setSite(s.key)} accessibilityRole="button">
-                  <Text style={styles.tileLabel}>{s.label}</Text>
-                  <Text style={styles.tileValue}>
-                    {kgNum(latest.cm)}
-                    <Text style={styles.unitSmall}> {s.unit}</Text>
-                  </Text>
-                  <Text style={styles.tileHint}>{prev ? `${signed(latest.cm - prev.cm)} since ${fmtDayLabel(prev.date)}` : fmtDayLabel(latest.date)}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </>
-      )}
-
-      <WeighInSheet entry={weigh} onClose={() => setWeigh(null)} />
-      <MeasureSheet visible={measuring} latest={latestBySite} onClose={() => setMeasuring(false)} />
-      <DetailsSheet visible={details} onClose={() => setDetails(false)} />
-      <SiteSheet site={site} rows={site ? (bySite.get(site) ?? []) : []} onClose={() => setSite(null)} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  checkNote: { marginTop: space.md },
-  onTrack: { color: color.positive },
-  offTrack: { color: color.warning },
-  todayRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: hit.default },
-  trendNote: { ...font.caption, color: color.textMuted },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
-  hero: { ...font.display, ...font.numeric, fontSize: 44, color: color.text },
-  unit: { ...font.heading, color: color.textMuted },
-  unitSmall: { ...font.caption, color: color.textMuted },
-  muted: { ...font.label, color: color.textMuted },
-  hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  chart: { marginTop: space.md, gap: space.md },
-  gapTop: { marginTop: space.md },
-  list: { paddingVertical: 0 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  flex1: { flex: 1 },
+  selector: { marginBottom: gap.between },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   body: { ...font.body, color: color.text },
-  value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  tile: { width: '48.5%', backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, padding: space.md, gap: 2 },
-  pressed: { backgroundColor: color.surfaceHigh },
-  tileLabel: { ...font.caption, color: color.textMuted },
-  tileValue: { ...font.heading, ...font.numeric, color: color.text },
-  tileHint: { ...font.caption, ...font.numeric, color: color.textFaint },
+  hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
 });

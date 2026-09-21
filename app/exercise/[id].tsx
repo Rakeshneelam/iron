@@ -95,7 +95,7 @@ export default function ExerciseScreen() {
         style={styles.gap}
         onPress={toggleDislike}
       />
-      <Text style={styles.muted}>Hidden exercises are left out of swaps and new plans. Plans you already have don't change.</Text>
+      <Text style={styles.muted}>{"Hidden exercises are left out of swaps and new plans. Plans you already have don't change."}</Text>
     </Screen>
   );
 }

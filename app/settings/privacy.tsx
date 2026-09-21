@@ -56,33 +56,28 @@ export default function PrivacyScreen() {
           so without it the backup cannot be read by anyone, including Google.
         </P>
         <P style={styles.gap}>
-          Signing in tells Iron the name and email address on your Google account. Both stay on this device and are used
-          only to show you which account is connected.
+          Authorising Drive tells Iron the name and email address on your Google account. Both stay on this device and
+          are used only to show you which account is connected. It is a Drive permission, not an Iron account, and
+          nothing is uploaded until you tap Back up now.
         </P>
       </Card>
 
-      <SectionHeader title="If you create an account" />
+      <SectionHeader title="Accounts" />
       <Card>
-        <P>
-          An account is optional and Iron works fully without one. If you make one, five things are stored on our server:
-          your name, email address, occupation, age and sex.
-        </P>
+        <P>There are none. Iron has no sign-in, no profile on any server, and no marketing email to opt into.</P>
         <P style={styles.gap}>
-          Your workouts, bodyweight, measurements, food, water and anything you flagged to go easy on are never sent
-          there. They stay on this phone.
-        </P>
-        <P style={styles.gap}>
-          We will only email you about Iron if you ticked the box asking us to. That box is never ticked for you, it is
-          never required to have an account, and you can turn it off in Settings whenever you like.
+          Earlier versions offered an optional account holding a name, email address, age and sex. That is gone from the
+          app. If you made one, its details still exist on the old service until it is retired — ask the developer to
+          remove yours.
         </P>
       </Card>
 
       <SectionHeader title="Deleting your data" />
       <Card>
         <P>
-          Delete all my data, in Settings, erases everything on this phone. Delete account, also in Settings, erases your
-          name, email, occupation, age and sex from our server. Disconnect stops Drive backups; backups already in Drive
-          can be deleted from your Google account at any time. Uninstalling Iron removes everything local.
+          Delete all my data, in Settings, erases everything on this phone. Disconnect removes Iron&apos;s access to
+          Drive; backups already there can be deleted from your Google account at any time. Uninstalling Iron removes
+          everything local.
         </P>
       </Card>
 

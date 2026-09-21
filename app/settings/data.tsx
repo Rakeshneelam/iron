@@ -12,7 +12,6 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { Card, confirm, Icon, PrimaryButton, Screen, SectionHeader } from '@/components';
 import { wipeAllData } from '@/db/repositories/admin';
-import { isAccountsConfigured } from '@/services/account';
 import { exportAll } from '@/services/export';
 import { color, font, space } from '@/theme/tokens';
 
@@ -97,10 +96,7 @@ export default function DataSettings() {
       </Card>
 
       <Text style={styles.footer}>
-        Iron {Constants.expoConfig?.version ?? ''} ·{' '}
-        {isAccountsConfigured()
-          ? 'Your workouts, body, food and water stay on this phone.'
-          : 'No account, no server. Everything stays on this phone.'}
+        Iron {Constants.expoConfig?.version ?? ''} · No account, no server. Everything stays on this phone.
       </Text>
     </Screen>
   );

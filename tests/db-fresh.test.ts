@@ -106,6 +106,54 @@ describe('a fresh install', () => {
     assert.equal(back.kcal, estimated.kcal);
   });
 
+  /**
+   * UX-08: the target sheet showed a null override as `0`, so the first + tap wrote
+   * a 50 kcal target instead of nudging the value actually in force. The sheet now
+   * reads `auto`, which must keep reporting what Iron works out regardless of any
+   * override, so Custom can start there.
+   */
+  test('the calculated target stays visible underneath an override', () => {
+    const today = todayISO();
+    const estimated = computeTargets(today);
+    assert.equal(estimated.auto.kcal, estimated.kcal, 'with no override the effective target IS the automatic one');
+    assert.ok(estimated.auto.kcal > 0, 'never a zero target');
+
+    setSetting('manualKcal', 2400);
+    const mine = computeTargets(today);
+    assert.equal(mine.kcal, 2400);
+    assert.equal(mine.auto.kcal, estimated.auto.kcal, 'the automatic figure is unchanged by taking over');
+    assert.equal(mine.auto.proteinG, estimated.auto.proteinG);
+
+    // Switching protein to custom must leave the calorie mode alone, and vice versa.
+    setSetting('manualProteinG', mine.auto.proteinG);
+    const both = computeTargets(today);
+    assert.equal(both.kcal, 2400);
+    assert.equal(both.proteinG, estimated.auto.proteinG);
+
+    setSetting('manualKcal', null);
+    const autoKcal = computeTargets(today);
+    assert.equal(autoKcal.kcal, estimated.auto.kcal, 'Use automatic target restores the calculated value');
+    assert.equal(autoKcal.proteinG, estimated.auto.proteinG, 'protein stayed custom at the value it started from');
+
+    setSetting('manualProteinG', null);
+  });
+
+  /**
+   * UX-12: setup defaulted weight to 70 kg and wrote a weigh-in unconditionally, so
+   * every install opened with a measurement nobody took and a trend line that began
+   * at a fiction. Skipping the field must leave the history genuinely empty, and
+   * everything downstream must still work off a calculation.
+   */
+  test('with no weigh-in the history is empty and targets still work off a calculation', () => {
+    assert.deepEqual(listWeighIns(), []);
+    assert.equal(getLatestWeight(), undefined);
+
+    const t = computeTargets(todayISO());
+    assert.ok(t.kcal > 0 && t.proteinG > 0);
+    assert.equal(t.basis, 'estimated', 'a fallback is labelled an estimate, never a measurement');
+    assert.ok(hydrationTarget().ml > 0);
+  });
+
   test('the exercise catalogue is there so the library is never empty', () => {
     const ctx = suggestionContext();
     assert.deepEqual(ctx.weekly, {});

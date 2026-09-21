@@ -1,7 +1,7 @@
-import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { impact } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 /**
@@ -34,7 +34,8 @@ export interface PrimaryButtonProps {
 }
 
 const BG: Record<ButtonTone, string> = {
-  accent: color.accent,
+  // accentFill, not accent: white on #E8552E measures 3.64 : 1 (UX-11).
+  accent: color.accentFill,
   neutral: color.surfaceHigh,
   danger: color.danger,
   ghost: 'transparent',
@@ -60,7 +61,7 @@ export function PrimaryButton({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={() => {
-        if (haptic) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (haptic) impact();
         onPress();
       }}
       onLongPress={onLongPress}
@@ -69,14 +70,19 @@ export function PrimaryButton({
         { minHeight: hit[size], backgroundColor: BG[tone] },
         tone === 'ghost' && styles.ghost,
         tone === 'neutral' && styles.neutral,
-        pressed && (tone === 'accent' ? { backgroundColor: color.accentPressed } : styles.pressed),
+        pressed && (tone === 'accent' ? { backgroundColor: color.accentFillPressed } : styles.pressed),
         disabled && styles.disabled,
         style,
       ]}
     >
       <View style={styles.row}>
         {icon}
-        <Text style={[size === 'gym' ? styles.labelGym : styles.label, { color: fg }]} numberOfLines={1}>
+        {/*
+          Two lines rather than an ellipsis. numberOfLines={1} turned "Replace
+          everything with this backup" into "Replace everything with th…" at large
+          text sizes — a destructive button whose label you cannot read (UX-11).
+        */}
+        <Text style={[size === 'gym' ? styles.labelGym : styles.label, { color: fg }]} numberOfLines={2}>
           {label}
         </Text>
       </View>
@@ -88,14 +94,16 @@ const styles = StyleSheet.create({
   base: {
     borderRadius: radius.md,
     paddingHorizontal: space.lg,
+    paddingVertical: space.xs,
     alignItems: 'center',
     justifyContent: 'center',
   },
   ghost: { paddingHorizontal: space.sm },
   // A hairline, not a frame: enough to read as tappable, not enough to compete.
   neutral: { borderWidth: 1, borderColor: color.border },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  label: { ...font.label },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, flexShrink: 1 },
+  // 16px, not 15: an action label has to survive being read at arm's length.
+  label: { ...font.body, fontWeight: '600' },
   labelGym: { ...font.heading },
   pressed: { opacity: 0.8 },
   disabled: { opacity: 0.4 },

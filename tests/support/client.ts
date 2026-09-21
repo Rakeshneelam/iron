@@ -73,7 +73,7 @@ export async function initDatabase(): Promise<void> {
 /** Wipes every table so each test starts from the same place. */
 export function resetDatabase(): void {
   // A test may have rolled the schema back; put it back before clearing.
-  if (tableNames().length < 19) rollbackTo(Number.MAX_SAFE_INTEGER);
+  if (tableNames().length < 20) rollbackTo(Number.MAX_SAFE_INTEGER);
   expoDb.execSync('PRAGMA foreign_keys = OFF;');
   for (const t of tableNames()) expoDb.execSync(`DELETE FROM "${t}"`);
   expoDb.execSync('PRAGMA foreign_keys = ON;');

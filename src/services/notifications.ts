@@ -19,6 +19,7 @@ import { logWater } from '@/db/repositories/water';
 import type { ReminderSlot } from '@/engine/metabolic';
 import { planReminders, type ReminderState } from '@/engine/reminders';
 import { addDays, daysBetweenISO, minutesSinceMidnight, parseISODate, todayISO } from '@/lib/date';
+import { destinationFor } from '@/lib/deepLinks';
 
 import { hydrationPlan, tomorrowHydrationSlots } from './hydration';
 
@@ -58,6 +59,16 @@ export async function ensureChannels(): Promise<void> {
   });
 }
 
+/** Asks the OS without prompting. Lets a screen show the real state before nagging. */
+export async function notificationsAllowed(): Promise<boolean> {
+  return (await Notifications.getPermissionsAsync()).granted;
+}
+
+/**
+ * Prompts if it has to. Called when someone switches a reminder ON, never at
+ * startup: a permission dialog before the app has been seen is a question with no
+ * context, and Android only lets it be asked once (UX-12).
+ */
 export async function requestPermissions(): Promise<boolean> {
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
@@ -209,8 +220,9 @@ function handleResponse(r: Notifications.NotificationResponse): void {
     void snooze(r, 60, CHANNELS.daily);
     return;
   }
-  const url = (r.notification.request.content.data as Record<string, unknown> | null)?.url;
-  if (typeof url === 'string') {
+  const data = r.notification.request.content.data as Record<string, unknown> | null;
+  const url = destinationFor(data);
+  if (url !== null) {
     setTimeout(() => {
       try {
         router.push(url as never);

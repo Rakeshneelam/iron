@@ -7,7 +7,7 @@ import { before, beforeEach, describe, test } from 'node:test';
 
 import { db, expoDb, initDatabase, resetDatabase } from './support/client.ts';
 import { createPlan, getDays } from '../src/db/repositories/program.ts';
-import { inspectBackup, restoreBackup } from '../src/db/repositories/restore.ts';
+import { BACKUP_TABLES, inspectBackup, inspectTables, restoreBackup } from '../src/db/repositories/restore.ts';
 import { finishSession, getSessionSets, insertSet, listSessions, startSession } from '../src/db/repositories/sessions.ts';
 import { upsertWeighIn, listWeighIns } from '../src/db/repositories/body.ts';
 import * as schema from '../src/db/schema.ts';
@@ -140,6 +140,58 @@ describe('restore', () => {
     resetDatabase();
     restoreBackup(found.tables);
     assert.equal(listSessions().length, 1);
+  });
+
+  /**
+   * The Drive route (UX-13). An encrypted backup is read table by table out of a
+   * staged database file rather than parsed from JSON, so it arrives as tables with
+   * no envelope — and before this it went straight from SELECT * into the live
+   * database, skipping the schema check that makes an untrusted backup safe. The
+   * decryption itself needs SQLCipher and a device; everything after it is here.
+   */
+  describe('a backup read out of a database file, as Drive restores do', () => {
+    /** Exactly what inspectDriveBackup does once the staged file is open. */
+    const readTables = (): Record<string, unknown[]> =>
+      Object.fromEntries(BACKUP_TABLES.map((t) => [t, expoDb.getAllSync(`SELECT * FROM "${t}"`)]));
+
+    test('previews and restores through the same validated path as a file', () => {
+      seedHistory();
+      const tables = readTables();
+      const before = { sessions: listSessions().length, weighIns: listWeighIns().length };
+
+      resetDatabase();
+      assert.equal(listSessions().length, 0, 'wiped');
+
+      const found = inspectTables(tables, { exportedAt: '2026-01-03T08:00:00.000Z' });
+      assert.ok(found.ok, found.ok ? '' : found.reason);
+      assert.equal(found.summary.workouts, before.sessions, 'the preview counts what is really in it');
+      assert.equal(found.summary.weighIns, before.weighIns);
+      assert.equal(found.summary.exportedAt, '2026-01-03T08:00:00.000Z');
+
+      assert.equal(restoreBackup(found.tables), before.sessions);
+      assert.equal(listSessions().length, before.sessions, 'and the restore matches the preview');
+      assert.equal(listWeighIns().length, before.weighIns);
+    });
+
+    test('the preview says what this phone would lose before anything is replaced', () => {
+      seedHistory();
+      const tables = readTables();
+      // Logged after the backup's newest workout: exactly what needs warning about.
+      upsertWeighIn('2030-01-01', 81);
+
+      const found = inspectTables(tables);
+      assert.ok(found.ok);
+      assert.equal(found.summary.losesWeighIns, 1);
+      // Reading it changed nothing: the newer weigh-in is still here.
+      assert.equal(listWeighIns().length, 3);
+    });
+
+    test('rubbish is refused rather than written, whatever produced it', () => {
+      const found = inspectTables({ session: [{ not_a_column: 1 }] });
+      assert.equal(found.ok, false);
+      const other = inspectTables({ nonsense_table: [] });
+      assert.equal(other.ok, false);
+    });
   });
 
   test('the built-in catalogue is not overwritten by an older one', () => {

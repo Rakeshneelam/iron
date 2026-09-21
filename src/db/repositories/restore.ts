@@ -23,7 +23,7 @@ type Row = Record<string, unknown>;
  */
 export const BACKUP_TABLES = [
   'exercise', 'exercise_link', 'equipment', 'routine', 'routine_day', 'routine_slot', 'session', 'session_exercise', 'set_log',
-  'exercise_session_stat', 'weigh_in', 'measurement', 'food', 'recipe', 'recipe_item', 'meal_log', 'water_log', 'setting',
+  'exercise_session_stat', 'weigh_in', 'check_in', 'measurement', 'food', 'recipe', 'recipe_item', 'meal_log', 'water_log', 'setting',
 ] as const;
 
 /** Built-in exercises and foods are app data, not the user's — the same line wipeAllData draws. */
@@ -117,6 +117,21 @@ function summarise(tables: Record<string, Row[]>, envelope: Row): BackupSummary 
   };
 }
 
+/**
+ * Validates already-extracted tables and summarises them. Changes nothing.
+ *
+ * The seam the two backup formats meet at: a JSON file parses into this, and an
+ * encrypted database file is read into it a table at a time. Before UX-13 only the
+ * JSON path was validated — a Drive restore went straight from `SELECT *` to the
+ * live database, skipping the schema check that makes an untrusted backup safe.
+ */
+export function inspectTables(tables: Record<string, unknown>, envelope: Row = {}): Inspection {
+  const problem = checkShape(tables);
+  if (problem) return { ok: false, reason: problem };
+  const rows = tables as Record<string, Row[]>;
+  return { ok: true, summary: summarise(rows, envelope), tables: rows };
+}
+
 /** Reads a backup and reports what is in it. Changes nothing. */
 export function inspectBackup(text: string): Inspection {
   let parsed: unknown;
@@ -136,11 +151,7 @@ export function inspectBackup(text: string): Inspection {
     return { ok: false, reason: "This file isn't an Iron backup." };
   }
 
-  const problem = checkShape(parsed.tables);
-  if (problem) return { ok: false, reason: problem };
-
-  const tables = parsed.tables as Record<string, Row[]>;
-  return { ok: true, summary: summarise(tables, parsed), tables };
+  return inspectTables(parsed.tables, parsed);
 }
 
 function insert(table: string, row: Row, orIgnore: boolean): void {

@@ -131,7 +131,7 @@ export default function DayEditor() {
         {swap ? (
           <View style={styles.stack}>
             <Text style={styles.body}>
-              Start {swap.to.name} from your {swap.slot.exercise.name} numbers so progress doesn't reset. Adjust the ratio if they don't load the same.
+              {`Start ${swap.to.name} from your ${swap.slot.exercise.name} numbers so progress doesn't reset. Adjust the ratio if they don't load the same.`}
             </Text>
             <Stepper label="Load ratio" value={ratio} step={0.05} min={0.3} max={2} onChange={setRatio} />
             <Text style={styles.muted}>
