@@ -16,6 +16,18 @@
  * you hold the rights and the how-to uses real frames; until then it draws its
  * own figure.
  *
+ * WHAT A LICENCE COSTS (checked 21 Sep 2026 — verify, these move)
+ *
+ *   Gym visual   ~$0.90 per animated GIF at 10+ in the cart, ~$0.75 per still.
+ *                A la carte, so Iron's 95 exercises land near $85 — and you buy
+ *                only the movements this catalogue actually has.
+ *   ExerciseDB   $199 one-time (Starter: 1,394 exercises, 180×180 + 360×360) or
+ *                $599 (Pro: adds 720/1080 and a movement taxonomy). Perpetual,
+ *                self-hosted, commercial — but you would use ~7% of it.
+ *
+ * Per-exercise buying is the cheaper route for a catalogue this size. Both end up
+ * here: get the files, then run this.
+ *
  * USAGE
  *   git clone https://github.com/hasaneyldrm/exercises-dataset /tmp/ex
  *   npm run media:import -- --from /tmp/ex --i-have-a-gymvisual-licence

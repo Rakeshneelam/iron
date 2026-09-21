@@ -155,6 +155,17 @@ Both match by name with qualifier and equipment penalties (a missing "incline", 
 conflicting "dumbbell") and print a `--dry-run` audit weakest-first, because a
 confidently wrong demonstration is worse than the drawn figure it replaces.
 
+What the paid routes cost, if four is not enough (checked 21 Sep 2026):
+
+- **Gym visual** — ~$0.90 per GIF at 10+ in the cart, a la carte. Iron's 95
+  exercises land near **$85**, and you buy only what this catalogue has.
+- **ExerciseDB** — **$199** one-time for 1,394 exercises with 180×180 and 360×360
+  GIFs, perpetual and self-hosted; $599 adds larger sizes and a taxonomy. Good
+  value per exercise, but ~7% of it would ever be shown.
+
+Buying per exercise is cheaper at this catalogue size. Both routes end at
+`npm run media:import`.
+
 **wger currently yields 4 trustworthy matches against this catalogue** — it skews
 dumbbell and bodyweight and has no barbell squat or bench. That is the honest state
 of free exercise media, and why the stick figure is still what most exercises show.
