@@ -4,6 +4,7 @@ import Animated, {
   cancelAnimation,
   Easing,
   useAnimatedProps,
+  useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
   withRepeat,
@@ -19,7 +20,7 @@ import { useReducedMotion } from '@/components/Screen';
 import { color, font, radius, space } from '@/theme/tokens';
 
 import { demoViews, FRONT_PARTS, PART_MUSCLES, SEGMENTS, SIDE_PARTS, solveFrame, type DemoPattern } from './demo';
-import { exerciseMedia, mediaCredit } from './media';
+import { exerciseMedia, mediaCredit, type MediaEntry } from './media';
 
 const AnimatedLine = Animated.createAnimatedComponent(Line);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -115,23 +116,66 @@ export function ExerciseDemo({
 }
 
 /**
- * A looping frame. Never upscaled past the artwork's own pixel size: the licence
- * that covers this media distributes it at 180×180, and stretching it to 230
- * would only make a blurry picture out of a sharp one.
+ * A demonstration frame, or a pair of them moved between.
+ *
+ * Never upscaled past the artwork's own pixel size — a set distributed at 180×180
+ * stretched to 230 is a blurry picture made out of a sharp one.
+ *
+ * Two frames cross-fade rather than cut, because start/end stills are what the
+ * freely-licensed sets actually provide, and holding each end before moving is how
+ * the drawn figure has always read the movement out. Reduced motion holds the end
+ * position instead of looping.
  */
-function MediaDemo({ media, fallbackName, size }: { media: ReturnType<typeof exerciseMedia> & object; fallbackName?: string; size: number }) {
+function MediaDemo({ media, fallbackName, size }: { media: MediaEntry; fallbackName?: string; size: number }) {
+  const reduced = useReducedMotion();
   const box = Math.min(size, media.size);
-  const credit = mediaCredit();
+  const credit = media.credit ?? mediaCredit();
+  const [playing, setPlaying] = useState(true);
+  const fade = useSharedValue(0);
+  const paired = media.end !== undefined;
+
+  useEffect(() => {
+    cancelAnimation(fade);
+    if (!paired || reduced || !playing) {
+      fade.value = reduced ? 1 : fade.value;
+      return;
+    }
+    fade.value = withRepeat(
+      withSequence(
+        withTiming(0, { duration: HOLD_MS }),
+        withTiming(1, { duration: MOVE_MS, easing: Easing.inOut(Easing.quad) }),
+        withTiming(1, { duration: HOLD_MS }),
+        withTiming(0, { duration: MOVE_MS, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+    );
+    return () => cancelAnimation(fade);
+  }, [paired, reduced, playing, fade]);
+
+  const endStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  const label = `Demonstration of ${media.name || fallbackName || 'the movement'}`;
+
   return (
     <View style={styles.wrap}>
-      <Image
-        source={media.source}
-        style={[styles.media, { width: box, height: box }]}
-        resizeMode="contain"
-        accessibilityRole="image"
-        accessibilityLabel={`Demonstration of ${media.name || fallbackName || 'the movement'}`}
-      />
-      {/* Required by the media licence, and rendered only when media actually is. */}
+      <View style={{ width: box, height: box }} accessible accessibilityRole="image" accessibilityLabel={label}>
+        <Image source={media.source} style={[styles.media, { width: box, height: box }]} resizeMode="contain" />
+        {media.end ? (
+          <Animated.Image
+            source={media.end}
+            style={[styles.media, styles.overlay, { width: box, height: box }, endStyle]}
+            resizeMode="contain"
+          />
+        ) : null}
+      </View>
+      {paired && !reduced ? (
+        <IconButton
+          icon={playing ? 'pause' : 'play'}
+          accessibilityLabel={playing ? 'Pause' : 'Play'}
+          tone="neutral"
+          onPress={() => setPlaying(!playing)}
+        />
+      ) : null}
+      {/* Required by CC-BY and CC-BY-SA, and shown only when media actually is. */}
       {credit ? <Text style={styles.credit}>{credit}</Text> : null}
     </View>
   );
@@ -239,6 +283,7 @@ function Cable({ frame, anchor }: { frame: SharedValue<number[]>; anchor: readon
 
 const styles = StyleSheet.create({
   media: { borderRadius: radius.md, backgroundColor: color.surface },
+  overlay: { position: 'absolute', top: 0, left: 0 },
   credit: { ...font.caption, color: color.textMuted, textAlign: 'center' },
   wrap: { alignItems: 'center', gap: space.lg },
   controls: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

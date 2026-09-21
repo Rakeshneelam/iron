@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
     "db:generate": "drizzle-kit generate",
     "lint": "expo lint",
-    "media:import": "node scripts/import-exercise-media.mjs"
+    "media:import": "node scripts/import-exercise-media.mjs",
+    "media:import:wger": "node scripts/import-wger-media.mjs"
   },
   "//": "NATIVE DEPS: managed by `npx expo install`. Do not hand-edit native versions.",
   "dependencies": {

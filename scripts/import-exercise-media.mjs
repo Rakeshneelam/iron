@@ -110,6 +110,25 @@ const norm = (s) =>
 const tokens = (s) => new Set(norm(s).split(' ').filter(Boolean));
 
 /**
+ * Equipment words are qualifiers with teeth. "Dumbbell Front Squat" shares three of
+ * four words with a barbell front squat, and "Incline bench pulldown" shares three
+ * with an incline bench press — both scored 0.67 and both are a different exercise.
+ * A conflicting implement is close to disqualifying.
+ */
+const EQUIPMENT = new Set(['barbell', 'dumbbell', 'cable', 'machine', 'kettlebell', 'band', 'smith', 'bodyweight']);
+
+/** Penalty for the other name naming an implement this exercise does not use. */
+function equipmentClash(entryEquipment, nameTokens) {
+  const mine = norm(entryEquipment);
+  for (const w of nameTokens) {
+    if (!EQUIPMENT.has(w)) continue;
+    if (w !== mine) return true;
+  }
+  return false;
+}
+
+
+/**
  * Words that change WHICH movement it is, not just how it is described.
  *
  * Without this "Incline Barbell Bench Press" scores 0.90 against plain "Barbell
@@ -139,6 +158,7 @@ function score(catalogueEntry, datasetEntry) {
     // different lifts, however much of the rest of the name they share.
     for (const w of a) if (QUALIFIERS.has(w) && !b.has(w)) jaccard -= 0.35;
     for (const w of b) if (QUALIFIERS.has(w) && !a.has(w)) jaccard -= 0.35;
+    if (equipmentClash(catalogueEntry.equipment, b)) jaccard -= 0.5;
     if (jaccard > best) best = jaccard;
   }
   const equip = norm(String(datasetEntry.equipment ?? ''));

@@ -10,13 +10,17 @@
  * 180×180.
  *
  * So Iron ships none of it. What Iron ships is the whole integration with an empty
- * registry: `npm run media:import` matches the catalogue against a local clone,
- * copies the matched frames in and regenerates `registry.generated.ts`. Until then
- * `hasMedia` is false everywhere and the drawn figure is what you see — which is
- * why that figure stays, rather than leaving an empty box for everyone without a
- * Gym visual licence.
+ * registry, and two ways to fill it:
  *
- * Nothing here fetches anything. A bundled asset or nothing.
+ *   npm run media:import        a set you hold a licence for (Gym visual, ExerciseDB)
+ *   npm run media:import:wger   wger's community set, CC0 / CC-BY / CC-BY-SA
+ *
+ * The second needs no licence to buy — those licences permit commercial use, given
+ * attribution — so it is the one to reach for first. It is stills in start/end
+ * pairs rather than animation, and covers fewer movements; anything it misses keeps
+ * the drawn figure, which is why that figure stays rather than leaving an empty box.
+ *
+ * Nothing here fetches anything at runtime. A bundled asset or nothing.
  */
 import { MEDIA, MEDIA_CREDIT } from './registry.generated';
 import type { MediaEntry } from './types';

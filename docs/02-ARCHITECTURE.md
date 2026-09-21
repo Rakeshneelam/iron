@@ -125,13 +125,39 @@ Equipment. The training schedule is a link to the Plans-side editor, not a copy.
 ## Exercise media
 
 `features/exercises/media` renders real demonstration artwork when any is bundled
-and falls back to the drawn stick figure when none is. **The registry ships empty.**
-The obvious source (the Gym visual frames in `hasaneyldrm/exercises-dataset`) is MIT
-for its JSON and explicitly *not* licensed for redistribution for its images —
-"cloning this repo is not a license". `npm run media:import` fills the registry from
-a local clone once you hold a licence; it refuses without one, writes into a
-git-ignored folder, and wires the required credit in. The stick figure stays because
-without that licence the alternative is an empty box.
+and falls back to the drawn stick figure when none is. **The registry ships empty**,
+and the artwork folder is git-ignored.
+
+Why it ships empty is a licensing finding worth writing down, because the search
+looks solved and is not:
+
+| Source | Licence on the **media** | Usable? |
+|---|---|---|
+| `hasaneyldrm/exercises-dataset` | © Gym visual. "Cloning this repo is not a license" | Only with a Gym visual licence |
+| `mfortini/exercise-library` | README says MIT; credits "ExerciseDB", GIFs "community-contributed" | No — relabelled |
+| `omercotkd/exercises-gifs` | README: "I do not own any of the content in this repository" | No — relabelled |
+| ExerciseDB | Claims ownership; sells a perpetual commercial licence that forbids redistributing raw files | Only if you buy it |
+| **wger** | **Per-image CC0 / CC-BY / CC-BY-SA, with author recorded** | **Yes, with attribution** |
+| everkinetic | CC-BY-SA 4.0 | Yes, with attribution |
+
+The pattern: an MIT notice applied by someone who does not hold the rights conveys
+nothing, and most "free exercise GIF" repos are the same paid artwork relabelled.
+
+Two importers, both writing the same registry:
+
+- `npm run media:import` — a set you hold a licence for. Refuses to copy without
+  `--i-have-a-gymvisual-licence`.
+- `npm run media:import:wger` — wger's set, no purchase needed. Skips any image
+  whose author is unrecorded, because a CC-BY-SA image that cannot be attributed
+  cannot be used, and writes per-entry credit that the demo renders under the frame.
+
+Both match by name with qualifier and equipment penalties (a missing "incline", a
+conflicting "dumbbell") and print a `--dry-run` audit weakest-first, because a
+confidently wrong demonstration is worse than the drawn figure it replaces.
+
+**wger currently yields 4 trustworthy matches against this catalogue** — it skews
+dumbbell and bodyweight and has no barbell squat or bench. That is the honest state
+of free exercise media, and why the stick figure is still what most exercises show.
 
 ## Data flow for the hot path (logging a set)
 
