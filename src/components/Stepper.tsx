@@ -20,6 +20,8 @@ export interface StepperProps {
    */
   size?: 'hero' | 'gym' | 'default';
   label?: string;
+  /** What a screen reader calls it when the visible label lives elsewhere (a row title). */
+  accessibilityLabel?: string;
   suffix?: string;
   /** Under the value, inside a hero card: the target, or a "Use target" chip. */
   footer?: ReactNode;
@@ -48,12 +50,14 @@ export function Stepper({
   max = 9999,
   size = 'default',
   label,
+  accessibilityLabel,
   suffix,
   footer,
   onLongPress,
   haptics = true,
 }: StepperProps) {
   const dp = decimalsOf(step);
+  const name = label ?? accessibilityLabel;
   const valueRef = useRef(value);
   // Re-synced after every render, as the old in-render assignment did, but outside render.
   useEffect(() => {
@@ -136,7 +140,7 @@ export function Stepper({
       style={styles.valueBox}
       onLongPress={typeIt}
       accessibilityRole="adjustable"
-      accessibilityLabel={`${label ?? 'Value'}: ${value.toFixed(dp)}${suffix ? ` ${suffix}` : ''}`}
+      accessibilityLabel={`${name ?? 'Value'}: ${value.toFixed(dp)}${suffix ? ` ${suffix}` : ''}`}
       accessibilityHint="Long-press to type a value"
       accessibilityActions={[{ name: 'activate', label: 'Type a value' }, { name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(e) => {
@@ -160,7 +164,7 @@ export function Stepper({
   const button = (dir: 1 | -1) => (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${dir > 0 ? 'Increase' : 'Decrease'} ${label ?? 'value'}`}
+      accessibilityLabel={`${dir > 0 ? 'Increase' : 'Decrease'} ${name ?? 'value'}`}
       onPress={() => bump(dir)}
       onLongPress={() => startRepeat(dir)}
       onPressOut={stopRepeat}

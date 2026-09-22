@@ -485,6 +485,25 @@ export function recentMuscles(days = 2): string[] {
   return [...new Set(rows.flatMap((r) => r.muscles))];
 }
 
+/** The last date each primary muscle got a working set, over the last `days` days. */
+export function lastTrainedByMuscle(days = 14): Map<string, string> {
+  const since = addDays(todayISO(), -(days - 1));
+  const rows = db
+    .select({ muscles: schema.exercise.primaryMuscles, date: max(schema.session.date) })
+    .from(schema.setLog)
+    .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
+    .innerJoin(schema.exercise, eq(schema.setLog.exerciseId, schema.exercise.id))
+    .where(and(gte(schema.session.date, since), eq(schema.setLog.isWarmup, 0)))
+    .groupBy(schema.setLog.exerciseId)
+    .all();
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    if (!r.date) continue;
+    for (const m of r.muscles) if (!out.has(m) || (out.get(m) ?? '') < r.date) out.set(m, r.date);
+  }
+  return out;
+}
+
 const REGION_OF: Partial<Record<Pattern, LiftRegion>> = {
   horizontal_push: 'push', vertical_push: 'push', fly: 'push', elbow_extension: 'push',
   horizontal_pull: 'pull', vertical_pull: 'pull', elbow_flexion: 'pull', shrug: 'pull',
