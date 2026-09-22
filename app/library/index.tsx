@@ -64,17 +64,24 @@ export default function Library() {
     <View style={[styles.flex, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <IconButton icon="chevronLeft" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
-        <Text style={styles.title}>Exercise library</Text>
+        <Text style={styles.title} accessibilityRole="header">
+          Exercise library
+        </Text>
       </View>
       <View style={styles.filters}>
-        <TextInput
-          value={q}
-          onChangeText={setQ}
-          placeholder="Search exercises and drills"
-          placeholderTextColor={color.textFaint}
-          style={styles.input}
-          autoCorrect={false}
-        />
+        <View style={styles.search}>
+          <Icon name="search" size={20} color={color.textFaint} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder={`Search ${exercises.length.toLocaleString()} exercises and drills`}
+            placeholderTextColor={color.textFaint}
+            style={styles.input}
+            autoCorrect={false}
+            accessibilityLabel="Search exercises and drills"
+          />
+          {q ? <IconButton icon="close" accessibilityLabel="Clear search" onPress={() => setQ('')} /> : null}
+        </View>
         <ChipRow options={CATEGORIES.map((c) => ({ label: c, value: c }))} value={cat} onChange={setCat} fill={false} />
         {!(cat in DRILL_CATEGORIES) ? (
           <ChipRow options={EQUIP.map((e) => ({ label: e === 'all' ? 'Any equipment' : EQUIPMENT_LABEL[e as Equipment], value: e }))} value={equip} onChange={setEquip} fill={false} />
@@ -124,15 +131,27 @@ export default function Library() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.sm },
-  title: { ...font.title, color: color.text },
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingLeft: space.sm, paddingTop: space.md, paddingBottom: space.sm },
+  title: { ...font.titleSm, color: color.text },
   filters: { paddingHorizontal: layout.screenPadding, gap: space.sm, paddingVertical: space.sm },
-  input: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.default },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md - 2,
+    minHeight: hit.gym,
+    paddingLeft: space.lg,
+    paddingRight: space.xs,
+    backgroundColor: color.surfaceHigh,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  input: { ...font.body, color: color.text, flex: 1, minHeight: hit.gym },
   list: { paddingHorizontal: layout.screenPadding },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.gym, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.border },
   pressed: { backgroundColor: color.surface },
-  name: { ...font.body, color: color.text, fontWeight: '600' },
-  sub: { ...font.caption, color: color.textMuted, marginTop: 2 },
+  name: { ...font.label, color: color.text, fontWeight: '600' },
+  sub: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: 2 },
   empty: { ...font.label, color: color.textMuted, textAlign: 'center', marginTop: space.xl },
   drill: { gap: space.md, paddingBottom: space.lg },
   stage: { alignItems: 'center', backgroundColor: color.bg, borderRadius: radius.lg, paddingVertical: space.lg, marginBottom: space.sm },

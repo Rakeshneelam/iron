@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, Stepper, TextField, toast } from '@/components';
+import { Card, confirm, EmptyState, Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, SectionHeader, Stepper, TextField, toast } from '@/components';
 import { useLive } from '@/db/live';
 import {
   addDay,
@@ -59,7 +59,12 @@ export default function PlanScreen() {
   };
 
   return (
-    <Screen title="Edit plan" right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}>
+    <Screen
+      title="Edit plan"
+      subtitle={routine.active ? 'Your active plan' : 'Not in use'}
+      back
+      dock={routine.active ? undefined : <PrimaryButton label="Use this plan" size="gym" onPress={activate} />}
+    >
       <TextField
         value={routine.name}
         onCommit={(v) => v && renameRoutine(id, v)}
@@ -67,9 +72,6 @@ export default function PlanScreen() {
         placeholder="Plan name"
         accessibilityLabel="Plan name"
       />
-      <View style={styles.statusRow}>
-        {routine.active ? <Pill label="Active plan" tone="accent" /> : <PrimaryButton label="Use this plan" onPress={activate} />}
-      </View>
 
       <Card style={styles.gapTop}>
         <Stepper label="Workouts per week" value={routine.daysPerWeek} step={1} min={1} max={7} onChange={(v) => setDaysPerWeek(id, v)} />
@@ -77,23 +79,27 @@ export default function PlanScreen() {
       </Card>
 
       <SectionHeader title={`Days · ${detail.days.length}`} />
-      {detail.days.map(({ day, slots }, i) => (
-        <Card key={day.id} onPress={() => router.push(`/program/${day.id}`)}>
-          <View style={styles.dayRow}>
-            <View style={styles.flex1}>
-              <Text style={styles.dayLabel}>{day.label}</Text>
-              <Text style={styles.muted} numberOfLines={2}>
-                {slots.length ? slots.map((s) => s.exercise.name).join(' · ') : 'No exercises yet — tap to add'}
-              </Text>
-            </View>
-            <IconButton icon="chevronUp" accessibilityLabel={`Move ${day.label} earlier`} disabled={i === 0} onPress={() => moveDay(day.id, -1)} />
-            <IconButton icon="chevronDown" accessibilityLabel={`Move ${day.label} later`} disabled={i === detail.days.length - 1} onPress={() => moveDay(day.id, 1)} />
-          </View>
-        </Card>
-      ))}
+      <ListCard>
+        {detail.days.map(({ day, slots }, i) => (
+          <ListRow
+            key={day.id}
+            divider={i > 0}
+            title={day.label}
+            sub={slots.length ? slots.map((s) => s.exercise.name).join(' · ') : 'No exercises yet — tap to add'}
+            chevron={false}
+            onPress={() => router.push(`/program/${day.id}`)}
+            right={
+              <View style={styles.dayRow}>
+                <IconButton icon="chevronUp" accessibilityLabel={`Move ${day.label} earlier`} disabled={i === 0} onPress={() => moveDay(day.id, -1)} />
+                <IconButton icon="chevronDown" accessibilityLabel={`Move ${day.label} later`} disabled={i === detail.days.length - 1} onPress={() => moveDay(day.id, 1)} />
+              </View>
+            }
+          />
+        ))}
+      </ListCard>
       <PrimaryButton
         label="Add a day"
-        tone="ghost"
+        tone="neutral"
         icon={<Icon name="plus" size={16} />}
         onPress={() => router.push(`/program/${addDay(id, `Day ${detail.days.length + 1}`).id}`)}
       />
@@ -110,12 +116,12 @@ export default function PlanScreen() {
       ) : null}
 
       <SectionHeader title="Plan" />
-      <View style={styles.actions}>
-        <IconButton
-          icon="copy"
+      <View style={styles.pair}>
+        <PrimaryButton
           label="Duplicate"
           tone="neutral"
-          accessibilityLabel="Duplicate this plan"
+          icon={<Icon name="copy" size={16} />}
+          style={styles.flex1}
           onPress={() => {
             const copy = duplicateRoutine(id);
             if (copy) {
@@ -124,27 +130,27 @@ export default function PlanScreen() {
             }
           }}
         />
-        <IconButton icon="archive" label="Archive" tone="neutral" accessibilityLabel="Archive this plan" onPress={archive} />
-        <IconButton
-          icon="trash"
-          label="Delete"
-          tone="neutral"
-          accessibilityLabel="Delete this plan"
-          onPress={() =>
-            confirm({
-              title: `Delete ${routine.name}?`,
-              message: 'Your workout history is kept, but those workouts lose their day names. Archive instead to keep everything.',
-              confirmLabel: 'Delete',
-              destructive: true,
-              onConfirm: () => {
-                deleteRoutine(id);
-                toast(`Deleted ${routine.name}`);
-                router.back();
-              },
-            })
-          }
-        />
+        <PrimaryButton label="Archive" tone="neutral" icon={<Icon name="archive" size={16} />} style={styles.flex1} onPress={archive} />
       </View>
+      <PrimaryButton
+        label="Delete plan"
+        tone="dangerOutline"
+        icon={<Icon name="trash" size={16} color={color.danger} />}
+        style={styles.gapTop}
+        onPress={() =>
+          confirm({
+            title: `Delete ${routine.name}?`,
+            message: 'Your workout history is kept, but those workouts lose their day names. Archive instead to keep everything.',
+            confirmLabel: 'Delete',
+            destructive: true,
+            onConfirm: () => {
+              deleteRoutine(id);
+              toast(`Deleted ${routine.name}`);
+              router.back();
+            },
+          })
+        }
+      />
     </Screen>
   );
 }
@@ -159,12 +165,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     minHeight: hit.gym,
   },
-  statusRow: { flexDirection: 'row', marginTop: space.md },
+  pair: { flexDirection: 'row', gap: space.sm },
   gapTop: { marginTop: space.lg },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  dayRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  dayLabel: { ...font.body, color: color.text, fontWeight: '600' },
+  dayRow: { flexDirection: 'row', alignItems: 'center' },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  actions: { flexDirection: 'row', justifyContent: 'space-around' },
 });

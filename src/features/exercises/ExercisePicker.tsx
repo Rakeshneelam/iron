@@ -3,7 +3,9 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
 import { Icon } from '@/components/Icon';
+import { IconButton } from '@/components/IconButton';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import { SectionHeader } from '@/components/SectionHeader';
 import { Stepper } from '@/components/Stepper';
 import { CATALOG_BY_ID, EQUIPMENT_LABEL, MUSCLE_LABEL, type Equipment, type Muscle } from '@/data/catalog';
 import { createCustomExercise, getExercise, LOAD_TYPES, listExercises, MUSCLES, type Exercise } from '@/db/repositories/exercises';
@@ -53,25 +55,41 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
 
   const suggested = suggestions.map((s) => ({ s, e: getExercise(s.id) })).filter((x): x is { s: (typeof suggestions)[number]; e: Exercise } => !!x.e && !excludeIds.includes(x.e.id));
 
+  const row = (ex: Exercise, sub: string, i: number, spark = false) => (
+    <Pressable
+      key={ex.id}
+      style={({ pressed }) => [styles.item, i > 0 && styles.divider, pressed && styles.pressed]}
+      onPress={() => onPick(ex)}
+      accessibilityRole="button"
+      accessibilityLabel={`Add ${ex.name}. ${sub}`}
+    >
+      {spark ? <Icon name="spark" size={16} color={color.accent} /> : null}
+      <View style={styles.flex}>
+        <Text style={styles.name}>{ex.name}</Text>
+        <Text style={styles.meta}>{sub}</Text>
+      </View>
+      <View style={styles.plus}>
+        <Icon name="plus" size={20} color={color.text} />
+      </View>
+    </Pressable>
+  );
+  const describe = (ex: Exercise) => `${ex.primaryMuscles.map(muscleLabel).join(', ')} · ${EQUIPMENT_LABEL[ex.loadType as Equipment] ?? ex.loadType}`;
+
   return (
     <View>
-      {suggested.length && !q ? (
-        <View style={styles.suggested}>
-          <Text style={styles.section}>SUGGESTED</Text>
-          {suggested.map(({ s, e }) => (
-            <Pressable key={e.id} style={({ pressed }) => [styles.item, pressed && styles.pressed]} onPress={() => onPick(e)}>
-              <View style={styles.itemRow}>
-                <Icon name="spark" size={16} color={color.accent} />
-                <View style={styles.flex}>
-                  <Text style={styles.name}>{e.name}</Text>
-                  <Text style={styles.meta}>{s.reasons.join(', ')}</Text>
-                </View>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-      <TextInput value={q} onChangeText={setQ} placeholder="Search exercises" placeholderTextColor={color.textFaint} style={styles.input} autoCorrect={false} />
+      <View style={styles.search}>
+        <Icon name="search" size={20} color={color.textFaint} />
+        <TextInput
+          value={q}
+          onChangeText={setQ}
+          placeholder="Search exercises"
+          placeholderTextColor={color.textFaint}
+          style={styles.input}
+          autoCorrect={false}
+          accessibilityLabel="Search exercises"
+        />
+        {q ? <IconButton icon="close" accessibilityLabel="Clear search" onPress={() => setQ('')} /> : null}
+      </View>
       <View style={styles.gap}>
         <ChipRow
           options={[{ label: 'All', value: 'all' }, ...MUSCLES.map((m) => ({ label: muscleLabel(m), value: m }))]}
@@ -80,20 +98,24 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
           fill={false}
         />
       </View>
-      <Pressable style={styles.toggle} onPress={() => setMine(!mine)} accessibilityRole="switch" accessibilityState={{ checked: mine }}>
-        <Icon name={mine ? 'check' : 'plus'} size={16} color={mine ? color.accent : color.textMuted} />
-        <Text style={styles.meta}>{mine ? 'Showing exercises for your equipment' : 'Showing everything'}</Text>
-      </Pressable>
+      <ChipRow
+        options={[
+          { label: 'My gym', value: 'mine' },
+          { label: 'Any gear', value: 'all' },
+        ]}
+        value={mine ? 'mine' : 'all'}
+        onChange={(v) => setMine(v === 'mine')}
+      />
 
-      {results.map((ex) => (
-        <Pressable key={ex.id} style={({ pressed }) => [styles.item, pressed && styles.pressed]} onPress={() => onPick(ex)}>
-          <Text style={styles.name}>{ex.name}</Text>
-          <Text style={styles.meta}>
-            {ex.primaryMuscles.map(muscleLabel).join(', ')} · {EQUIPMENT_LABEL[ex.loadType as Equipment] ?? ex.loadType}
-          </Text>
-        </Pressable>
-      ))}
-      {results.length === 0 ? <Text style={styles.meta}>No match. Create it below.</Text> : null}
+      {suggested.length && !q ? (
+        <>
+          <SectionHeader title="Suggested" />
+          <View style={styles.list}>{suggested.map(({ s, e }, i) => row(e, s.reasons.join(', '), i, true))}</View>
+        </>
+      ) : null}
+
+      <SectionHeader title={q ? 'Results' : mine ? 'For your equipment' : 'Everything'} action={{ label: 'Not what you want?', onPress: () => setCreating(true), accessibilityLabel: 'Create a custom exercise' }} />
+      {results.length ? <View style={styles.list}>{results.map((ex, i) => row(ex, describe(ex), i))}</View> : <Text style={styles.meta}>No match. Create it below.</Text>}
 
       {creating ? (
         <View style={styles.create}>
@@ -116,16 +138,27 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  input: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.default },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md - 2,
+    minHeight: hit.gym,
+    paddingLeft: space.lg,
+    paddingRight: space.xs,
+    backgroundColor: color.surfaceHigh,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  input: { ...font.body, color: color.text, flex: 1, minHeight: hit.gym },
   gap: { marginVertical: space.md },
-  suggested: { marginBottom: space.md },
-  section: { ...font.label, color: color.textMuted, marginBottom: space.xs },
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.default },
-  item: { paddingVertical: space.md, borderBottomWidth: 1, borderBottomColor: color.border, minHeight: hit.default },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  pressed: { backgroundColor: color.surfaceHigh },
-  name: { ...font.body, color: color.text },
-  meta: { ...font.caption, color: color.textMuted, marginTop: space.xs },
+  list: { backgroundColor: color.bg, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.lg },
+  item: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 60, paddingVertical: space.xs },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  plus: { width: hit.default, height: hit.default, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
+  pressed: { opacity: 0.7 },
+  name: { ...font.label, fontWeight: '600', color: color.text },
+  meta: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: 2 },
   create: { gap: space.md, marginTop: space.lg },
   label: { ...font.label, color: color.text },
 });

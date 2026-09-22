@@ -204,6 +204,20 @@ export function addDay(routineId: string, label: string): RoutineDay {
   return row;
 }
 
+/** A copy of one day, exercises and targets included, appended to the same plan. */
+export function duplicateDay(dayId: string): RoutineDay | undefined {
+  const day = getDay(dayId);
+  if (!day) return undefined;
+  return db.transaction(() => {
+    const copy = addDay(day.routineId, `${day.label} (copy)`);
+    for (const s of getSlots(dayId)) {
+      const { targetSets, repLo, repHi, targetRir, restSeconds, supersetGroup, notes, startWeight } = s;
+      addSlot(copy.id, s.exerciseId, { targetSets, repLo, repHi, targetRir, restSeconds, supersetGroup, notes, startWeight });
+    }
+    return copy;
+  });
+}
+
 export function renameDay(dayId: string, label: string): void {
   db.update(schema.routineDay).set({ label }).where(eq(schema.routineDay.id, dayId)).run();
 }

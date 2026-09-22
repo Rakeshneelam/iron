@@ -13,7 +13,9 @@ import {
   createPlan,
   createRoutine,
   addDay,
+  duplicateDay,
   getDays,
+  removeDay,
   getSlots,
   removeSlot,
   resolveNextDay,
@@ -210,6 +212,18 @@ describe('the plan cycle', () => {
     work(s2.id, 'row', 1);
     cancelSession(s2.id, true);
     assert.equal(resolveNextDay(routine.id)?.id, dayB.id, 'a cancelled day waits for you');
+  });
+
+  test('duplicating a day copies its exercises and targets to the end; removing the copy undoes it', () => {
+    const { routine, dayA } = seedPlan();
+    updateSlot(getSlots(dayA.id)[0]!.id, { notes: 'belt', startWeight: 80, supersetGroup: 'A' });
+    const copy = duplicateDay(dayA.id)!;
+    assert.deepEqual(getDays(routine.id).map((d) => d.label), ['Day A', 'Day B', 'Day A (copy)']);
+    const strip = ({ id: _i, routineDayId: _d, exercise: _e, ...rest }: ReturnType<typeof getSlots>[number]) => rest;
+    assert.deepEqual(getSlots(copy.id).map(strip), getSlots(dayA.id).map(strip));
+    removeDay(copy.id);
+    assert.deepEqual(getDays(routine.id).map((d) => d.label), ['Day A', 'Day B']);
+    assert.equal(getSlots(dayA.id).length, 2, 'the original is untouched');
   });
 
   test('skipping a day advances the cycle, and undo puts it back', () => {
