@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -36,7 +35,7 @@ export default function EquipmentScreen() {
     <Screen
       title="Equipment"
       subtitle="Suggestions only offer what you can actually do."
-      right={<PrimaryButton label="Back" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/settings'))} />}
+      back
     >
       <SectionHeader title="Where you train" />
       <Card>

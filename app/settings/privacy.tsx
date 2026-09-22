@@ -5,11 +5,10 @@
  * promise is that it works offline should be able to state its privacy terms offline.
  * Keep this in step with §3 of that document.
  */
-import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native';
 
-import { Card, PrimaryButton, Screen, SectionHeader } from '@/components';
+import { Card, Screen, SectionHeader } from '@/components';
 import { color, font, space } from '@/theme/tokens';
 
 function P({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
@@ -21,7 +20,7 @@ export default function PrivacyScreen() {
     <Screen
       title="Privacy"
       subtitle="Last updated 12 September 2026"
-      right={<PrimaryButton label="Done" tone="ghost" onPress={() => router.back()} />}
+      back
     >
       <Card>
         <P>Iron is a personal training log. It runs entirely on your phone.</P>

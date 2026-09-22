@@ -133,7 +133,7 @@ export default function RestoreScreen() {
     <Screen
       title="Restore"
       subtitle="Put a backup back onto this phone."
-      right={<PrimaryButton label="Back" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/settings/backup'))} />}
+      back
     >
       {loaded ? (
         <>
