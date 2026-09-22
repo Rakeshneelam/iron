@@ -15,9 +15,10 @@ If you read only one file, read this one. Everything else is detail in `/docs`.
    network call the app is allowed to make is an optional, user-initiated encrypted
    backup to the user's own Google Drive `appDataFolder`. No analytics, no crash
    reporting SaaS, no remote config, no ads, no telemetry.
-2. **No accounts, no login.** A fresh install shows ONE setup screen (profile + pick
-   a plan); after that the app opens straight into today's workout. An upgrade of
-   an existing install never shows it.
+2. **No accounts, no login.** A fresh install shows one welcome (what Iron is, and
+   Restore for a new phone) and then ONE setup screen (profile + pick a plan, as
+   tabs of one screen, never a wizard); after that the app opens straight into
+   today's workout. An upgrade of an existing install never shows either.
 3. **Writes are immediate.** Every logged set hits SQLite the moment the user taps.
    Never hold a workout in React state and save "on finish" — the app will be killed
    in the background and the session must survive it.

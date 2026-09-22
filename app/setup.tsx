@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChipRow, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips } from '@/components';
+import { ChipRow, Icon, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, type IconName } from '@/components';
 import { CATALOG_BY_ID, type Level, type Stress } from '@/data/catalog';
 import { PLAN_TEMPLATES, type EquipmentPreset, type Goal } from '@/data/templates';
 import { getLatestWeight, upsertWeighIn } from '@/db/repositories/body';
@@ -39,10 +40,16 @@ const WEIGHT_ANCHOR_KG = 75;
  * tabs — sections of one screen, not steps. Finish is in the dock on every tab,
  * and only the name is required; everything else has a default.
  *
+ * Before it, once, the welcome: what Iron is, three promises it keeps, and the
+ * way in for someone arriving from another phone. It is this route's first state,
+ * not a route of its own, so it can only ever appear on a fresh install.
+ *
  * Google is not here at all. Drive authorisation is a backup permission, asked for
  * in Backup by someone who wants a backup; it was never an Iron account.
  */
 export default function Setup() {
+  const insets = useSafeAreaInsets();
+  const [started, setStarted] = useState(false);
   const [tab, setTab] = useState<Tab>('you');
   const [initial] = useState(getSettings);
   const [name, setName] = useState(initial.name);
@@ -75,6 +82,34 @@ export default function Setup() {
 
   const choice = picked ?? ranked[0]?.template.id ?? OWN;
   const shown = showAll ? ranked : ranked.slice(0, 3);
+
+  if (!started) {
+    return (
+      <View style={[styles.welcome, { paddingTop: insets.top + space.xxxl, paddingBottom: insets.bottom + space.lg }]}>
+        {/* The number you came here to log, as texture. Decoration only. */}
+        <Text style={styles.ghost} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+          72.5
+        </Text>
+        <View style={styles.brandRow}>
+          <Image source={require('../assets/icon.png')} style={styles.brandLogo} accessibilityLabel="Iron" />
+          <Text style={styles.wordmark}>IRON</Text>
+        </View>
+        <Text style={styles.hello} accessibilityRole="header">
+          Log the set.{'\n'}Skip the noise.
+        </Text>
+        <Text style={styles.pitch}>A private training log that lives on your phone. Open it, lift, log.</Text>
+        <View style={styles.flex1} />
+        <Pledge icon="phone" title="Stays on this phone" sub="No account, no server, no tracking." />
+        <Pledge icon="spark" title="Advice that shows its reasoning" sub="Every suggested weight comes with a plain why." />
+        <Pledge icon="bell" title="Quiet by default" sub="Reminders only nudge when there is something to do. A missed day is just a day." />
+        <View style={styles.welcomeActions}>
+          <PrimaryButton label="Get started" size="gym" icon={<Icon name="chevronRight" size={20} color={color.onAccent} />} onPress={() => setStarted(true)} />
+          <PrimaryButton label="Restore a backup from another phone" tone="neutral" onPress={() => router.push('/settings/restore')} />
+          <Text style={styles.gate}>Takes about a minute. Only your name is required.</Text>
+        </View>
+      </View>
+    );
+  }
 
   /** What still needs an answer, and which tab it is on. Never a dead control. */
   const blocker: { text: string; tab: Tab } | null = !name.trim()
@@ -121,6 +156,7 @@ export default function Setup() {
     <Screen
       title="Set up Iron"
       subtitle="One screen. Stays on this phone."
+      back={() => setStarted(false)}
       right={<Image source={require('../assets/icon.png')} style={styles.logo} accessibilityLabel="Iron" />}
       strip={<SegmentTabs options={TABS} value={tab} onChange={setTab} />}
       dock={
@@ -242,6 +278,20 @@ export default function Setup() {
   );
 }
 
+function Pledge({ icon, title, sub }: { icon: IconName; title: string; sub: string }) {
+  return (
+    <View style={styles.promise} accessible accessibilityLabel={`${title}. ${sub}`}>
+      <View style={styles.promiseIcon}>
+        <Icon name={icon} size={20} color={color.accent} />
+      </View>
+      <View style={styles.flex1}>
+        <Text style={styles.promiseTitle}>{title}</Text>
+        <Text style={styles.promiseSub}>{sub}</Text>
+      </View>
+    </View>
+  );
+}
+
 function Choice({ title, subtitle, selected, badge, onPress }: { title: string; subtitle: string; selected: boolean; badge?: string; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} style={({ pressed }) => [styles.choice, selected && styles.choiceOn, pressed && styles.pressed]}>
@@ -258,6 +308,18 @@ function Choice({ title, subtitle, selected, badge, onPress }: { title: string; 
 }
 
 const styles = StyleSheet.create({
+  welcome: { flex: 1, backgroundColor: color.bg, paddingHorizontal: space.xl, overflow: 'hidden' },
+  ghost: { position: 'absolute', top: '36%', left: space.lg, ...font.hero, fontSize: 214, lineHeight: 230, letterSpacing: -8, color: color.surface },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginBottom: space.xl },
+  brandLogo: { width: 44, height: 44, borderRadius: radius.md },
+  wordmark: { ...font.heading, fontWeight: '800', letterSpacing: 2, color: color.text },
+  hello: { ...font.display, fontSize: 46, lineHeight: 52, color: color.text },
+  pitch: { ...font.body, color: color.textMuted, marginTop: space.md },
+  promise: { flexDirection: 'row', alignItems: 'center', gap: space.md + 2, minHeight: 60 },
+  promiseIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: color.surfaceHigh, borderWidth: 1, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
+  promiseTitle: { ...font.label, fontWeight: '600', color: color.text },
+  promiseSub: { ...font.caption, color: color.textMuted },
+  welcomeActions: { gap: space.md - 2, marginTop: space.xl },
   logo: { width: 36, height: 36, borderRadius: radius.md, marginTop: space.xs },
   stack: { gap: space.md + 2 },
   flex1: { flex: 1 },
