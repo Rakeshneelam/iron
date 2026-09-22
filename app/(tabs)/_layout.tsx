@@ -20,7 +20,7 @@ import { color, font } from '@/theme/tokens';
 const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: 'index', title: 'Today', icon: 'dumbbell' },
   { name: 'food', title: 'Food', icon: 'food' },
-  { name: 'body', title: 'Body', icon: 'ruler' },
+  { name: 'body', title: 'Body', icon: 'body' },
   { name: 'program', title: 'Plans', icon: 'plans' },
   { name: 'review', title: 'Progress', icon: 'progress' },
 ];
@@ -33,7 +33,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: color.accent,
         tabBarInactiveTintColor: color.textMuted,
         tabBarStyle: { backgroundColor: color.surface, borderTopColor: color.border },
-        tabBarLabelStyle: { ...font.caption, fontWeight: '600' },
+        tabBarLabelStyle: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '600' },
         sceneStyle: { backgroundColor: color.bg },
       }}
     >
