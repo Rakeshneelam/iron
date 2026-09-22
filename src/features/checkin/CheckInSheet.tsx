@@ -92,35 +92,48 @@ function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker
     <View style={styles.stack}>
       {datePicker ? <DateStepper value={day} onChange={goTo} /> : null}
       <Text style={styles.hint}>
-        {onStart ? "Optional. A rough night lowers today's targets; nothing here raises them." : 'Optional. Only what you answer is saved, and any answer can go back to Not recorded.'}
+        {onStart
+          ? "Optional. A rough night lowers today's targets; nothing here raises them. Tap an answer again to clear it."
+          : 'Optional. Only what you answer is saved. Tap an answer again to clear it.'}
       </Text>
 
-      <View>
-        <Text style={styles.label}>Morning weight</Text>
-        <WeightField draft={weight} onChange={setWeight} pendingLabel="Will save with the check-in" />
-      </View>
-
-      <Answer label="Sleep last night" cleared={recorded(sleep)}>
+      <Answer label="Morning weight" hint={weight.given ? null : 'Saves with the check-in'}>
+        <WeightField draft={weight} onChange={setWeight} pendingLabel="Will save with the check-in" size="gym" />
+      </Answer>
+      <Answer label="Sleep last night" hint={recorded(sleep)}>
         <ChipRow options={SLEEP} value={sleep} onChange={toggle(sleep, setSleep)} />
       </Answer>
-      <Answer label="Soreness: 1 fresh, 5 wrecked" cleared={recorded(soreness)}>
+      <Answer label="Soreness" hint={recorded(soreness) ?? '1 fresh · 5 wrecked'}>
         <ChipRow options={SCALE} value={soreness} onChange={toggle(soreness, setSoreness)} />
       </Answer>
-      <Answer label="Stress: 1 calm, 5 fried" cleared={recorded(stress)}>
+      <Answer label="Stress" hint={recorded(stress) ?? '1 calm · 5 stressed'}>
         <ChipRow options={SCALE} value={stress} onChange={toggle(stress, setStress)} />
       </Answer>
 
       {onStart ? (
-        <View style={styles.actions}>
+        <View style={styles.pair}>
+          <PrimaryButton
+            label="Save"
+            tone="neutral"
+            size="gym"
+            disabled={!answered}
+            style={styles.flex}
+            onPress={() => {
+              save();
+              toast(`Check-in saved for ${fmtDayLabel(day)}`);
+              onClose();
+            }}
+          />
+          {/* Nothing answered is not a reason to stop someone starting. */}
           <PrimaryButton
             label="Save and start"
             size="gym"
+            style={styles.flex2}
             onPress={() => {
               if (answered) save();
               onStart();
             }}
           />
-          <PrimaryButton label="Start without saving" tone="ghost" onPress={onStart} />
         </View>
       ) : (
         <View style={styles.actions}>
@@ -168,12 +181,13 @@ function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker
   );
 }
 
-function Answer({ label, cleared, children }: { label: string; cleared: string | null; children: React.ReactNode }) {
+/** A question: its label, a faint hint beside it (the scale, or "Not recorded"), then the answers. */
+function Answer({ label, hint, children }: { label: string; hint: string | null; children: React.ReactNode }) {
   return (
     <View>
       <View style={styles.labelRow}>
-        <Text style={[styles.label, styles.flex]}>{label}</Text>
-        {cleared ? <Text style={styles.note}>{cleared}</Text> : null}
+        <Text style={styles.label}>{label}</Text>
+        {hint ? <Text style={styles.note}>{hint}</Text> : null}
       </View>
       {children}
     </View>
@@ -183,9 +197,11 @@ function Answer({ label, cleared, children }: { label: string; cleared: string |
 const styles = StyleSheet.create({
   stack: { gap: space.lg, paddingBottom: space.lg },
   flex: { flex: 1 },
-  labelRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  flex2: { flex: 2 },
+  labelRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginBottom: space.sm },
   hint: { ...font.caption, color: color.textMuted },
-  label: { ...font.label, color: color.text, fontWeight: '600', marginBottom: space.sm },
-  note: { ...font.caption, color: color.textMuted },
+  label: { ...font.caption, fontWeight: '600', color: color.textMuted },
+  note: { ...font.caption, fontSize: 12, color: color.textFaint, flexShrink: 1 },
   actions: { gap: space.xs, marginTop: space.sm },
+  pair: { flexDirection: 'row', gap: space.md - 2, marginTop: space.sm },
 });

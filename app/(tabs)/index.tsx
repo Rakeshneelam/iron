@@ -334,7 +334,15 @@ export default function Today() {
       {week}
       {recent}
       {recoverySheet}
-      {checkInSheet}
+      {/* With a day to start, the sheet ends in Save and start (CheckIn board). */}
+      <CheckInSheet
+        visible={checkIn}
+        onClose={() => setCheckIn(false)}
+        onStart={() => {
+          setCheckIn(false);
+          start();
+        }}
+      />
     </Screen>
   );
 }

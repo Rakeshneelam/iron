@@ -2,9 +2,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, Icon, IconButton, MiniBars, PrimaryButton, Ring, Screen, SectionHeader, Sheet, Stepper, toast } from '@/components';
+import { Card, Icon, IconButton, ListCard, ListRow, MiniBars, Pill, PrimaryButton, Ring, Screen, SectionHeader, Sheet, Stepper, toast } from '@/components';
 import { DateStepper, useSelectedDate } from '@/components/DateStepper';
 import { useLive } from '@/db/live';
+import { useSettings } from '@/db/repositories/settings';
 import { deleteEntry, getDayEntries, getDayTotal, historyMl, logWater, restoreEntry, updateEntry, type WaterEntry } from '@/db/repositories/water';
 import { fmtClockOfDay } from '@/features/settings/time';
 import { fmtDayLabel, minutesSinceMidnight, parseISODate, todayISO } from '@/lib/date';
@@ -13,9 +14,13 @@ import { ml } from '@/lib/format';
 import { hydrationPlan } from '@/services/hydration';
 import { rescheduleAll } from '@/services/notifications';
 import { WaterTargetSheet } from '@/features/water/TargetSheet';
-import { color, font, hit, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
-const QUICK = [250, 500, 750, 1000] as const;
+const QUICK = [
+  { ml: 250, label: 'glass' },
+  { ml: 500, label: 'bottle' },
+  { ml: 750, label: 'shaker' },
+] as const;
 const WEEKDAY = 'SMTWTFS';
 
 type AmountTarget = { mode: 'add' } | { mode: 'edit'; entry: WaterEntry };
@@ -36,6 +41,7 @@ export default function WaterScreen() {
   // through to Water does not silently land on today.
   const [date, setDate] = useSelectedDate(typeof params.date === 'string' && params.date <= today ? params.date : undefined);
   const isToday = date === today;
+  const settings = useSettings();
 
   const [targetSheet, setTargetSheet] = useState(false);
   const [sheet, setSheet] = useState<AmountTarget | null>(null);
@@ -66,75 +72,95 @@ export default function WaterScreen() {
   // out loud, or just shown as the total it was.
   const target = plan.targetMl;
   const reached = dayTotal >= target;
-  const status = !isToday
-    ? `${ml(dayTotal)} logged · current target ${ml(target)}`
-    : reached
-      ? 'Target reached — no more reminders today.'
-      : next
-        ? `Next reminder ${fmtClockOfDay(next.atMinutes)}${plan.ahead ? ' · you’re ahead of pace' : ''}`
-        : plan.ahead
-          ? 'Ahead of pace. Nothing scheduled.'
-          : 'No more reminders today.';
-
   const logged = history.filter((d) => d.ml > 0);
   const daysHit = history.filter((d) => d.ml >= target).length;
   const avg = logged.length ? logged.reduce((a, d) => a + d.ml, 0) / logged.length : 0;
+  const litres = dayTotal >= 1000 ? { n: (Math.round(dayTotal / 100) / 10).toString(), u: 'L' } : { n: String(Math.round(dayTotal)), u: 'ml' };
+  const pace = !isToday ? null : reached ? { label: 'Target reached', tone: 'positive' as const } : plan.ahead ? { label: 'Ahead of pace', tone: 'positive' as const } : { label: 'Behind pace', tone: 'muted' as const };
+  const gapMl = Math.round(Math.abs(plan.consumedMl - plan.expectedByNowMl) / 10) * 10;
+  const remindersOn = settings.reminders.water.on;
+  const reminderTitle = !remindersOn ? 'Reminders are off' : reached || plan.ahead ? 'Reminders are quiet' : next ? `Next reminder ${fmtClockOfDay(next.atMinutes)}` : 'No more reminders today';
+  const reminderText = !remindersOn
+    ? 'Turn them on in Settings → Reminders. They only ever nudge when you fall behind.'
+    : reached
+      ? 'Target reached — nothing more will buzz today.'
+      : plan.ahead
+        ? `You are ${ml(gapMl)} ahead of where the day expects you to be, so nothing will buzz until you fall behind.`
+        : `You are ${ml(gapMl)} behind where the day expects you to be. One reminder at a time, never on a timer.`;
 
   return (
     <Screen
       title="Water"
-      subtitle={`${isToday ? 'Target' : 'Current target'} ${ml(target)}`}
+      subtitle={isToday ? new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : fmtDayLabel(date)}
+      back
       right={
         <View style={styles.headerBtns}>
-          <IconButton icon="edit" tone="neutral" accessibilityLabel="Change your daily water target" onPress={() => setTargetSheet(true)} />
-          <PrimaryButton label="Done" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+          <IconButton icon="target" accessibilityLabel={`Daily target ${ml(target)}. Change it.`} onPress={() => setTargetSheet(true)} />
+          <IconButton icon="bell" accessibilityLabel="Reminder settings" onPress={() => router.push('/settings/reminders')} />
         </View>
       }
+      dock={<PrimaryButton label="Log another amount" size="gym" icon={<Icon name="plus" size={18} color={color.onAccent} />} onPress={() => setSheet({ mode: 'add' })} />}
     >
       <DateStepper value={date} onChange={setDate} />
 
       <View style={styles.center}>
-        <Ring
-          progress={target > 0 ? dayTotal / target : 0}
-          size={148}
-          label={ml(dayTotal)}
-          sublabel={reached ? 'done' : `${ml(Math.max(0, target - dayTotal))} to go`}
-          tone={reached ? 'positive' : 'accent'}
-        />
+        <Ring progress={target > 0 ? dayTotal / target : 0} size={248} thickness={16} tone={isToday && reached ? 'positive' : 'accent'}>
+          <Text style={styles.big} numberOfLines={1}>
+            {litres.n}
+            <Text style={styles.bigUnit}> {litres.u}</Text>
+          </Text>
+          <Text style={styles.of}>
+            of {ml(target)} {isToday ? 'today' : '(current target)'}
+          </Text>
+          {pace ? (
+            <View style={styles.pace}>
+              <Pill label={pace.label} tone={pace.tone} />
+            </View>
+          ) : null}
+        </Ring>
       </View>
-      <Text style={styles.status}>{status}</Text>
 
-      <View style={styles.grid}>
+      <View style={styles.quickRow}>
         {QUICK.map((q) => (
-          <PrimaryButton
-            key={q}
-            label={`+${ml(q)}`}
-            size="gym"
-            tone="neutral"
-            style={styles.quick}
-            accessibilityLabel={`Add ${ml(q)} to ${isToday ? 'today' : fmtDayLabel(date)}`}
-            onPress={() => log(q)}
-          />
-        ))}
-      </View>
-      <PrimaryButton label="Custom amount" tone="ghost" icon={<Icon name="edit" size={16} />} style={styles.gapTop} onPress={() => setSheet({ mode: 'add' })} />
-
-      <SectionHeader title={isToday ? 'Entries today' : `Entries on ${fmtDayLabel(date)}`} />
-      <Card>
-        {entries.length === 0 ? <Text style={styles.empty}>Nothing logged {isToday ? 'yet today' : 'this day'}.</Text> : null}
-        {entries.map((e) => (
-          <Pressable key={e.id} style={styles.entry} onPress={() => setSheet({ mode: 'edit', entry: e })} accessibilityHint="Tap to edit or delete">
-            <Text style={styles.time}>{fmtClockOfDay(minutesSinceMidnight(new Date(e.loggedAt)))}</Text>
-            <Text style={styles.amount}>{ml(e.ml)}</Text>
+          <Pressable
+            key={q.ml}
+            onPress={() => log(q.ml)}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${ml(q.ml)} to ${isToday ? 'today' : fmtDayLabel(date)}`}
+            style={({ pressed }) => [styles.quick, pressed && styles.pressed]}
+          >
+            <Text style={styles.quickAmount}>{q.ml}</Text>
+            <Text style={styles.quickLabel}>ml · {q.label}</Text>
           </Pressable>
         ))}
-        {entries.length ? (
-          <View style={styles.entry}>
-            <Text style={styles.time}>Total</Text>
-            <Text style={styles.amount}>{ml(dayTotal)}</Text>
+      </View>
+
+      {isToday ? (
+        <Card style={styles.reminders}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.cardTitle}>{reminderTitle}</Text>
+            <Text style={styles.faint}>{remindersOn ? 'On' : 'Off'}</Text>
           </View>
-        ) : null}
-      </Card>
+          <Text style={styles.hint}>{reminderText}</Text>
+        </Card>
+      ) : null}
+
+      <SectionHeader title={isToday ? 'Today' : fmtDayLabel(date)} />
+      <ListCard>
+        {entries.length === 0 ? <ListRow title={`Nothing logged ${isToday ? 'yet today' : 'this day'}.`} tone="muted" /> : null}
+        {entries.map((e, i) => (
+          <ListRow
+            key={e.id}
+            divider={i > 0}
+            title={fmtClockOfDay(minutesSinceMidnight(new Date(e.loggedAt)))}
+            tone="muted"
+            chevron={false}
+            right={<Text style={styles.amount}>{ml(e.ml)}</Text>}
+            onPress={() => setSheet({ mode: 'edit', entry: e })}
+            accessibilityLabel={`${ml(e.ml)} at ${fmtClockOfDay(minutesSinceMidnight(new Date(e.loggedAt)))}. Tap to edit or delete.`}
+          />
+        ))}
+      </ListCard>
 
       <SectionHeader title="Last 14 days" hint={plan.breakdown} />
       <Card>
@@ -220,16 +246,32 @@ function AmountForm({ sheet, onClose, onAdd, date }: AmountProps & { sheet: Amou
 }
 
 const styles = StyleSheet.create({
-  headerBtns: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  center: { alignItems: 'center', marginVertical: space.md },
-  status: { ...font.label, color: color.textMuted, textAlign: 'center', marginBottom: space.lg },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  quick: { width: '48.5%' },
-  gapTop: { marginTop: space.sm },
-  empty: { ...font.label, color: color.textMuted, textAlign: 'center', paddingVertical: space.md },
-  entry: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  time: { ...font.body, ...font.numeric, color: color.textMuted },
-  amount: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
+  headerBtns: { flexDirection: 'row', alignItems: 'center' },
+  center: { alignItems: 'center', marginVertical: space.lg },
+  big: { ...font.hero, fontSize: 56, lineHeight: 60, ...font.numeric, color: color.text },
+  bigUnit: { ...font.title, fontSize: 26, color: color.textMuted, letterSpacing: 0 },
+  of: { ...font.caption, fontSize: 14, color: color.textMuted },
+  pace: { marginTop: space.sm },
+  quickRow: { flexDirection: 'row', gap: space.md - 2 },
+  quick: {
+    flex: 1,
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  pressed: { backgroundColor: color.surfaceHigh },
+  quickAmount: { ...font.heading, fontWeight: '700', ...font.numeric, color: color.text },
+  quickLabel: { ...font.caption, fontSize: 12, color: color.textFaint },
+  reminders: { marginTop: space.lg, marginBottom: 0, gap: space.xs },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
+  cardTitle: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text, flex: 1 },
+  faint: { ...font.caption, color: color.textFaint },
+  amount: { ...font.label, fontSize: 14, fontWeight: '700', ...font.numeric, color: color.text },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   stack: { gap: space.md, paddingBottom: space.lg },
   row: { flexDirection: 'row', justifyContent: 'center' },

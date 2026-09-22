@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
@@ -16,14 +16,16 @@ export interface RingProps {
   progress: number;
   size: number;
   thickness?: number;
-  label: string;
+  label?: string;
   sublabel?: string;
   tone?: RingTone;
+  /** Replaces label and sublabel with your own centre. */
+  children?: ReactNode;
 }
 
 const STROKE: Record<RingTone, string> = { accent: color.accent, positive: color.positive, warning: color.warning };
 
-export function Ring({ progress, size, thickness = 14, label, sublabel, tone = 'accent' }: RingProps) {
+export function Ring({ progress, size, thickness = 14, label, sublabel, tone = 'accent', children }: RingProps) {
   const reduced = useReducedMotion();
   const r = (size - thickness) / 2;
   const circumference = 2 * Math.PI * r;
@@ -56,10 +58,14 @@ export function Ring({ progress, size, thickness = 14, label, sublabel, tone = '
         />
       </Svg>
       <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
-        <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit>
-          {label}
-        </Text>
-        {sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : null}
+        {children ?? (
+          <>
+            <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit>
+              {label}
+            </Text>
+            {sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : null}
+          </>
+        )}
       </View>
     </View>
   );
