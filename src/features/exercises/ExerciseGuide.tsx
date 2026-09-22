@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
+import { Pill } from '@/components/Pill';
 import { CATALOG, CATALOG_BY_ID, EQUIPMENT_LABEL, MUSCLE_LABEL, type Muscle } from '@/data/catalog';
 import type { Exercise } from '@/db/repositories/exercises';
 import { useSettings } from '@/db/repositories/settings';
@@ -39,24 +40,28 @@ export function ExerciseGuide({ exercise, compact = false, onOpen }: { exercise:
         <ExerciseDemo exercise={exercise} size={compact ? 190 : 230} />
       </View>
       <MuscleMap primary={exercise.primaryMuscles} secondary={secondary} body={settings.sex === 'female' ? 'female' : 'male'} height={compact ? 150 : 190} />
-      <View style={styles.legend}>
-        <Legend tone={color.accent} text={exercise.primaryMuscles.map(label).join(', ')} />
-        {secondary.length ? <Legend tone={color.accentSoft} text={secondary.map(label).join(', ')} /> : null}
+      {/* What it trains, as the map's key: the main movers in accent, the helpers muted. */}
+      <View style={styles.muscles}>
+        {exercise.primaryMuscles.map((m) => (
+          <Pill key={m} label={label(m)} tone="accent" />
+        ))}
+        {secondary.map((m) => (
+          <Pill key={m} label={label(m)} tone="muted" />
+        ))}
       </View>
 
       {entry ? (
         <>
-          <Text style={styles.meta}>
-            {EQUIPMENT_LABEL[entry.equipment]} · {LEVEL[entry.level]} · {entry.compound ? 'Compound' : 'Isolation'}
-            {entry.unilateral ? ' · one side at a time' : ''}
-          </Text>
+          {compact ? <Text style={styles.meta}>{guideMeta(exercise)}</Text> : null}
           <Block title="Setup">
-            <Text style={styles.body}>{entry.setup}</Text>
+            <Text style={styles.quiet}>{entry.setup}</Text>
           </Block>
           <Block title="How to">
             {entry.steps.map((s, i) => (
               <View key={s} style={styles.line}>
-                <Text style={styles.num}>{i + 1}</Text>
+                <View style={styles.num}>
+                  <Text style={styles.numText}>{i + 1}</Text>
+                </View>
                 <Text style={styles.body}>{s}</Text>
               </View>
             ))}
@@ -65,7 +70,7 @@ export function ExerciseGuide({ exercise, compact = false, onOpen }: { exercise:
             {entry.mistakes.map((m) => (
               <View key={m} style={styles.line}>
                 <Icon name="close" size={14} color={color.warning} />
-                <Text style={styles.body}>{m}</Text>
+                <Text style={styles.quiet}>{m}</Text>
               </View>
             ))}
           </Block>
@@ -97,20 +102,18 @@ export function ExerciseGuide({ exercise, compact = false, onOpen }: { exercise:
   );
 }
 
+/** "Barbell · Intermediate · Compound" — the line under the name. */
+export function guideMeta(exercise: Exercise): string {
+  const entry = CATALOG_BY_ID.get(exercise.id);
+  if (!entry) return 'Custom exercise';
+  return [EQUIPMENT_LABEL[entry.equipment], LEVEL[entry.level], entry.compound ? 'Compound' : 'Isolation', entry.unilateral ? 'one side at a time' : ''].filter(Boolean).join(' · ');
+}
+
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.block}>
       <Text style={styles.blockTitle}>{title}</Text>
       {children}
-    </View>
-  );
-}
-
-function Legend({ tone, text }: { tone: string; text: string }) {
-  return (
-    <View style={styles.legendRow}>
-      <View style={[styles.dot, { backgroundColor: tone }]} />
-      <Text style={styles.legendText}>{text}</Text>
     </View>
   );
 }
@@ -129,19 +132,18 @@ function LinkRow({ title, hint, onPress }: { title: string; hint: string; onPres
 
 const styles = StyleSheet.create({
   // Illustrations need air: text set right under a figure reads as part of the drawing.
-  stack: { gap: space.xl, paddingBottom: space.lg },
+  stack: { gap: space.lg, paddingBottom: space.lg },
   flex: { flex: 1 },
-  stage: { alignItems: 'center', backgroundColor: color.bg, borderRadius: radius.lg, paddingVertical: space.lg },
-  legend: { gap: space.xs, alignItems: 'center', marginTop: -space.sm },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { ...font.label, color: color.text },
-  meta: { ...font.caption, color: color.textMuted, textAlign: 'center' },
+  stage: { alignItems: 'center', backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, paddingVertical: space.lg },
+  muscles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2 },
+  meta: { ...font.caption, color: color.textMuted },
   block: { gap: space.sm },
-  blockTitle: { ...font.label, color: color.textMuted },
-  line: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
-  num: { ...font.label, ...font.numeric, color: color.accent, width: 14 },
-  body: { ...font.body, color: color.text, flex: 1 },
+  blockTitle: { ...font.eyebrow, color: color.textFaint },
+  line: { flexDirection: 'row', gap: space.md, alignItems: 'flex-start' },
+  num: { width: 22, height: 22, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, borderWidth: 1, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
+  numText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '700', ...font.numeric, color: color.text },
+  body: { ...font.label, fontSize: 14, fontWeight: '400', color: color.text, flex: 1 },
+  quiet: { ...font.caption, color: color.textMuted, flex: 1 },
   safety: { flexDirection: 'row', gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: color.warning },
   link: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.default, paddingVertical: space.xs },
   pressed: { opacity: 0.7 },

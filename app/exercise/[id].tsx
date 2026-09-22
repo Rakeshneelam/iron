@@ -8,7 +8,7 @@ import { getExercise } from '@/db/repositories/exercises';
 import { getLastPerformance } from '@/db/repositories/sessions';
 import { setSetting, useSettings } from '@/db/repositories/settings';
 import { e1rmSeries } from '@/db/repositories/stats';
-import { ExerciseGuide } from '@/features/exercises/ExerciseGuide';
+import { ExerciseGuide, guideMeta } from '@/features/exercises/ExerciseGuide';
 import { fmtSet } from '@/features/session/prescription';
 import { fmtDayLabel } from '@/lib/date';
 import { kgNum } from '@/lib/format';
@@ -48,7 +48,23 @@ export default function ExerciseScreen() {
   };
 
   return (
-    <Screen title={exercise.name} right={<PrimaryButton label="Done" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />}>
+    <Screen
+      title={exercise.name}
+      subtitle={guideMeta(exercise)}
+      back
+      dock={
+        <View style={styles.pair}>
+          <PrimaryButton
+            label={disliked ? 'Suggest this again' : 'Don’t suggest this'}
+            tone="neutral"
+            icon={<Icon name={disliked ? 'undo' : 'eyeOff'} size={18} />}
+            style={styles.flex1}
+            onPress={toggleDislike}
+          />
+          <PrimaryButton label="Done" style={styles.flex1} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
+        </View>
+      }
+    >
       <ExerciseGuide exercise={exercise} />
       <SectionHeader title="Your history" />
       {history.last ? (
@@ -88,14 +104,7 @@ export default function ExerciseScreen() {
       ) : (
         <Text style={styles.muted}>Not logged yet.</Text>
       )}
-      <PrimaryButton
-        label={disliked ? 'Suggest this again' : "Don't suggest this exercise"}
-        tone="ghost"
-        icon={<Icon name={disliked ? 'undo' : 'close'} size={16} color={color.textMuted} />}
-        style={styles.gap}
-        onPress={toggleDislike}
-      />
-      <Text style={styles.muted}>{"Hidden exercises are left out of swaps and new plans. Plans you already have don't change."}</Text>
+      <Text style={[styles.muted, styles.gap]}>{"Hidden exercises are left out of swaps and new plans. Plans you already have don't change."}</Text>
     </Screen>
   );
 }
@@ -106,5 +115,7 @@ const styles = StyleSheet.create({
   value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600', flexShrink: 1 },
   muted: { ...font.label, color: color.textMuted },
   gap: { marginTop: space.xl },
+  pair: { flexDirection: 'row', gap: space.sm },
+  flex1: { flex: 1 },
   chart: { marginTop: space.md, gap: space.xs },
 });

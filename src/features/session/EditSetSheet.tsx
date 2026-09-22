@@ -48,7 +48,7 @@ function EditSetForm({ set, step, correcting, onClose }: { set: SetRow; step: nu
 
   return (
     <>
-      <View style={styles.pair}>
+      <View style={styles.stack}>
         <Stepper label="kg" value={weight} step={step} min={0} max={500} size="gym" onChange={setWeight} />
         <Stepper
           label={timed ? 'sec' : 'reps'}
@@ -95,5 +95,7 @@ function EditSetForm({ set, step, correcting, onClose }: { set: SetRow; step: nu
 
 const styles = StyleSheet.create({
   pair: { flexDirection: 'row', gap: space.md, marginVertical: space.md },
+  // One full-width row each: side by side, 102.5 had about 58dp between its buttons.
+  stack: { gap: space.md, marginVertical: space.md },
   flex: { flex: 1 },
 });

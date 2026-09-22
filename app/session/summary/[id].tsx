@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, TextField, toast } from '@/components';
+import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Pill, PrimaryButton, Screen, SectionHeader, StatTile, TextField, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { getExercise } from '@/db/repositories/exercises';
@@ -112,12 +112,81 @@ export default function SummaryScreen() {
 
   const title = justFinished ? (s.status === 'skipped' ? 'Skipped day' : 'Workout saved') : (summary.session.routineDayId ? undefined : 'Workout');
 
+  const perExercise = (
+    <>
+      <SectionHeader title="What you did" hint="Tap an exercise to see and fix its sets." />
+      <ListCard>
+        {summary.perExercise.map((e, i) => {
+          const measure = measureOf(e.exerciseId);
+          const delta = e.prevBestE1rm === null ? null : e.bestE1rm - e.prevBestE1rm;
+          const open = expanded === e.exerciseId;
+          return (
+            <View key={e.exerciseId} style={[i > 0 && styles.divider]}>
+              <Pressable
+                style={styles.row}
+                onPress={() => setExpanded(open ? null : e.exerciseId)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: open }}
+                accessibilityLabel={`${e.name}, ${e.sets} sets, best ${fmtSet(measure, e.topWeight, e.topReps)}. ${open ? 'Hide' : 'Show'} its sets.`}
+              >
+                <View style={styles.flex1}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {e.name}
+                  </Text>
+                  <Text style={styles.muted}>
+                    {e.sets} {e.sets === 1 ? 'set' : 'sets'}, best {fmtSet(measure, e.topWeight, e.topReps)}
+                  </Text>
+                </View>
+                {/* An estimated 1RM means nothing for a timed hold, so it is not shown. */}
+                {measure === 'reps' ? (
+                  <Text style={[styles.delta, { color: delta !== null && delta > 0.05 ? color.positive : color.textMuted }]}>
+                    {delta === null ? 'first' : `${signed(delta)} kg`}
+                  </Text>
+                ) : null}
+                <Icon name={open ? 'chevronUp' : 'chevronDown'} size={18} color={color.textFaint} />
+              </Pressable>
+              {open
+                ? e.rows.map((r, n) => (
+                    <Pressable
+                      key={r.id}
+                      style={styles.setRow}
+                      onPress={() => setEditing(r)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${r.isWarmup === 1 ? 'Warm-up' : `Set ${n + 1}`}: ${fmtSet(measure, r.weight, r.reps)}. Tap to correct.`}
+                    >
+                      <Text style={styles.setIdx}>{r.isWarmup === 1 ? 'warm-up' : `set ${n + 1}`}</Text>
+                      <Text style={[styles.setVal, styles.flex1]}>{fmtSet(measure, r.weight, r.reps)}</Text>
+                      {r.painFlag === 1 ? <Text style={styles.pain}>pain</Text> : null}
+                      {r.isWarmup === 0 && measure === 'reps' ? <Text style={styles.muted}>RIR {r.rir}</Text> : null}
+                      <Icon name="edit" size={16} color={color.textMuted} />
+                    </Pressable>
+                  ))
+                : null}
+            </View>
+          );
+        })}
+      </ListCard>
+      <Text style={styles.legend}>Change is in estimated 1-rep max vs last time.</Text>
+    </>
+  );
+
   return (
     <Screen
       title={title ?? fmtDayLabel(s.date)}
       subtitle={justFinished ? `${fmtDayLabel(s.date)}, ${summary.durationMin} minutes` : `${summary.durationMin} minutes`}
       // Just finished: Done goes to Today. Browsing: Back goes where you came from.
-      right={justFinished ? undefined : <PrimaryButton label="Back" tone="ghost" onPress={back} />}
+      back={justFinished ? undefined : back}
+      dock={
+        justFinished ? (
+          <>
+            <PrimaryButton label="Done" size="gym" onPress={() => router.replace('/')} />
+            {/* A cool-down belongs to a workout you just did, not one from March. */}
+            {s.status !== 'skipped' && routine.items.length ? (
+              <PrimaryButton label={`Cool-down · ${minutesLabel(routine.seconds)}`} tone="neutral" icon={<Icon name="moon" size={18} />} onPress={() => setCooling(true)} />
+            ) : null}
+          </>
+        ) : undefined
+      }
     >
       <View style={styles.pills}>
         <Pill label={STATUS_LABEL[s.status]} tone={STATUS_TONE[s.status]} />
@@ -128,16 +197,16 @@ export default function SummaryScreen() {
       ) : (
         <>
           <View style={styles.tiles}>
-            <StatTile label="Volume" value={`${Math.round(summary.totalTonnage)} kg`} />
-            <StatTile label="Sets" value={String(summary.hardSets)} />
-            {/* Whichever the workout actually was. Never both totals in one number. */}
-            {totalReps > 0 || totalSeconds === 0 ? (
-              <StatTile label="Reps" value={String(totalReps)} />
-            ) : (
-              <StatTile label="Time under load" value={minutesLabel(totalSeconds)} />
-            )}
+            <StatTile label="Hard sets" value={String(summary.hardSets)} />
+            <StatTile label="Volume, kg" value={summary.totalTonnage >= 10000 ? `${(summary.totalTonnage / 1000).toFixed(1)}k` : String(Math.round(summary.totalTonnage))} />
+            <StatTile label="New bests" value={String(records.length)} tone={records.length ? 'positive' : 'default'} />
           </View>
-          {totalReps > 0 && totalSeconds > 0 ? <Text style={styles.note}>Plus {minutesLabel(totalSeconds)} of timed work.</Text> : null}
+          {/* Seconds held are not reps: timed work gets its own sentence, never a sum with reps (UX-09). */}
+          {totalSeconds > 0 ? (
+            <Text style={styles.note}>
+              {totalReps > 0 ? `${totalReps} reps, plus ${minutesLabel(totalSeconds)} of timed work.` : `${minutesLabel(totalSeconds)} of timed work.`}
+            </Text>
+          ) : null}
           {summary.progress.planned > 0 ? (
             <Text style={styles.note}>
               {summary.progress.done} of {summary.progress.planned} planned exercises done
@@ -146,35 +215,22 @@ export default function SummaryScreen() {
           ) : null}
 
           {records.length ? (
-            <>
-              <SectionHeader title="Personal records" />
-              <Card style={styles.list}>
-                {records.map((r, i) => (
-                  <View key={r.exerciseId} style={[styles.row, i > 0 && styles.divider]}>
-                    <Icon name="star" size={16} color={color.positive} />
-                    <View style={styles.flex1}>
-                      <Text style={styles.name}>{r.name}</Text>
-                      <Text style={styles.muted}>{r.events.map((e) => e.label).join(', ')}</Text>
-                    </View>
-                  </View>
-                ))}
-              </Card>
-            </>
-          ) : null}
-
-          {/* A cool-down belongs to a workout you just did, not one from March. */}
-          {justFinished && routine.items.length ? (
-            <Card onPress={() => setCooling(true)}>
+            <Card tone="positive" style={styles.records}>
               <View style={styles.row}>
-                <Icon name="moon" size={20} color={color.accent} />
-                <View style={styles.flex1}>
-                  <Text style={styles.name}>Cool-down · {minutesLabel(routine.seconds)}</Text>
-                  <Text style={styles.muted}>Optional — easy stretches for what you trained</Text>
-                </View>
-                <Icon name="chevronRight" size={18} color={color.textMuted} />
+                <Icon name="star" size={18} color={color.positive} />
+                <Text style={[styles.name, styles.flex1]}>
+                  {records.length === 1 ? 'One lift went past its best' : `${records.length} lifts went past their best`}
+                </Text>
               </View>
+              {records.map((r) => (
+                <Text key={r.exerciseId} style={styles.recordLine}>
+                  <Text style={styles.recordName}>{r.name}</Text> — {r.events.map((e) => e.label).join(', ')}
+                </Text>
+              ))}
             </Card>
           ) : null}
+
+          {perExercise}
 
           <SectionHeader title="How did it feel?" />
           <ChipRow options={EFFORT} value={s.sessionRpe} onChange={(v) => setSessionFeedback(id, { sessionRpe: v })} />
@@ -185,60 +241,6 @@ export default function SummaryScreen() {
             multiline
             style={styles.input}
           />
-
-          <SectionHeader title="Per exercise" hint="Tap an exercise to see and fix its sets." />
-          <Card style={styles.list}>
-            {summary.perExercise.map((e, i) => {
-              const measure = measureOf(e.exerciseId);
-              const delta = e.prevBestE1rm === null ? null : e.bestE1rm - e.prevBestE1rm;
-              const open = expanded === e.exerciseId;
-              return (
-                <View key={e.exerciseId} style={[i > 0 && styles.divider]}>
-                  <Pressable
-                    style={styles.row}
-                    onPress={() => setExpanded(open ? null : e.exerciseId)}
-                    accessibilityRole="button"
-                    accessibilityState={{ expanded: open }}
-                    accessibilityLabel={`${e.name}, ${e.sets} sets, best ${fmtSet(measure, e.topWeight, e.topReps)}. ${open ? 'Hide' : 'Show'} its sets.`}
-                  >
-                    <View style={styles.flex1}>
-                      <Text style={styles.name} numberOfLines={1}>
-                        {e.name}
-                      </Text>
-                      <Text style={styles.muted}>
-                        {e.sets} {e.sets === 1 ? 'set' : 'sets'}, best {fmtSet(measure, e.topWeight, e.topReps)}
-                      </Text>
-                    </View>
-                    {/* An estimated 1RM means nothing for a timed hold, so it is not shown. */}
-                    {measure === 'reps' ? (
-                      <Text style={[styles.delta, { color: delta !== null && delta > 0.05 ? color.positive : color.textMuted }]}>
-                        {delta === null ? 'first' : `${signed(delta)} kg`}
-                      </Text>
-                    ) : null}
-                    <Icon name={open ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
-                  </Pressable>
-                  {open
-                    ? e.rows.map((r, n) => (
-                        <Pressable
-                          key={r.id}
-                          style={styles.setRow}
-                          onPress={() => setEditing(r)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${r.isWarmup === 1 ? 'Warm-up' : `Set ${n + 1}`}: ${fmtSet(measure, r.weight, r.reps)}. Tap to correct.`}
-                        >
-                          <Text style={styles.setIdx}>{r.isWarmup === 1 ? 'warm-up' : `set ${n + 1}`}</Text>
-                          <Text style={[styles.setVal, styles.flex1]}>{fmtSet(measure, r.weight, r.reps)}</Text>
-                          {r.painFlag === 1 ? <Text style={styles.pain}>pain</Text> : null}
-                          {r.isWarmup === 0 && measure === 'reps' ? <Text style={styles.muted}>RIR {r.rir}</Text> : null}
-                          <Icon name="edit" size={16} color={color.textMuted} />
-                        </Pressable>
-                      ))
-                    : null}
-                </View>
-              );
-            })}
-          </Card>
-          <Text style={styles.legend}>Change is in estimated 1-rep max vs last time.</Text>
           {justFinished ? (
             <View style={styles.aside}>
               <BatteryCard />
@@ -247,13 +249,8 @@ export default function SummaryScreen() {
         </>
       )}
 
-      {justFinished ? (
-        <PrimaryButton label="Done" size="gym" style={styles.gapTop} onPress={() => router.replace('/')} />
-      ) : (
-        <PrimaryButton label="Back" size="gym" tone="neutral" style={styles.gapTop} onPress={back} />
-      )}
       <View style={styles.secondary}>
-        {s.status !== 'skipped' ? <PrimaryButton label="Reopen" tone="ghost" icon={<Icon name="undo" size={16} />} style={styles.flex1} onPress={reopen} /> : null}
+        {s.status !== 'skipped' ? <PrimaryButton label="Reopen" tone="ghost" icon={<Icon name="undo" size={16} color={color.textMuted} />} style={styles.flex1} onPress={reopen} /> : null}
         {/* Permanent deletion, kept in the corner it belongs in. */}
         <IconButton icon="trash" label="Delete" accessibilityLabel="Delete this workout permanently" onPress={remove} />
       </View>
@@ -298,8 +295,10 @@ const styles = StyleSheet.create({
     minHeight: hit.gym,
     marginTop: space.md,
   },
-  list: { paddingVertical: space.xs },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.md, minHeight: hit.default },
+  records: { gap: space.sm },
+  recordLine: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted },
+  recordName: { color: color.text, fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, minHeight: hit.gym },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -318,6 +317,5 @@ const styles = StyleSheet.create({
   delta: { ...font.label, ...font.numeric },
   legend: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   aside: { marginTop: gap.section },
-  gapTop: { marginTop: space.xl },
   secondary: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
 });

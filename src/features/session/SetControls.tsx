@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { ChipRow } from '@/components/ChipRow';
+import { ChipRow, Chips } from '@/components/ChipRow';
 import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Stepper } from '@/components/Stepper';
@@ -27,12 +27,16 @@ export interface SetControlsProps {
   /** Collapsed inputs expanded again by "Add another set". */
   expanded?: boolean;
   onExpand?: () => void;
-  /** Last session and today's target, right above the numbers they explain. */
-  context?: ReactNode;
+  /** The rest row, directly above the primary action. */
+  rest?: ReactNode;
   /** What the reps field counts: reps, seconds, or minutes (stored as seconds). */
   unit?: 'reps' | 'sec' | 'min';
-  /** Label for the load field; null hides it (cardio). */
+  /** The load field's label and unit; a null label hides it (cardio). */
   weightLabel?: string | null;
+  weightSuffix?: string;
+  /** Under each number, inside its card: today's target, or the way back to it. */
+  weightFooter?: ReactNode;
+  repsFooter?: ReactNode;
   /** Hide the effort chips (cardio). */
   showEffort?: boolean;
   onWeight: (v: number) => void;
@@ -42,80 +46,75 @@ export interface SetControlsProps {
   onLog: () => void;
 }
 
-/** Bottom third, one right thumb, no scrolling mid-set. Every target is >= 56dp. */
+/** Bottom-anchored, one right thumb, no scrolling mid-set. Every target is >= 56dp. */
 export function SetControls(p: SetControlsProps) {
   const unit = p.unit ?? 'reps';
-  const weightLabel = p.weightLabel === undefined ? 'kg' : p.weightLabel;
+  const weightLabel = p.weightLabel === undefined ? 'Weight' : p.weightLabel;
   // Done with this exercise and not deliberately adding another: one action.
   const collapsed = p.advance !== undefined && p.expanded === false;
 
-  return (
-    <View style={styles.wrap}>
-      {p.context}
-
-      {collapsed ? (
+  if (collapsed) {
+    return (
+      <View style={styles.wrap}>
+        {p.rest}
         <View style={styles.pair}>
-          <PrimaryButton label="Add another set" tone="neutral" size="gym" style={styles.flex1} onPress={() => p.onExpand?.()} />
+          <PrimaryButton label="Add another set" tone="neutral" size="gym" style={styles.flex1} icon={<Icon name="plus" size={18} />} onPress={() => p.onExpand?.()} />
           <PrimaryButton
             label={p.advance?.label ?? ''}
             size="gym"
-            style={styles.flex1}
+            style={styles.flex2}
             icon={<Icon name="chevronRight" size={20} color={color.onAccent} />}
             onPress={() => p.advance?.onPress()}
           />
         </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.wrap}>
+      {weightLabel !== null ? (
+        <Stepper label={weightLabel} suffix={p.weightSuffix} footer={p.weightFooter} value={p.weight} step={p.step} min={0} max={500} size="hero" onChange={p.onWeight} />
+      ) : null}
+      {unit === 'min' ? (
+        <Stepper label="Minutes" footer={p.repsFooter} value={Math.round(p.reps / 60)} step={1} min={1} max={180} size="hero" onChange={(v) => p.onReps(v * 60)} />
       ) : (
-        <>
-          <View style={styles.pair}>
-            {weightLabel !== null ? (
-              <Stepper label={weightLabel} value={p.weight} step={p.step} min={0} max={500} size="gym" onChange={p.onWeight} />
-            ) : null}
-            {unit === 'min' ? (
-              <Stepper label="min" value={Math.round(p.reps / 60)} step={1} min={1} max={180} size="gym" onChange={(v) => p.onReps(v * 60)} />
-            ) : (
-              <Stepper
-                label={unit === 'sec' ? 'sec' : 'reps'}
-                value={p.reps}
-                step={unit === 'sec' ? 5 : 1}
-                min={0}
-                max={unit === 'sec' ? 600 : 100}
-                size="gym"
-                onChange={p.onReps}
-              />
-            )}
-          </View>
-
-          {p.showEffort === false ? null : (
-            <>
-              <Text style={styles.caption}>{unit === 'reps' ? 'Reps left in the tank' : 'How much more could you have done?'}</Text>
-              <ChipRow options={RIR_CHIPS} value={p.rir} onChange={p.onRir} size="gym" />
-            </>
-          )}
-
-          <View style={styles.pair}>
-            <PrimaryButton
-              label="Pain"
-              accessibilityLabel={p.pain ? 'Pain flagged — tap to clear' : 'Flag pain on this set'}
-              icon={<Icon name="flag" size={18} color={p.pain ? color.onAccent : color.textMuted} />}
-              tone={p.pain ? 'danger' : 'neutral'}
-              size="gym"
-              onPress={() => p.onPain(!p.pain)}
-            />
-            <PrimaryButton label={p.logLabel} size="gym" style={styles.flex1} icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={p.onLog} />
-          </View>
-
-          {/* Expanded past the target: the way on stays one tap away. */}
-          {p.advance ? (
-            <PrimaryButton
-              label={p.advance.label}
-              tone="neutral"
-              size="gym"
-              icon={<Icon name="chevronRight" size={18} />}
-              onPress={p.advance.onPress}
-            />
-          ) : null}
-        </>
+        <Stepper
+          label={unit === 'sec' ? 'Seconds' : 'Reps'}
+          footer={p.repsFooter}
+          value={p.reps}
+          step={unit === 'sec' ? 5 : 1}
+          min={0}
+          max={unit === 'sec' ? 600 : 100}
+          size="hero"
+          onChange={p.onReps}
+        />
       )}
+
+      {p.showEffort === false ? null : (
+        <View style={styles.effort}>
+          <Text style={styles.effortLabel} accessibilityLabel="Reps in reserve">
+            RIR
+          </Text>
+          <View style={styles.flex1}>
+            <ChipRow options={RIR_CHIPS} value={p.rir} onChange={p.onRir} />
+          </View>
+          <View style={styles.pain}>
+            <Chips
+              options={[{ label: 'Pain', value: 1, icon: <Icon name="flag" size={14} color={p.pain ? color.danger : color.textMuted} strokeWidth={2.2} /> }]}
+              isOn={() => p.pain}
+              onPress={() => p.onPain(!p.pain)}
+              role="checkbox"
+            />
+          </View>
+        </View>
+      )}
+
+      {p.rest}
+      <PrimaryButton label={p.logLabel} size="gym" icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={p.onLog} />
+
+      {/* Expanded past the target: the way on stays one tap away. */}
+      {p.advance ? <PrimaryButton label={p.advance.label} tone="neutral" icon={<Icon name="chevronRight" size={18} />} onPress={p.advance.onPress} /> : null}
     </View>
   );
 }
@@ -123,6 +122,9 @@ export function SetControls(p: SetControlsProps) {
 const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   flex1: { flex: 1 },
-  pair: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
-  caption: { ...font.caption, color: color.textMuted, textAlign: 'center' },
+  flex2: { flex: 2 },
+  pair: { flexDirection: 'row', gap: space.sm },
+  effort: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  effortLabel: { ...font.eyebrow, color: color.textFaint, width: 28 },
+  pain: { width: 84 },
 });
