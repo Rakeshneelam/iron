@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
-import { IconButton } from './IconButton';
+import { Icon } from './Icon';
 import { PrimaryButton } from './PrimaryButton';
 
 /**
@@ -50,11 +50,11 @@ export function DateStepper({ value, onChange, max }: DateStepperProps) {
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        <IconButton icon="chevronLeft" accessibilityLabel="Previous day" onPress={() => onChange(addDays(value, -1))} />
+        <Arrow icon="chevronLeft" label="Previous day" onPress={() => onChange(addDays(value, -1))} />
         <Text style={styles.label} accessibilityRole="header">
           {fmtDayLabel(value)}
         </Text>
-        <IconButton icon="chevronRight" accessibilityLabel="Next day" disabled={value >= limit} onPress={() => onChange(addDays(value, 1))} />
+        <Arrow icon="chevronRight" label="Next day" disabled={value >= limit} onPress={() => onChange(addDays(value, 1))} />
       </View>
       {value !== today ? (
         <PrimaryButton label="Back to today" tone="ghost" accessibilityLabel="Go back to today" onPress={() => onChange(today)} />
@@ -63,15 +63,35 @@ export function DateStepper({ value, onChange, max }: DateStepperProps) {
   );
 }
 
+function Arrow({ icon, label, disabled, onPress }: { icon: 'chevronLeft' | 'chevronRight'; label: string; disabled?: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
+      style={({ pressed }) => [styles.arrow, pressed && styles.pressed, disabled && styles.disabled]}
+    >
+      <Icon name={icon} size={20} color={color.text} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.md, minHeight: hit.default },
-  label: {
-    ...font.body,
-    color: color.text,
-    fontWeight: '600',
-    minWidth: 120,
-    textAlign: 'center',
-    borderRadius: radius.sm,
+  wrap: { alignItems: 'stretch' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.default },
+  arrow: {
+    width: hit.default,
+    height: hit.default,
+    borderRadius: radius.md,
+    backgroundColor: color.surface,
+    borderWidth: 1,
+    borderColor: color.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  pressed: { backgroundColor: color.surfaceHigh },
+  disabled: { opacity: 0.35 },
+  label: { ...font.label, fontWeight: '600', color: color.text, flex: 1, textAlign: 'center' },
 });

@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { router } from 'expo-router';
 
-import { Card, Icon, IconButton, PrimaryButton, Screen, SectionHeader, Sheet, StatTile, Stepper } from '@/components';
+import { Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, Sheet, Stepper } from '@/components';
 import { DateStepper, useSelectedDate } from '@/components/DateStepper';
 import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
@@ -67,25 +67,21 @@ export default function FoodScreen() {
   const [editing, setEditing] = useState<DayEntry | null>(null);
   const [servings, setServings] = useState(1);
 
+  const soFar = `${Math.round(day.totals.kcal).toLocaleString()} / ${t.kcal.toLocaleString()} kcal`;
+
   return (
     <Screen
       title="Food"
       subtitle={fmtDayLabel(date)}
-      right={
-        <IconButton
-          icon="edit"
-          tone="neutral"
-          accessibilityLabel="Change your calorie and protein targets"
-          onPress={() => setTargetSheet(true)}
-        />
-      }
+      tab
+      right={<IconButton icon="target" accessibilityLabel="Change your calorie and protein targets" onPress={() => setTargetSheet(true)} />}
     >
       {/* Labelled controls, and a way back to today — the bare ‹ › said nothing to
           a screen reader and left no exit from three days ago. */}
       <DateStepper value={date} onChange={setDate} />
       <View style={styles.tiles}>
-        <StatTile label="Protein" value={`${Math.round(day.totals.protein)} / ${t.proteinG} g`} tone="accent" />
-        <StatTile label="Calories" value={`${Math.round(day.totals.kcal)} / ${t.kcal}`} />
+        <MacroTile label="Protein" value={day.totals.protein} target={t.proteinG} unit=" g" tone="accent" />
+        <MacroTile label="Calories" value={day.totals.kcal} target={t.kcal} />
       </View>
       {/* Carbs and fat follow from the two above; they are a line, not a second pair of tiles. */}
       <Text style={styles.secondary}>
@@ -102,12 +98,12 @@ export default function FoodScreen() {
         accessibilityLabel={`Water: ${ml(water.ml)} of ${ml(water.target)} on ${fmtDayLabel(date)}. Opens the water screen.`}
         style={({ pressed }) => [styles.waterRow, pressed && styles.pressed]}
       >
-        <Icon name="water" size={18} color={color.textMuted} />
+        <Icon name="water" size={18} color={color.accent} />
         <Text style={[styles.body, styles.flex1]}>Water</Text>
         <Text style={styles.waterValue}>
-          {ml(water.ml)} <Text style={styles.note}>of {ml(water.target)}</Text>
+          {ml(water.ml)} <Text style={styles.waterOf}>of {ml(water.target)}</Text>
         </Text>
-        <Icon name="chevronRight" size={18} color={color.textMuted} />
+        <Icon name="chevronRight" size={18} color={color.textFaint} />
       </Pressable>
 
       {prev.entries.length > 0 && day.entries.length === 0 ? (
@@ -122,39 +118,39 @@ export default function FoodScreen() {
         />
       ) : null}
 
-      <SectionHeader
-        title="Saved meals & recipes"
-        hint="Log something you cook often, or save a new one."
-        right={<PrimaryButton label="Open" tone="ghost" onPress={() => setAdding({ slot: null, start: 'recipes' })} />}
-      />
-
       {MEAL_SLOTS.map((slot) => {
         const entries = day.bySlot[slot];
         const prevSlot = prev.bySlot[slot];
         const kcal = entries.reduce((a, e) => a + e.macros.kcal, 0);
+        const repeat = prevSlot.length > 0 && entries.length === 0;
         return (
           <View key={slot}>
-            <SectionHeader
-              title={cap(slot)}
-              hint={entries.length ? `${Math.round(kcal)} kcal logged` : undefined}
-              right={
-                prevSlot.length > 0 && entries.length === 0 ? (
-                  <PrimaryButton
-                    label="Repeat"
-                    tone="ghost"
-                    onPress={() => {
-                      const ids = repeatMeal(yesterday, slot, date);
-                      toast(`Copied ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`, { label: 'Undo', onPress: () => deleteEntries(ids) });
-                    }}
-                  />
-                ) : undefined
-              }
-            />
-            <Card>
-              {entries.map((e) => (
+            <View style={styles.mealHead}>
+              <Text style={styles.mealTitle} accessibilityRole="header">
+                {cap(slot)}
+              </Text>
+              {entries.length ? <Text style={styles.mealKcal}>{Math.round(kcal)} kcal</Text> : null}
+              <View style={styles.flex1} />
+              {repeat ? (
+                <Pressable
+                  onPress={() => {
+                    const ids = repeatMeal(yesterday, slot, date);
+                    toast(`Copied ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`, { label: 'Undo', onPress: () => deleteEntries(ids) });
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Repeat ${date === todayISO() ? "yesterday's" : `${fmtDayLabel(yesterday)}'s`} ${slot}`}
+                  hitSlop={{ top: space.md, bottom: space.md, left: space.sm, right: space.sm }}
+                  style={({ pressed }) => pressed && styles.dim}
+                >
+                  <Text style={styles.link}>Repeat {date === todayISO() ? 'yesterday' : fmtDayLabel(yesterday)}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.meal}>
+              {entries.map((e, i) => (
                 <Pressable
                   key={e.id}
-                  style={styles.entry}
+                  style={({ pressed }) => [styles.entry, i > 0 && styles.divider, pressed && styles.dim]}
                   accessibilityRole="button"
                   accessibilityLabel={`Edit ${e.label}`}
                   onPress={() => {
@@ -162,33 +158,48 @@ export default function FoodScreen() {
                     setEditing(e);
                   }}
                 >
-                  <Text style={styles.entryName} numberOfLines={1}>
+                  <Text style={styles.entryName} numberOfLines={2}>
                     {fmtServings(e.servings)} × {unit(e.servingLabel)} · {e.label}
                   </Text>
                   <Text style={styles.entryMacro}>
-                    {Math.round(e.macros.kcal)} kcal
-                    <Text style={styles.entryProtein}>  {Math.round(e.macros.protein)} g protein</Text>
+                    {Math.round(e.macros.kcal)} kcal{'   '}
+                    {Math.round(e.macros.protein)} g protein
                   </Text>
                 </Pressable>
               ))}
               {usual[slot].length > 0 ? (
-                <View style={styles.usual}>
+                <View style={[styles.usual, entries.length > 0 && styles.usualAfter]}>
                   {usual[slot].map((u) => (
-                    <PrimaryButton
+                    <Pressable
                       key={`${u.foodId ?? ''}:${u.recipeId ?? ''}`}
-                      label={u.label}
-                      tone="ghost"
-                      accessibilityLabel={`Add your usual ${u.label} to ${slot}`}
                       onPress={() => addUsual(slot, u)}
-                    />
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add your usual ${u.label} to ${slot}`}
+                      hitSlop={{ top: space.xs, bottom: space.xs }}
+                      style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
+                    >
+                      <Icon name="plus" size={14} color={color.textMuted} />
+                      <Text style={styles.pillText} numberOfLines={1}>
+                        {u.label}
+                      </Text>
+                    </Pressable>
                   ))}
                 </View>
               ) : null}
-              <PrimaryButton label="Add food" tone="neutral" onPress={() => setAdding({ slot })} />
-            </Card>
+              <PrimaryButton label="Add food" tone="neutral" style={styles.addFood} onPress={() => setAdding({ slot })} />
+            </View>
           </View>
         );
       })}
+
+      <ListCard style={styles.gap}>
+        <ListRow
+          left={<Icon name="book" size={20} color={color.textMuted} />}
+          title="Saved meals & recipes"
+          sub="Log something you cook often, or save a new one."
+          onPress={() => setAdding({ slot: null, start: 'recipes' })}
+        />
+      </ListCard>
 
       {/*
         The big "New recipe" card that used to sit below the entire diary is gone.
@@ -201,6 +212,7 @@ export default function FoodScreen() {
         slot={adding?.slot ?? null}
         start={adding?.start}
         dateISO={date}
+        soFar={soFar}
         onClose={() => setAdding(null)}
       />
 
@@ -234,31 +246,80 @@ export default function FoodScreen() {
   );
 }
 
+/** A macro against its target, with the progress line under it. Protein leads, in accent. */
+function MacroTile({ label, value, target, unit: suffix = '', tone }: { label: string; value: number; target: number; unit?: string; tone?: 'accent' }) {
+  const pct = target > 0 ? Math.min(1, value / target) : 0;
+  return (
+    <View style={styles.tile} accessible accessibilityLabel={`${label}: ${Math.round(value)} of ${target}${suffix}`}>
+      <Text style={[styles.tileValue, tone === 'accent' && styles.accent]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+        {Math.round(value)}
+        <Text style={styles.tileOf}>
+          {' '}
+          / {target}
+          {suffix}
+        </Text>
+      </Text>
+      <Text style={styles.tileLabel}>{label}</Text>
+      <View style={styles.track}>
+        <View style={[styles.fill, { width: `${pct * 100}%`, backgroundColor: tone === 'accent' ? color.accent : color.textMuted }]} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  entryProtein: { color: color.textMuted },
-  usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
   flex1: { flex: 1 },
-  tiles: { flexDirection: 'row', gap: space.sm },
-  secondary: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: space.sm, textAlign: 'center' },
+  tiles: { flexDirection: 'row', gap: space.md - 2, marginTop: space.md },
+  tile: { flex: 1, minWidth: 0, backgroundColor: color.surface, borderRadius: radius.button, borderWidth: 1, borderColor: color.border, padding: space.md + 2, gap: 2 },
+  tileValue: { ...font.title, fontSize: 24, lineHeight: 30, ...font.numeric, color: color.text },
+  tileOf: { ...font.label, fontSize: 16, fontWeight: '600', color: color.textFaint, letterSpacing: 0 },
+  accent: { color: color.accent },
+  tileLabel: { ...font.caption, fontSize: 12, color: color.textMuted },
+  track: { height: 4, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, marginTop: space.sm, overflow: 'hidden' },
+  fill: { height: 4, borderRadius: radius.pill },
+  secondary: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: space.md },
+  note: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.xs },
   waterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
-    minHeight: hit.default,
+    gap: space.md - 2,
+    minHeight: hit.gym,
     marginTop: space.md,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.lg,
     backgroundColor: color.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: color.border,
   },
   pressed: { backgroundColor: color.surfaceHigh },
-  body: { ...font.body, color: color.text },
-  waterValue: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
+  dim: { opacity: 0.6 },
+  body: { ...font.label, color: color.text, fontWeight: '400' },
+  waterValue: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text },
+  waterOf: { fontWeight: '400', color: color.textFaint },
   gap: { marginTop: space.lg },
-  note: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  entry: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm, minHeight: hit.default },
-  entryName: { ...font.body, color: color.text, flex: 1 },
-  entryMacro: { ...font.caption, ...font.numeric, color: color.textMuted },
+  mealHead: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginTop: space.xl, marginBottom: space.sm, minHeight: 28 },
+  mealTitle: { ...font.heading, fontSize: 18, fontWeight: '700', color: color.text },
+  mealKcal: { ...font.caption, ...font.numeric, color: color.textFaint },
+  link: { ...font.caption, fontSize: 14, fontWeight: '600', color: color.accent },
+  meal: { backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: space.md + 2 },
+  entry: { minHeight: hit.default, paddingVertical: space.sm, justifyContent: 'center', gap: 2 },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  entryName: { ...font.label, fontSize: 14, fontWeight: '400', color: color.text },
+  entryMacro: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint },
+  usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2, paddingTop: space.md },
+  usualAfter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs + 2,
+    height: 40,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: color.border,
+    maxWidth: '100%',
+  },
+  pillText: { ...font.caption, fontWeight: '500', color: color.text, flexShrink: 1 },
+  addFood: { marginTop: space.md, backgroundColor: color.surfaceHigh },
   stack: { gap: space.md, paddingBottom: space.lg },
 });

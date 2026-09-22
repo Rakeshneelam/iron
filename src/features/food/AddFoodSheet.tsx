@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
+import { Icon } from '@/components/Icon';
+import { SectionHeader } from '@/components/SectionHeader';
+import { SegmentTabs } from '@/components/SegmentTabs';
 import { IconButton } from '@/components/IconButton';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
@@ -27,9 +30,9 @@ import { fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 type Tab = 'frequent' | 'search' | 'recipes' | 'newFood' | 'newRecipe';
+/** Search is not a tab of its own: the field sits above your usual foods and replaces them as you type. */
 const TABS: { label: string; value: Tab }[] = [
-  { label: 'Frequent', value: 'frequent' },
-  { label: 'Search', value: 'search' },
+  { label: 'Foods', value: 'frequent' },
   { label: 'Recipes', value: 'recipes' },
   { label: 'New food', value: 'newFood' },
   { label: 'New recipe', value: 'newRecipe' },
@@ -62,6 +65,8 @@ export interface AddFoodSheetProps {
   dateISO: string;
   /** Which tab to land on. Creating a recipe and logging a meal are different jobs. */
   start?: Tab;
+  /** "1,840 / 2,650 kcal" for the day being logged to. */
+  soFar?: string;
   onClose: () => void;
 }
 
@@ -72,21 +77,26 @@ export interface AddFoodSheetProps {
  * empty diary. What changes between them is the tab it starts on and whether a
  * meal is already known — never the flow itself.
  */
-export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClose }: AddFoodSheetProps) {
+export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar, onClose }: AddFoodSheetProps) {
   const [tab, setTab] = useState<Tab>(start);
   // Re-apply on each open: useState only runs once, so opening from the recipes
   // link after opening from "Add food" would otherwise land on the wrong tab.
   // Adjusted during render, on the open itself, rather than in an effect a frame later.
-  const [wasVisible, setWasVisible] = useState(visible);
-  if (visible !== wasVisible) {
-    setWasVisible(visible);
-    if (visible) setTab(start);
-  }
   const [q, setQ] = useState('');
   const [food, setFood] = useState<Food | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [servings, setServings] = useState(1);
   const [meal, setMeal] = useState<MealSlot>(slot ?? 'breakfast');
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      setTab(start);
+      // The sheet stays mounted between opens, so the meal must follow each one:
+      // Add food under Dinner after an earlier Lunch was still logging to lunch.
+      setMeal(slot ?? 'breakfast');
+    }
+  }
   /**
    * The recipe draft lives here, above the tabs. It used to live inside the recipe
    * form, which unmounts the moment you switch to New food — and the form itself
@@ -104,10 +114,22 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClo
     onClose();
   };
 
+  const searching = q.trim() !== '';
   const list = useMemo(
-    () => (!visible ? [] : tab === 'search' ? searchFoods(q) : tab === 'frequent' ? quickAddFoods(15) : []),
-    [visible, tab, q],
+    () => (!visible || (tab !== 'frequent' && tab !== 'search') ? [] : searching ? searchFoods(q) : quickAddFoods(15)),
+    [visible, tab, q, searching],
   );
+
+  /** One tap from the list when the meal is known; otherwise the amount step asks which meal. */
+  const quickAdd = (f: Food) => {
+    if (slot === null) {
+      setFood(f);
+      setServings(1);
+      return;
+    }
+    const id = logFood({ dateISO, mealSlot: meal, foodId: f.id, grams: f.servingG });
+    if (id) toast(`${unit(f.servingLabel)} ${f.name} → ${meal}`, { label: 'Undo', onPress: () => deleteEntries([id]) });
+  };
   const recipes = useMemo(() => (visible && tab === 'recipes' ? listRecipes() : []), [visible, tab, recipe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* --------------------------- confirm and log --------------------------- */
@@ -158,35 +180,74 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClo
   }
 
   /* ------------------------------- picker -------------------------------- */
+  const mealName = meal[0]?.toUpperCase() + meal.slice(1);
   return (
-    <Sheet visible={visible} onClose={close} title={slot ? `Add to ${slot}` : 'Food & recipes'}>
-      <ChipRow options={TABS} value={tab} onChange={setTab} fill={false} />
-      <View style={styles.gap} />
-      {tab === 'search' ? (
-        <TextInput value={q} onChangeText={setQ} placeholder="Search foods" placeholderTextColor={color.textFaint} style={styles.input} autoFocus />
+    <Sheet
+      visible={visible}
+      onClose={close}
+      title={slot ? 'Add food' : 'Food & recipes'}
+      subtitle={[slot ? mealName : null, fmtDayLabel(dateISO), soFar ? `so far ${soFar}` : null].filter(Boolean).join(' · ')}
+    >
+      {slot !== null ? (
+        <View style={styles.block}>
+          <ChipRow options={SLOT_CHIPS} value={meal} onChange={setMeal} columns={4} />
+        </View>
       ) : null}
-      {(tab === 'frequent' || tab === 'search') &&
-        list.map((f) => (
-          <Pressable
-            key={f.id}
-            style={styles.item}
-            accessibilityRole="button"
-            accessibilityLabel={`${f.name}, ${Math.round(f.kcal)} kcal`}
-            onPress={() => {
-              setFood(f);
-              setServings(1);
-            }}
-          >
-            <Text style={styles.name}>{f.name}</Text>
-            <Text style={styles.muted}>
-              <Text style={styles.strong}>{Math.round(f.kcal)} kcal</Text>
-              {'   '}
-              {Math.round(f.protein)} g protein
-              {'   '}
-              {f.servingLabel ?? `${f.servingG} g`}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={styles.block}>
+        <SegmentTabs options={TABS} value={tab === 'search' ? 'frequent' : tab} onChange={setTab} />
+      </View>
+      {tab === 'frequent' || tab === 'search' ? (
+        <>
+          <View style={styles.search}>
+            <Icon name="search" size={20} color={color.textFaint} />
+            <TextInput
+              value={q}
+              onChangeText={setQ}
+              placeholder="Search foods"
+              placeholderTextColor={color.textFaint}
+              style={styles.searchInput}
+              accessibilityLabel="Search foods"
+              returnKeyType="search"
+            />
+            {searching ? <IconButton icon="close" accessibilityLabel="Clear search" onPress={() => setQ('')} /> : null}
+          </View>
+          <SectionHeader title={searching ? 'Results' : 'Your usual foods'} action={{ label: 'Custom food', onPress: () => setTab('newFood') }} />
+          {searching && list.length === 0 ? <Text style={styles.muted}>Nothing matches “{q.trim()}”. Add it as a custom food.</Text> : null}
+          <View style={styles.list}>
+            {list.map((f, i) => (
+              <Pressable
+                key={f.id}
+                style={({ pressed }) => [styles.foodRow, i > 0 && styles.divider, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel={`${f.name}, ${Math.round(f.kcal)} kcal. Choose an amount.`}
+                onPress={() => {
+                  setFood(f);
+                  setServings(1);
+                }}
+              >
+                <View style={styles.flex}>
+                  <Text style={styles.name} numberOfLines={2}>
+                    {f.name}
+                  </Text>
+                  <Text style={styles.portion}>{f.servingLabel ?? `${f.servingG} g`}</Text>
+                </View>
+                <View style={styles.nums}>
+                  <Text style={styles.kcal}>{Math.round(f.kcal)}</Text>
+                  <Text style={styles.portion}>{Math.round(f.protein)} g P</Text>
+                </View>
+                <Pressable
+                  onPress={() => quickAdd(f)}
+                  accessibilityRole="button"
+                  accessibilityLabel={slot ? `Add ${f.name} to ${meal}` : `Add ${f.name}`}
+                  style={({ pressed }) => [styles.plus, pressed && styles.plusPressed]}
+                >
+                  <Icon name="plus" size={20} color={color.text} />
+                </Pressable>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ) : null}
       {tab === 'recipes' ? (
         recipes.length === 0 ? (
           <>
@@ -390,7 +451,30 @@ const styles = StyleSheet.create({
     minHeight: hit.default,
   },
   item: { paddingVertical: space.md, borderBottomWidth: 1, borderBottomColor: color.border, minHeight: hit.default },
-  name: { ...font.body, color: color.text },
+  block: { marginBottom: space.md },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md - 2,
+    minHeight: hit.gym,
+    paddingLeft: space.lg,
+    paddingRight: space.xs,
+    backgroundColor: color.surfaceHigh,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  searchInput: { ...font.body, color: color.text, flex: 1, minHeight: hit.gym },
+  list: { backgroundColor: color.bg, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.lg },
+  foodRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 60, paddingVertical: space.xs },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  pressed: { opacity: 0.7 },
+  portion: { ...font.caption, fontSize: 12, color: color.textFaint },
+  nums: { alignItems: 'flex-end' },
+  kcal: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text },
+  plus: { width: hit.default, height: hit.default, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
+  plusPressed: { backgroundColor: color.border },
+  name: { ...font.label, fontWeight: '600', color: color.text },
   strong: { color: color.text, fontWeight: '600' },
   label: { ...font.label, color: color.text, fontWeight: '600', marginBottom: space.sm },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
