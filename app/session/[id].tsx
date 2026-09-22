@@ -44,7 +44,7 @@ import { allSettled, isSettled, nextPendingIndex, type ExState } from '@/feature
 import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { Elapsed } from '@/features/session/Elapsed';
 import { PlateSheet } from '@/features/session/PlateSheet';
-import { fmtSet, liftOf, rampFor, readinessFrom, suggestFor, suggestionContext, verdictLabel, VERDICT_TONE, type SuggestionContext } from '@/features/session/prescription';
+import { fmtSet, fmtSetList, liftOf, rampFor, readinessFrom, suggestFor, suggestionContext, verdictLabel, VERDICT_TONE, type SuggestionContext } from '@/features/session/prescription';
 import { RestTimerBar } from '@/features/session/RestTimerBar';
 import { SetControls } from '@/features/session/SetControls';
 import { minutesLabel, MODE_OPTIONS } from '@/features/warmup/labels';
@@ -411,14 +411,7 @@ export default function SessionScreen() {
           : 'info';
   const reason = suggestion ? suggestion.reason.replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase()) : '';
 
-  /** "45 × 10, 10, 9" when the load held, "45×10, 47.5×9" when it moved. */
-  const setList = (rows: readonly SetRow[]) => {
-    if (!rows.length) return '';
-    const first = rows[0];
-    const same = first !== undefined && measure === 'reps' && loadType !== 'band' && rows.every((r) => r.weight === first.weight);
-    if (same && first.weight > 0) return `${kgNum(first.weight)} × ${rows.map((r) => r.reps).join(', ')}`;
-    return rows.map((r) => setText(r.weight, r.reps)).join(', ');
-  };
+  const setList = (rows: readonly SetRow[]) => fmtSetList(rows, measure, loadType);
 
   // The set that says most about today, by estimated one-rep max.
   const top = exWork.reduce<SetRow | undefined>((b, s) => (!b || e1RM(s.weight, s.reps, s.rir) > e1RM(b.weight, b.reps, b.rir) ? s : b), undefined);

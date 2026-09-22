@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast } from '@/components';
+import { Card, Icon, IconButton, ListCard, ListRow, Pill, PrimaryButton, Screen, SectionHeader, StatTile, toast } from '@/components';
 import { useLive } from '@/db/live';
 import { getSlot, updateSlot } from '@/db/repositories/program';
 import { activeRecommendations, dismissRecommendation, recentWorkouts, undismissRecommendation, weekInsights, weekSummary } from '@/db/repositories/progress';
@@ -24,7 +24,7 @@ const SHOWN_RECS = 3;
 /** Lifts shown before "View all" — which used to not exist at all (UX-09). */
 const SHOWN_LIFTS = 8;
 
-const volume = (kgTotal: number) => (kgTotal >= 1000 ? `${(kgTotal / 1000).toFixed(1)}k kg` : `${Math.round(kgTotal)} kg`);
+const volume = (kgTotal: number) => (kgTotal >= 1000 ? `${(kgTotal / 1000).toFixed(1)}k` : String(Math.round(kgTotal)));
 const change = (now: number, before: number) => (before > 0 ? `${signed(((now - before) / before) * 100, 0)}% vs last wk` : undefined);
 
 /** Is it working? One week at a glance, with suggestions you approve — never automatic. */
@@ -99,6 +99,7 @@ export default function ProgressScreen() {
     <Screen
       title="Progress"
       subtitle={isThisWeek ? 'This week' : `Week of ${fmtDayLabel(weekStart)}`}
+      tab
       right={
         <View style={styles.nav}>
           <IconButton icon="chevronLeft" accessibilityLabel="Previous week" onPress={() => setWeekStart(addDays(weekStart, -7))} />
@@ -107,20 +108,18 @@ export default function ProgressScreen() {
       }
     >
       {/* Concise totals first: the week is the question this screen answers. */}
-      <SectionHeader
-        title={isThisWeek ? 'This week' : `Week of ${fmtDayLabel(weekStart)}`}
-        hint={empty && isThisWeek ? 'Nothing logged yet. Start a workout and these fill in.' : undefined}
-      />
       <View style={styles.tiles}>
         <StatTile
           label="Workouts"
           value={week.plannedDays ? `${done} / ${week.plannedDays}` : String(done)}
           tone={week.plannedDays && done >= week.plannedDays ? 'positive' : 'default'}
         />
-        <StatTile label="Time" value={`${week.minutes} min`} tone="muted" />
-        <StatTile label="Volume" value={volume(week.tonnage)} tone="muted" hint={change(week.tonnage, prev.tonnage)} />
+        <StatTile label="Minutes" value={String(week.minutes)} tone="muted" />
+        <StatTile label="Volume, kg" value={volume(week.tonnage)} tone="muted" hint={change(week.tonnage, prev.tonnage)} />
       </View>
-      {empty ? null : (
+      {empty ? (
+        <Text style={styles.note}>{isThisWeek ? 'Nothing logged yet. Start a workout and these fill in.' : 'Nothing logged this week.'}</Text>
+      ) : (
         <Text style={styles.note}>
           {week.sets} sets · {week.exercises} different exercises
           {week.skipped ? ` · ${week.skipped} skipped` : ''}
@@ -133,23 +132,21 @@ export default function ProgressScreen() {
         used to render only when recent workouts existed and sat at the very
         bottom, which is the one place you would not look for "find a workout".
       */}
-      <Card onPress={() => router.push('/history')}>
-        <View style={styles.linkRow}>
-          <Icon name="progress" size={20} color={color.accent} />
-          <View style={styles.flex1}>
-            <Text style={styles.cardTitle}>Workout history</Text>
-            <Text style={styles.muted}>Search every workout you have logged, and correct one.</Text>
-          </View>
-          <Icon name="chevronRight" size={20} color={color.textMuted} />
-        </View>
-      </Card>
+      <ListCard style={styles.gap}>
+        <ListRow
+          left={<Icon name="calendar" size={20} color={color.accent} />}
+          title="Workout history"
+          sub="Search every workout you have logged, and correct one."
+          onPress={() => router.push('/history')}
+        />
+      </ListCard>
 
       {insights.length ? (
         <Card>
           {insights.map((t) => (
             <View key={t} style={styles.insight}>
               <View style={styles.insightDot} />
-              <Text style={[styles.body, styles.flex1]}>{t}</Text>
+              <Text style={[styles.insightText, styles.flex1]}>{t}</Text>
             </View>
           ))}
         </Card>
@@ -207,11 +204,7 @@ export default function ProgressScreen() {
         <>
           <SectionHeader
             title="Suggestions"
-            right={
-              recs.length > SHOWN_RECS ? (
-                <PrimaryButton label={allRecs ? 'Show fewer' : `All ${recs.length}`} tone="ghost" onPress={() => setAllRecs(!allRecs)} />
-              ) : undefined
-            }
+            action={recs.length > SHOWN_RECS ? { label: allRecs ? 'Show fewer' : `All ${recs.length}`, onPress: () => setAllRecs(!allRecs) } : undefined}
           />
           {(allRecs ? recs : recs.slice(0, SHOWN_RECS)).map((r) => (
             <Card key={r.id} tone={r.kind === 'keep_going' ? 'positive' : 'default'}>
@@ -224,7 +217,7 @@ export default function ProgressScreen() {
                 {r.change ? <PrimaryButton label="Apply" style={styles.flex1} onPress={() => apply(r)} /> : null}
                 {r.kind === 'replace_exercise' ? <PrimaryButton label="Open plan" tone="neutral" style={styles.flex1} onPress={() => openSlot(r.slotId)} /> : null}
                 {r.kind === 'fewer_days' ? <PrimaryButton label="See plans" tone="neutral" style={styles.flex1} onPress={() => router.push('/program')} /> : null}
-                <PrimaryButton label={r.kind === 'keep_going' ? 'Got it' : 'Dismiss'} tone="ghost" onPress={() => dismiss(r)} />
+                <PrimaryButton label={r.kind === 'keep_going' ? 'Got it' : 'Dismiss'} tone="neutral" onPress={() => dismiss(r)} />
               </View>
             </Card>
           ))}
@@ -235,58 +228,42 @@ export default function ProgressScreen() {
         <>
           <SectionHeader
             title="Lifts"
-            hint={isThisWeek ? 'This week. Tap one for its full history.' : `Week of ${fmtDayLabel(weekStart)}. Tap one for its full history.`}
-            right={
-              week.lifts.length > SHOWN_LIFTS ? (
-                <PrimaryButton
-                  label={allLifts ? 'Show fewer' : `View all ${week.lifts.length}`}
-                  tone="ghost"
-                  onPress={() => setAllLifts(!allLifts)}
-                />
-              ) : undefined
-            }
+            hint={isThisWeek ? undefined : `Week of ${fmtDayLabel(weekStart)}`}
+            action={week.lifts.length > SHOWN_LIFTS ? { label: allLifts ? 'Show fewer' : `View all ${week.lifts.length}`, onPress: () => setAllLifts(!allLifts) } : undefined}
           />
-          <Card style={styles.list}>
+          <ListCard>
             {(allLifts ? week.lifts : week.lifts.slice(0, SHOWN_LIFTS)).map((l, i) => {
               const d = l.prevBestE1rm === null ? null : l.bestE1rm - l.prevBestE1rm;
               const w = l.prevTopWeight === null ? null : l.topWeight - l.prevTopWeight;
               const delta = w === null ? 'new' : w !== 0 ? `${signed(w)} kg` : d !== null && d > 0.05 ? 'more reps' : '=';
               return (
-                <Pressable
+                <ListRow
                   key={l.exerciseId}
-                  style={[styles.liftRow, i > 0 && styles.divider]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${l.name}: top set ${kgNum(l.topWeight)} kg, ${delta}. Opens its history.`}
+                  divider={i > 0}
+                  title={l.name}
+                  chevron={false}
+                  accessibilityLabel={`${l.name}: top set ${kgNum(l.topWeight)} kg, ${delta}. Opens its progress.`}
                   /*
-                   * Straight to the exercise page, which already owns the full
+                   * Straight to the exercise's own progress, which owns the full
                    * e1RM chart and every session of it. Progress used to draw a
                    * second chart of its own underneath this list (UX-09).
                    */
-                  onPress={() => router.push(`/exercise/${l.exerciseId}`)}
-                >
-                  <Text style={[styles.body, styles.flex1]} numberOfLines={1}>
-                    {l.name}
-                  </Text>
-                  <Text style={styles.value}>{kgNum(l.topWeight)} kg</Text>
-                  <Text style={[styles.delta, { color: d !== null && d > 0.05 ? color.positive : color.textMuted }]}>{delta}</Text>
-                  <Icon name="chevronRight" size={16} color={color.textMuted} />
-                </Pressable>
+                  onPress={() => router.push(`/exercise/${l.exerciseId}?tab=progress`)}
+                  right={
+                    <>
+                      <Text style={styles.value}>{kgNum(l.topWeight)} kg</Text>
+                      <Text style={[styles.delta, { color: d !== null && d > 0.05 ? color.positive : color.textFaint }]}>{delta}</Text>
+                    </>
+                  }
+                />
               );
             })}
-          </Card>
+          </ListCard>
         </>
       ) : null}
 
       {/* Detail, collapsed. Open it when you want it; it is not the headline. */}
-      <Pressable
-        style={styles.toggle}
-        onPress={() => setShowBody(!showBody)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: showBody }}
-      >
-        <SectionHeader title="Body & water" />
-        <Icon name={showBody ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
-      </Pressable>
+      <SectionHeader title="Body & water" action={{ label: showBody ? 'Hide' : 'Show', onPress: () => setShowBody(!showBody), accessibilityLabel: `${showBody ? 'Hide' : 'Show'} body and water` }} />
       {showBody ? (
         <Card style={styles.list}>
           <Row label="Bodyweight trend" value={bw === null ? '—' : `${signed(bw, 1)} kg`} />
@@ -299,45 +276,26 @@ export default function ProgressScreen() {
         </Card>
       ) : null}
 
-      <Pressable
-        style={styles.toggle}
-        onPress={() => setShowMuscles(!showMuscles)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: showMuscles }}
-      >
-        <SectionHeader title="Sets per muscle" />
-        <Icon name={showMuscles ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
-      </Pressable>
+      <SectionHeader title="Sets per muscle" action={{ label: showMuscles ? 'Hide' : 'Show', onPress: () => setShowMuscles(!showMuscles), accessibilityLabel: `${showMuscles ? 'Hide' : 'Show'} sets per muscle` }} />
       {showMuscles ? <VolumeList weekly={data.muscles} /> : null}
 
       {workouts.length ? (
         <>
-          <SectionHeader title="Recent workouts" right={<PrimaryButton label="See all" tone="ghost" onPress={() => router.push('/history')} />} />
-          <Card style={styles.list}>
+          <SectionHeader title="Recent workouts" action={{ label: 'See all', onPress: () => router.push('/history'), accessibilityLabel: 'See all workout history' }} />
+          <ListCard>
             {workouts.map((w, i) => (
-              <Pressable
+              <ListRow
                 key={w.session.id}
-                style={[styles.liftRow, i > 0 && styles.divider]}
-                accessibilityRole="button"
-                accessibilityLabel={`${w.dayLabel ?? 'Workout'}, ${fmtDayLabel(w.session.date)}, ${STATUS_LABEL[w.session.status]}`}
+                divider={i > 0}
+                title={w.dayLabel ?? 'Workout'}
+                sub={`${fmtDayLabel(w.session.date)}${w.sets ? ` · ${w.sets} sets` : ''}`}
+                right={<Pill label={STATUS_LABEL[w.session.status]} tone={STATUS_TONE[w.session.status]} />}
                 onPress={() => router.push(`/session/summary/${w.session.id}`)}
-              >
-                <View style={styles.flex1}>
-                  <Text style={styles.body} numberOfLines={1}>
-                    {w.dayLabel ?? 'Workout'}
-                  </Text>
-                  <Text style={styles.caption}>
-                    {fmtDayLabel(w.session.date)}
-                    {w.sets ? ` · ${w.sets} sets` : ''}
-                  </Text>
-                </View>
-                <Pill label={STATUS_LABEL[w.session.status]} tone={STATUS_TONE[w.session.status]} />
-              </Pressable>
+              />
             ))}
-          </Card>
+          </ListCard>
         </>
       ) : null}
-
     </Screen>
   );
 }
@@ -359,20 +317,21 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   cardTitle: { ...font.heading, color: color.text, marginBottom: space.sm },
   recHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  recTitle: { ...font.body, color: color.text, fontWeight: '700', flex: 1 },
+  recTitle: { ...font.label, color: color.text, fontWeight: '700', flex: 1 },
   body: { ...font.body, color: color.text },
-  muted: { ...font.label, color: color.textMuted, marginTop: space.xs },
+  muted: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted, marginTop: space.xs },
   caption: { ...font.caption, color: color.textMuted, marginTop: 2 },
-  note: { ...font.caption, color: color.textMuted, marginTop: space.sm },
+  note: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm },
   accent: { color: color.accent },
   list: { paddingVertical: 0 },
   liftRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
-  delta: { ...font.label, ...font.numeric, minWidth: 64, textAlign: 'right' },
+  value: { ...font.label, fontSize: 14, ...font.numeric, color: color.text, fontWeight: '700' },
+  delta: { ...font.caption, fontWeight: '600', ...font.numeric, minWidth: 68, textAlign: 'right' },
   kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, gap: space.md },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: hit.default },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   insight: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start', paddingVertical: space.xs },
-  insightDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.accent, marginTop: 8 },
+  insightDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.accent, marginTop: 7 },
+  insightText: { ...font.label, fontSize: 14, fontWeight: '400', color: color.text },
 });

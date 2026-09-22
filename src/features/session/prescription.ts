@@ -17,6 +17,7 @@ import { weightTrend } from '@/engine/metabolic';
 import { deloadPrescription, prescribe, VOLUME_LANDMARKS, working, type Prescription, type Readiness } from '@/engine/progression';
 import { rampSets, warmedStates, type RampSet, type SessionLift } from '@/engine/warmup';
 import { daysBetweenISO, todayISO } from '@/lib/date';
+import { kgNum } from '@/lib/format';
 import { nearestLoadable, type EquipmentRow } from '@/lib/plates';
 
 export interface Suggestion extends Adjusted {
@@ -175,4 +176,13 @@ export function fmtSet(measure: 'reps' | 'time', weight: number, reps: number, l
   if (loadType === 'band') return weight > 0 ? `L${weight}×${reps}` : `${reps} reps`;
   if (loadType === 'bodyweight' && weight === 0) return `${reps} reps`;
   return `${weight}×${reps}`;
+}
+
+/** "45 × 10, 10, 9" when the load held, "45×10, 47.5×9" when it moved. */
+export function fmtSetList(rows: readonly { weight: number; reps: number }[], measure: 'reps' | 'time', loadType?: string): string {
+  const first = rows[0];
+  if (!first) return '';
+  const same = measure === 'reps' && loadType !== 'band' && rows.every((r) => r.weight === first.weight);
+  if (same && first.weight > 0) return `${kgNum(first.weight)} × ${rows.map((r) => r.reps).join(', ')}`;
+  return rows.map((r) => fmtSet(measure, r.weight, r.reps, loadType)).join(', ');
 }

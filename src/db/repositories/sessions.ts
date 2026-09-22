@@ -368,6 +368,22 @@ export function getSetsFor(sessionId: string, exerciseId: string): SetRow[] {
  * Follows exercise_link: sets from a swapped-out variation come along with their
  * weights scaled by the link ratio, so a swap never resets progression to zero.
  */
+/**
+ * This exercise's own finished sessions, newest first, with their working sets in
+ * order. Unlike getExerciseHistory it never folds in a linked exercise's sets at a
+ * ratio: a personal best has to be something you actually lifted.
+ */
+export function exerciseSessions(exerciseId: string): { sessionId: string; date: string; sets: SetRow[] }[] {
+  const rows = db
+    .select({ set: schema.setLog, date: schema.session.date })
+    .from(schema.setLog)
+    .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
+    .where(and(eq(schema.setLog.exerciseId, exerciseId), eq(schema.setLog.isWarmup, 0), isNotNull(schema.session.endedAt)))
+    .orderBy(desc(schema.session.date), asc(schema.setLog.loggedAt))
+    .all();
+  return [...groupBy(rows, (r) => r.set.sessionId)].map(([sessionId, group]) => ({ sessionId, date: group[0]?.date ?? '', sets: group.map((r) => r.set) }));
+}
+
 export function getExerciseHistory(exerciseId: string, limit = 8): SessionLog[] {
   const ratios = new Map<string, number>([[exerciseId, 1]]);
   for (const src of getLinkedSources(exerciseId)) ratios.set(src.fromExerciseId, src.ratio);

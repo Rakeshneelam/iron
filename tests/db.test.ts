@@ -25,6 +25,7 @@ import {
 import {
   cancelSession,
   deleteSession,
+  exerciseSessions,
   finishSession,
   getSessionPlan,
   getSessionSets,
@@ -194,6 +195,23 @@ describe('workout lifecycle', () => {
     assert.equal(row.status, 'active');
     assert.equal(row.endedAt, null);
     assert.equal(getSessionSets(s.id).length, 2, 'reopening never drops what was logged');
+  });
+});
+
+describe('exercise progress', () => {
+  test("personal bests read only this exercise's finished working sets", () => {
+    const { dayA } = seedPlan();
+    const done = startSession(dayA.id);
+    insertSet({ sessionId: done.id, exerciseId: 'squat', weight: 40, reps: 5, rir: 5, isWarmup: true });
+    work(done.id, 'squat', 2);
+    work(done.id, 'bench', 1);
+    finishSession(done.id);
+    const open = startSession(dayA.id);
+    insertSet({ sessionId: open.id, exerciseId: 'squat', weight: 100, reps: 5, rir: 2 });
+
+    const rows = exerciseSessions('squat');
+    assert.equal(rows.length, 1, 'the open workout is not history yet');
+    assert.deepEqual(rows[0]!.sets.map((x) => x.weight), [60, 60], 'no warm-up, no other exercise');
   });
 });
 
