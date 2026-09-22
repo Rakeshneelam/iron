@@ -61,7 +61,8 @@ export const gap = {
   section: space.xxl,
 } as const;
 
-export const radius = { sm: 8, md: 12, lg: 16, xl: 24, pill: 999 } as const;
+/** `button` sits between a chip (md) and a card (lg), so a button never reads as either. */
+export const radius = { sm: 8, md: 12, button: 14, lg: 16, xl: 24, pill: 999 } as const;
 
 /**
  * One family, six roles, each visibly distinct from its neighbours.
@@ -77,8 +78,18 @@ export const radius = { sm: 8, md: 12, lg: 16, xl: 24, pill: 999 } as const;
 export const font = {
   /** Tabular figures everywhere numbers change — no jitter on steppers or timers. */
   numeric: { fontVariant: ['tabular-nums'] as ['tabular-nums'] },
-  display: { fontSize: 44, lineHeight: 48, fontWeight: '700' as const, letterSpacing: -1.5 },
+  /** The number being logged: weight and reps on the session screen. Nothing on screen is louder. */
+  hero: { fontSize: 60, lineHeight: 64, fontWeight: '800' as const, letterSpacing: -2 },
+  display: { fontSize: 44, lineHeight: 48, fontWeight: '800' as const, letterSpacing: -1.5 },
   title: { fontSize: 28, lineHeight: 34, fontWeight: '700' as const, letterSpacing: -0.5 },
+  /** A pushed screen's title, beside its back arrow. */
+  titleSm: { fontSize: 22, lineHeight: 28, fontWeight: '700' as const, letterSpacing: -0.4 },
+  /**
+   * A small tracked label above a group — "This week", "Up next". Upper-cased so it
+   * reads as a signpost, not as content, and never used for anything you must read
+   * to act: the content under it carries the meaning.
+   */
+  eyebrow: { fontSize: 11, lineHeight: 14, fontWeight: '600' as const, letterSpacing: 1.3, textTransform: 'uppercase' as const },
   heading: { fontSize: 20, lineHeight: 26, fontWeight: '600' as const, letterSpacing: -0.2 },
   body: { fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
   label: { fontSize: 15, lineHeight: 20, fontWeight: '500' as const },

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { selection } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
+
+import { Icon } from './Icon';
 
 export interface StepperProps {
   value: number;
@@ -11,14 +13,16 @@ export interface StepperProps {
   min?: number;
   max?: number;
   /**
-   * `gym` stacks the value above its own pair of ± buttons. In a row, two gym
-   * steppers side by side left each value about 60dp between two 56dp buttons, and
-   * `adjustsFontSizeToFit` hid that by shrinking 102.5 until it fitted — the one
-   * number AGENTS §7 requires stay readable at arm's length (UX-04).
+   * One field, − value +, at three sizes. `hero` is the session's weight and reps:
+   * a full-width card with the label and a footer inside it. Give `gym` and `hero`
+   * a full row each — two side by side left the value about 60dp between its
+   * buttons, which is the one number AGENTS §7 requires stay readable (UX-04).
    */
-  size?: 'gym' | 'default';
+  size?: 'hero' | 'gym' | 'default';
   label?: string;
   suffix?: string;
+  /** Under the value, inside a hero card: the target, or a "Use target" chip. */
+  footer?: ReactNode;
   /** Replaces the built-in keyboard entry on long-press of the value. */
   onLongPress?: () => void;
   /** Opt out per instance; the user's Haptics setting already gates it globally. */
@@ -45,6 +49,7 @@ export function Stepper({
   size = 'default',
   label,
   suffix,
+  footer,
   onLongPress,
   haptics = true,
 }: StepperProps) {
@@ -108,9 +113,9 @@ export function Stepper({
     setEditing(true);
   };
 
-  const gym = size === 'gym';
-  const box = hit[size];
-  const valueStyle = gym ? styles.valueGym : styles.value;
+  const hero = size === 'hero';
+  const valueStyle = hero ? styles.valueHero : size === 'gym' ? styles.valueGym : styles.value;
+  const box = hero ? HERO_BUTTON : hit[size];
 
   const readout = editing ? (
     <TextInput
@@ -128,7 +133,7 @@ export function Stepper({
     />
   ) : (
     <Pressable
-      style={gym ? styles.valueBoxGym : styles.valueBox}
+      style={styles.valueBox}
       onLongPress={typeIt}
       accessibilityRole="adjustable"
       accessibilityLabel={`${label ?? 'Value'}: ${value.toFixed(dp)}${suffix ? ` ${suffix}` : ''}`}
@@ -141,91 +146,88 @@ export function Stepper({
       }}
     >
       {/*
-        No adjustsFontSizeToFit. Given room, 102.5 fits; where it does not, the
+        Only the hero may shrink, and only to 45pt on a 360dp phone, where 102.5 kg
+        is otherwise wider than the card. Anywhere else, if it does not fit the
         layout is wrong and shrinking the number only hides that (UX-11).
       */}
-      <Text style={valueStyle} numberOfLines={1}>
+      <Text style={valueStyle} numberOfLines={1} adjustsFontSizeToFit={hero} minimumFontScale={0.75}>
         {value.toFixed(dp)}
-        {suffix ? <Text style={styles.suffix}> {suffix}</Text> : null}
+        {suffix ? <Text style={hero ? styles.suffixHero : styles.suffix}> {suffix}</Text> : null}
       </Text>
     </Pressable>
   );
 
-  const minus = (
+  const button = (dir: 1 | -1) => (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Decrease ${label ?? 'value'}`}
-      onPress={() => bump(-1)}
-      onLongPress={() => startRepeat(-1)}
+      accessibilityLabel={`${dir > 0 ? 'Increase' : 'Decrease'} ${label ?? 'value'}`}
+      onPress={() => bump(dir)}
+      onLongPress={() => startRepeat(dir)}
       onPressOut={stopRepeat}
       delayLongPress={300}
-      style={({ pressed }) => [styles.btn, gym ? styles.btnWide : { width: box }, { height: box }, pressed && styles.btnPressed]}
+      style={({ pressed }) => [styles.btn, { width: box }, pressed && styles.btnPressed]}
     >
-      <Text style={styles.btnText}>−</Text>
+      <Icon name={dir > 0 ? 'plus' : 'minus'} size={hero ? 28 : 20} color={hero ? color.text : color.textMuted} strokeWidth={hero ? 2.4 : 2} />
     </Pressable>
   );
-  const plus = (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Increase ${label ?? 'value'}`}
-      onPress={() => bump(1)}
-      onLongPress={() => startRepeat(1)}
-      onPressOut={stopRepeat}
-      delayLongPress={300}
-      style={({ pressed }) => [styles.btn, gym ? styles.btnWide : { width: box }, { height: box }, pressed && styles.btnPressed]}
-    >
-      <Text style={styles.btnText}>+</Text>
-    </Pressable>
-  );
+
+  if (hero) {
+    return (
+      <View style={[styles.field, styles.fieldHero]}>
+        {button(-1)}
+        <View style={styles.heroMid}>
+          {label ? <Text style={styles.labelHero}>{label}</Text> : null}
+          {readout}
+          {footer ? <View style={styles.footer}>{footer}</View> : null}
+        </View>
+        {button(1)}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      {gym ? (
-        <View style={styles.stack}>
-          {readout}
-          <View style={styles.buttons}>
-            {minus}
-            {plus}
-          </View>
-        </View>
-      ) : (
-        <View style={styles.row}>
-          {minus}
-          {readout}
-          {plus}
-        </View>
-      )}
+      <View style={[styles.field, { height: hit[size] }]}>
+        {button(-1)}
+        {readout}
+        {button(1)}
+      </View>
     </View>
   );
 }
 
+/** Wider than a thumb, so a mid-set tap on − never lands on the number. */
+const HERO_BUTTON = 76;
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, minWidth: 0 },
   label: { ...font.caption, color: color.textMuted, marginBottom: space.xs, textAlign: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  stack: { gap: space.xs },
-  buttons: { flexDirection: 'row', gap: space.xs },
-  btn: {
-    borderRadius: radius.md,
+  field: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     backgroundColor: color.surfaceHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.border,
+    overflow: 'hidden',
   },
-  // Half the field each, rather than 56dp of fixed furniture either side of the number.
-  btnWide: { flex: 1 },
-  btnText: { ...font.title, color: color.text },
+  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 108 },
+  btn: { alignItems: 'center', justifyContent: 'center' },
   btnPressed: { backgroundColor: color.border },
-  valueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0 },
-  valueBoxGym: { alignItems: 'center', justifyContent: 'center', minHeight: hit.default, paddingHorizontal: space.xs },
-  value: { ...font.heading, ...font.numeric, color: color.text, textAlign: 'center' },
-  // Pinned, not derived. This was font.display.fontSize * 0.6, so shrinking the
-  // display token quietly shrank the weight and rep controls on the logging screen.
-  valueGym: { ...font.title, fontSize: 34, lineHeight: 40, ...font.numeric, color: color.text, textAlign: 'center' },
-  suffix: { ...font.caption, color: color.textMuted },
+  heroMid: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: space.sm },
+  labelHero: { ...font.eyebrow, color: color.textFaint },
+  footer: { minHeight: 26, justifyContent: 'center' },
+  valueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0, alignSelf: 'stretch' },
+  value: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text, textAlign: 'center' },
+  valueGym: { ...font.heading, fontSize: 22, fontWeight: '700', ...font.numeric, color: color.text, textAlign: 'center' },
+  valueHero: { ...font.hero, ...font.numeric, color: color.text, textAlign: 'center' },
+  suffix: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textFaint },
+  suffixHero: { ...font.label, fontSize: 16, fontWeight: '600', letterSpacing: 0, color: color.textFaint },
   input: {
     flex: 1,
     minWidth: 0,
+    alignSelf: 'stretch',
     borderBottomWidth: 2,
     borderBottomColor: color.accent,
     paddingVertical: 0,

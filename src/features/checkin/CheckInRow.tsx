@@ -67,8 +67,8 @@ export function CheckInRow({ onCheckIn }: { onCheckIn: () => void }) {
         accessibilityLabel={`Water: ${ml(data.water)} of ${ml(data.waterTarget)} today. Tap to log.`}
         style={({ pressed }) => [styles.cell, pressed && styles.pressed]}
       >
-        <Icon name="water" size={18} color={color.textMuted} />
-        <Text style={styles.label}>{ml(data.water)}</Text>
+        <Icon name="water" size={18} color={color.accent} />
+        <Text style={styles.water}>{ml(data.water)}</Text>
       </Pressable>
     </View>
   );
@@ -82,14 +82,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    minHeight: hit.default,
-    paddingHorizontal: space.md,
+    minHeight: hit.gym,
+    paddingHorizontal: space.md + 2,
     backgroundColor: color.surface,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: color.border,
   },
   pressed: { backgroundColor: color.surfaceHigh },
-  label: { ...font.label, color: color.text },
-  action: { ...font.label, color: color.accent, fontWeight: '700' },
+  label: { ...font.label, fontSize: 14, color: color.text },
+  water: { ...font.label, fontSize: 14, fontWeight: '700', ...font.numeric, color: color.text },
+  action: { ...font.caption, color: color.accent, fontWeight: '600' },
 });

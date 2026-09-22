@@ -11,6 +11,8 @@ export interface SheetProps {
   visible: boolean;
   onClose: () => void;
   title?: string;
+  /** One muted line under the title: "2 of 6 done · 21:05". */
+  subtitle?: ReactNode;
   children?: ReactNode;
 }
 
@@ -24,7 +26,7 @@ export interface SheetProps {
  * Close sits beside the title now, at a full touch target, and the title is a
  * header so a screen reader lands on it rather than on the first stepper (UX-11).
  */
-export function Sheet({ visible, onClose, title, children }: SheetProps) {
+export function Sheet({ visible, onClose, title, subtitle, children }: SheetProps) {
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
@@ -36,9 +38,12 @@ export function Sheet({ visible, onClose, title, children }: SheetProps) {
           </Pressable>
           <View style={styles.titleRow}>
             {title ? (
-              <Text style={styles.title} accessibilityRole="header" numberOfLines={2}>
-                {title}
-              </Text>
+              <View style={styles.flex1}>
+                <Text style={styles.title} accessibilityRole="header" numberOfLines={2}>
+                  {title}
+                </Text>
+                {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+              </View>
             ) : (
               <View style={styles.flex} />
             )}
@@ -78,6 +83,8 @@ const styles = StyleSheet.create({
   handleHit: { alignItems: 'center', paddingVertical: space.md },
   handle: { width: space.xxxl, height: space.xs, borderRadius: radius.pill, backgroundColor: color.border },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.md },
-  title: { ...font.heading, color: color.text, flex: 1 },
+  flex1: { flex: 1 },
+  title: { ...font.titleSm, color: color.text },
+  subtitle: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: 2 },
   close: { width: hit.default, height: hit.default, alignItems: 'center', justifyContent: 'center' },
 });
