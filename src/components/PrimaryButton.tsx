@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { impact } from '@/lib/haptics';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { color, family, font, hit, radius, space } from '@/theme/tokens';
 
 /**
  * Three weights, and they have to look like three weights.
@@ -91,7 +91,7 @@ export function PrimaryButton({
           everything with this backup" into "Replace everything with th…" at large
           text sizes — a destructive button whose label you cannot read (UX-11).
         */}
-        <Text style={[size === 'gym' ? styles.labelGym : styles.label, filled && styles.bold, { color: fg }]} numberOfLines={2}>
+        <Text style={[size === 'gym' ? styles.labelGym : styles.label, filled ? styles.filledFace : styles.textFace, { color: fg }]} numberOfLines={2}>
           {label}
         </Text>
       </View>
@@ -115,7 +115,9 @@ const styles = StyleSheet.create({
   // 16px, not 15: an action label has to survive being read at arm's length.
   label: { ...font.body, fontWeight: '600' },
   labelGym: { ...font.heading },
-  bold: { fontWeight: '700' },
+  // The one thing to do here is set in the display face, as on the boards; the alternatives read as text.
+  filledFace: { fontFamily: family.display, fontWeight: '700' },
+  textFace: { fontFamily: family.text },
   pressed: { opacity: 0.8 },
   disabled: { opacity: 0.4 },
 });

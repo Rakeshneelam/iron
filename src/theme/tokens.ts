@@ -65,7 +65,19 @@ export const gap = {
 export const radius = { sm: 8, md: 12, button: 14, lg: 16, xl: 24, pill: 999 } as const;
 
 /**
- * One family, six roles, each visibly distinct from its neighbours.
+ * The two faces the design is drawn in, embedded at build time by the expo-font
+ * config plugin (app.json), so there is no runtime loading and nothing to wait on.
+ * The Android XML families carry the same names iOS reads from the files, so one
+ * string works on both, and fontWeight picks the right file on each.
+ *
+ *   Plex    — everything you read: body, labels, captions.
+ *   Archivo — everything you glance at: titles, headings, filled buttons, and
+ *             every number that changes.
+ */
+export const family = { text: 'IBM Plex Sans', display: 'Archivo' } as const;
+
+/**
+ * Six roles, each visibly distinct from its neighbours.
  *
  * Two things were wrong before. 14 and 12 sat close enough to read as one size, so
  * labels and captions carried the same weight and small text all blurred together —
@@ -77,23 +89,23 @@ export const radius = { sm: 8, md: 12, button: 14, lg: 16, xl: 24, pill: 999 } a
  */
 export const font = {
   /** Tabular figures everywhere numbers change — no jitter on steppers or timers. */
-  numeric: { fontVariant: ['tabular-nums'] as ['tabular-nums'] },
+  numeric: { fontFamily: family.display, fontVariant: ['tabular-nums'] as ['tabular-nums'] },
   /** The number being logged: weight and reps on the session screen. Nothing on screen is louder. */
-  hero: { fontSize: 60, lineHeight: 64, fontWeight: '800' as const, letterSpacing: -2 },
-  display: { fontSize: 44, lineHeight: 48, fontWeight: '800' as const, letterSpacing: -1.5 },
-  title: { fontSize: 28, lineHeight: 34, fontWeight: '700' as const, letterSpacing: -0.5 },
+  hero: { fontFamily: family.display, fontSize: 60, lineHeight: 64, fontWeight: '800' as const, letterSpacing: -2 },
+  display: { fontFamily: family.display, fontSize: 44, lineHeight: 48, fontWeight: '800' as const, letterSpacing: -1.5 },
+  title: { fontFamily: family.display, fontSize: 28, lineHeight: 34, fontWeight: '700' as const, letterSpacing: -0.5 },
   /** A pushed screen's title, beside its back arrow. */
-  titleSm: { fontSize: 22, lineHeight: 28, fontWeight: '700' as const, letterSpacing: -0.4 },
+  titleSm: { fontFamily: family.display, fontSize: 22, lineHeight: 28, fontWeight: '700' as const, letterSpacing: -0.4 },
   /**
    * A small tracked label above a group — "This week", "Up next". Upper-cased so it
    * reads as a signpost, not as content, and never used for anything you must read
    * to act: the content under it carries the meaning.
    */
-  eyebrow: { fontSize: 11, lineHeight: 14, fontWeight: '600' as const, letterSpacing: 1.3, textTransform: 'uppercase' as const },
-  heading: { fontSize: 20, lineHeight: 26, fontWeight: '600' as const, letterSpacing: -0.2 },
-  body: { fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
-  label: { fontSize: 15, lineHeight: 20, fontWeight: '500' as const },
-  caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
+  eyebrow: { fontFamily: family.text, fontSize: 11, lineHeight: 14, fontWeight: '600' as const, letterSpacing: 1.3, textTransform: 'uppercase' as const },
+  heading: { fontFamily: family.display, fontSize: 20, lineHeight: 26, fontWeight: '600' as const, letterSpacing: -0.2 },
+  body: { fontFamily: family.text, fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
+  label: { fontFamily: family.text, fontSize: 15, lineHeight: 20, fontWeight: '500' as const },
+  caption: { fontFamily: family.text, fontSize: 13, lineHeight: 18, fontWeight: '400' as const },
 } as const;
 
 /**

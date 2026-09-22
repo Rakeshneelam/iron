@@ -13,8 +13,12 @@ optional and comes last.
 
 ## Type
 
-One family (system default, or Inter). Six sizes. Numbers use tabular figures so
-weights don't jitter when they change during a countdown or a stepper hold.
+Two faces, embedded at build time by the `expo-font` config plugin (`app.json`),
+so nothing loads at runtime: **IBM Plex Sans** for everything you read, **Archivo**
+for titles, headings, filled buttons and every number that changes. Both are OFL;
+the files and licences are in `assets/fonts/`. The family names live in
+`family` in the tokens — never write one in a screen. Numbers use tabular figures
+so weights don't jitter when they change during a countdown or a stepper hold.
 
 The logged number is the hero: weight and reps are the largest text on the screen,
 larger than any heading.

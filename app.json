@@ -51,7 +51,75 @@
           "imageWidth": 160
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-font",
+        {
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "IBM Plex Sans",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/IBMPlexSans_400Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./assets/fonts/IBMPlexSans_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./assets/fonts/IBMPlexSans_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./assets/fonts/IBMPlexSans_700Bold.ttf",
+                    "weight": 700
+                  }
+                ]
+              },
+              {
+                "fontFamily": "Archivo",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/Archivo_400Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./assets/fonts/Archivo_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./assets/fonts/Archivo_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./assets/fonts/Archivo_700Bold.ttf",
+                    "weight": 700
+                  },
+                  {
+                    "path": "./assets/fonts/Archivo_800ExtraBold.ttf",
+                    "weight": 800
+                  }
+                ]
+              }
+            ]
+          },
+          "ios": {
+            "fonts": [
+              "./assets/fonts/IBMPlexSans_400Regular.ttf",
+              "./assets/fonts/IBMPlexSans_500Medium.ttf",
+              "./assets/fonts/IBMPlexSans_600SemiBold.ttf",
+              "./assets/fonts/IBMPlexSans_700Bold.ttf",
+              "./assets/fonts/Archivo_400Regular.ttf",
+              "./assets/fonts/Archivo_500Medium.ttf",
+              "./assets/fonts/Archivo_600SemiBold.ttf",
+              "./assets/fonts/Archivo_700Bold.ttf",
+              "./assets/fonts/Archivo_800ExtraBold.ttf"
+            ]
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
