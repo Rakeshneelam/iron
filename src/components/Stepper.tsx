@@ -4,7 +4,9 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { selection } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
+import { FitText } from './FitText';
 import { Icon } from './Icon';
+import { Press } from './Press';
 
 export interface StepperProps {
   value: number;
@@ -150,29 +152,39 @@ export function Stepper({
       }}
     >
       {/*
-        Only the hero may shrink, and only to 45pt on a 360dp phone, where 102.5 kg
-        is otherwise wider than the card. Anywhere else, if it does not fit the
-        layout is wrong and shrinking the number only hides that (UX-11).
+        Only the hero may shrink, and only far enough that "102.5 kg" fits a 360dp
+        phone. Anywhere else, if it does not fit the layout is wrong and shrinking
+        the number only hides that (UX-11).
+
+        FitText, not Text: `font.hero` carries lineHeight 64, and Android shrinks
+        fontSize while leaving lineHeight alone, so the height constraint could
+        never be satisfied and the search ran to the floor — this rendered at
+        roughly 10pt on device. See components/FitText.
       */}
-      <Text style={valueStyle} numberOfLines={1} adjustsFontSizeToFit={hero} minimumFontScale={0.75}>
+      <FitText style={valueStyle} numberOfLines={1} adjustsFontSizeToFit={hero}>
         {value.toFixed(dp)}
         {suffix ? <Text style={hero ? styles.suffixHero : styles.suffix}> {suffix}</Text> : null}
-      </Text>
+      </FitText>
     </Pressable>
   );
 
   const button = (dir: 1 | -1) => (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityLabel={`${dir > 0 ? 'Increase' : 'Decrease'} ${name ?? 'value'}`}
       onPress={() => bump(dir)}
       onLongPress={() => startRepeat(dir)}
       onPressOut={stopRepeat}
       delayLongPress={300}
-      style={({ pressed }) => [styles.btn, { width: box }, pressed && styles.btnPressed]}
+      // Highlight, not scale: these are two halves of one card, and a scaling
+      // half pulls away from the border it shares with the number.
+      feedback="highlight"
+      touchStyle={styles.btnTouch}
+      style={[styles.btn, { width: box }]}
+      pressedStyle={styles.btnPressed}
     >
       <Icon name={dir > 0 ? 'plus' : 'minus'} size={hero ? 28 : 20} color={hero ? color.text : color.textMuted} strokeWidth={hero ? 2.4 : 2} />
-    </Pressable>
+    </Press>
   );
 
   if (hero) {
@@ -216,8 +228,13 @@ const styles = StyleSheet.create({
     borderColor: color.border,
     overflow: 'hidden',
   },
-  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 108 },
-  btn: { alignItems: 'center', justifyContent: 'center' },
+  /** 132, not 108: a 60pt number needs ~72dp of glyph box, and the label and
+   *  footer take 40dp of the field. At 108 the number could never fit, which is
+   *  what the auto-shrink was quietly papering over. */
+  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 132 },
+  /** The target stretches the full height of the field; the fill inside it follows. */
+  btnTouch: { alignSelf: 'stretch' },
+  btn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   btnPressed: { backgroundColor: color.border },
   heroMid: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: space.sm },
   labelHero: { ...font.eyebrow, color: color.textFaint },

@@ -35,11 +35,18 @@ export const color = {
   accentFill: '#C4441F',
   accentFillPressed: '#A8380F',   // white 6.49 : 1
   accentSoft: 'rgba(232,85,46,0.55)', // secondary muscles in demos and maps
+  /**
+   * The accent as a wash over a dark surface — the first frame of the set-logged
+   * flash, and nothing else. Never a ground for text: it exists to be left.
+   */
+  accentWash: 'rgba(232,85,46,0.16)',
   onAccent: '#FFFFFF',
 
   positive: '#3FBF7F',    // progression, a new e1RM high
   warning: '#E0A02E',     // stalled, approaching MRV
   danger: '#D9483B',      // pain flag, backoff — NEVER "you missed a day"
+  /** Held, on the filled destructive button. White on it is 5.94 : 1. */
+  dangerPressed: '#B23A2E',
 
   chart: '#E8552E',
   chartFaint: 'rgba(232,85,46,0.28)',
@@ -118,11 +125,63 @@ export const font = {
 export const hit = { gym: 56, default: 48 } as const;
 
 export const motion = {
+  /**
+   * Press feedback, and the ceiling for it. A pressable is touched hundreds of
+   * times a day, so its response has to be felt rather than watched: anything
+   * longer than this stops reading as the surface giving way and starts reading
+   * as the app thinking about it.
+   */
+  press: 120,
   fast: 150,
   base: 200,
   slow: 250,
-  /** Springs for anything following a gesture; timing for everything else. */
-  spring: { damping: 18, stiffness: 220, mass: 0.7 },
+  /** How far a pressable gives under a thumb. 3% reads as physical; 5% as a toy. */
+  pressScale: 0.97,
+  /**
+   * Springs, in the two parameters Reanimated 4 actually takes.
+   *
+   * The old `{ damping, stiffness, mass }` triple is gone — nothing consumed it,
+   * and that form cannot express "settle in 300ms without overshooting" without
+   * doing the algebra by hand. `dampingRatio` 1 is critically damped: fast, no
+   * bounce. Below 1 overshoots, and only one thing here is allowed to.
+   */
+  spring: {
+    /** Anything returning to rest with no finger on it. */
+    settle: { duration: 400, dampingRatio: 1 },
+    /**
+     * A sheet or drawer under a thumb, and the only overshoot in the app: a flick
+     * carries momentum, and a drawer that stops dead at its detent reads as jammed.
+     * Pass the gesture's velocity with it or the handoff shows a seam.
+     */
+    sheet: { duration: 300, dampingRatio: 0.8 },
+  },
+} as const;
+
+/**
+ * Light and heat: the two things this palette has that a flat dark theme does not.
+ *
+ * `edge` is a one-pixel highlight along the top of a raised surface. Machined iron
+ * catches light on its chamfer, and a card carrying one reads as an object sitting
+ * ON the background rather than as a lighter region OF it. White at 5.5% — far too
+ * faint to be a border, which is exactly the point: a border marks where a thing
+ * ends, this marks which way is up. It is never load-bearing, so it needs no
+ * contrast ratio; remove it and nothing becomes unreadable.
+ *
+ * `heat` is the accent used as light instead of as ink — an accent-coloured glow
+ * under the one live thing on screen. It is rationed on purpose: the primary
+ * action, a session in progress, a running rest timer. Nothing else. If three
+ * things glow, nothing reads as live, and the ration is the whole idea — in a dark
+ * room the eye goes to the warm thing, which is the thing you are meant to touch.
+ *
+ * `boxShadow` rather than `elevation`: Android's elevation shadow is black
+ * whatever `shadowColor` says, so a warm glow drawn that way is just a dark
+ * smudge. RN 0.86 renders `boxShadow` on both platforms.
+ */
+export const material = {
+  edge: 'rgba(255,255,255,0.055)',
+  /** A sheet and the session hero sit closer to the light. */
+  edgeStrong: 'rgba(255,255,255,0.09)',
+  heat: `0px 6px 20px -4px ${color.accent}59`,
 } as const;
 
 export const layout = {

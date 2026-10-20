@@ -19,7 +19,7 @@ import { listMeasurements, listWeighIns } from './body';
 import { intakeBetween } from './food';
 import { groupBy } from './mappers';
 import { getActiveRoutine, getDays, getSlots, plannedWeeklySets } from './program';
-import type { Session } from './sessions';
+import { isNoTraining, TRAINED, type Session } from './sessions';
 import { getRaw, getSettings, setRaw } from './settings';
 import { countConsecutiveResets, e1rmSeries } from './stats';
 
@@ -38,7 +38,10 @@ export interface WeekSummary {
   plannedDays: number;
   completed: number;
   partial: number;
+  /** The planned workout did not happen. */
   skipped: number;
+  /** A day taken off on purpose. Neutral — never counted against the week. */
+  rest: number;
   cancelled: number;
   exercises: number;
   sets: number;
@@ -61,7 +64,7 @@ export function weekSummary(weekStart: string, waterTargetMl: number): WeekSumma
   const sessions = db.select().from(schema.session).where(inWeek).all();
   const count = (st: Session['status']) => sessions.filter((s) => s.status === st).length;
   const minutes = sessions
-    .filter((s) => s.status !== 'skipped' && s.endedAt)
+    .filter((s) => !isNoTraining(s.status) && s.endedAt)
     .reduce((m, s) => m + Math.max(0, (Date.parse(s.endedAt ?? s.startedAt) - Date.parse(s.startedAt)) / 60_000), 0);
 
   const agg = db
@@ -143,6 +146,7 @@ export function weekSummary(weekStart: string, waterTargetMl: number): WeekSumma
     completed: count('completed'),
     partial: count('partial'),
     skipped: count('skipped'),
+    rest: count('rest'),
     cancelled: count('cancelled'),
     exercises: Number(agg?.exercises ?? 0),
     sets: Number(agg?.sets ?? 0),
@@ -161,13 +165,18 @@ export function weekSummary(weekStart: string, waterTargetMl: number): WeekSumma
   };
 }
 
-/** Every finished or skipped workout, newest first, with its day name and set count. */
+/** Workouts where training happened, newest first, with their day name and set count. */
 export function recentWorkouts(limit = 10): { session: Session; dayLabel: string | null; sets: number }[] {
   const rows = db
     .select({ session: schema.session, dayLabel: schema.routineDay.label })
     .from(schema.session)
     .leftJoin(schema.routineDay, eq(schema.session.routineDayId, schema.routineDay.id))
-    .where(isNotNull(schema.session.endedAt))
+    // Workouts only. A rest day or a missed day is a finished session with no sets,
+    // and it is not a recent workout: on Today's two-row list it would push a real
+    // one off and render as "Workout · 0 sets". Marked days belong in history,
+    // which has its own query and shows them. It also guards the summary screen's
+    // "is this the newest workout" check, which decides the milestone line.
+    .where(and(isNotNull(schema.session.endedAt), inArray(schema.session.status, [...TRAINED])))
     .orderBy(desc(schema.session.startedAt))
     .limit(limit)
     .all();

@@ -5,6 +5,7 @@ import { selection } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 import { Icon } from './Icon';
+import { Press } from './Press';
 
 /**
  * A card of rows with hairlines between them — the list every screen is built of.
@@ -54,15 +55,19 @@ export function ListRow({ title, sub, left, right, onPress, onLongPress, chevron
   const style = [styles.row, divider && styles.divider];
   if (!onPress && !onLongPress) return <View style={style}>{content}</View>;
   return (
-    <Pressable
+    <Press
       onPress={onPress}
       onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? (sub ? `${title}, ${sub}` : title)}
-      style={({ pressed }) => [style, pressed && styles.pressed]}
+      // A row runs the full width of its card, and a full-width row that scales
+      // reads as the whole screen squashing. It lights up instead.
+      feedback="highlight"
+      style={style}
+      pressedStyle={styles.pressed}
     >
       {content}
-    </Pressable>
+    </Press>
   );
 }
 
@@ -109,7 +114,15 @@ const styles = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym, paddingVertical: space.sm },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  pressed: { opacity: 0.6 },
+  /**
+   * Inset and rounded rather than full-bleed: the card already pads its rows by
+   * 16, so a square highlight would stop short of the card's edge and read as a
+   * floating bar. Rounded, it reads as the row itself lighting up.
+   *
+   * It was `opacity: 0.6`, which fades the row's text — the one thing the user is
+   * looking at while deciding whether the tap landed.
+   */
+  pressed: { backgroundColor: color.surfaceHigh, borderRadius: radius.md },
   text: { flex: 1, minWidth: 0 },
   title: { ...font.label, fontWeight: '600', color: color.text },
   muted: { color: color.textMuted },

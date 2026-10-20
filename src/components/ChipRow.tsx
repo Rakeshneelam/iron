@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { selection } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
+
+import { FitText } from './FitText';
+import { Press } from './Press';
 
 export interface ChipOption<T extends string | number> {
   label: string;
@@ -50,7 +53,7 @@ export function Chips<T extends string | number>({ options, isOn, onPress, role,
   const chips = options.map((o) => {
     const on = isOn(o.value);
     const chip = (
-      <Pressable
+      <Press
         key={String(o.value)}
         accessibilityRole={role}
         accessibilityState={role === 'checkbox' ? { checked: on } : { selected: on }}
@@ -59,21 +62,24 @@ export function Chips<T extends string | number>({ options, isOn, onPress, role,
           if (haptics) selection();
           onPress(o.value);
         }}
-        style={({ pressed }) => [styles.chip, { minHeight: hit[size] }, fill && !grid && styles.fill, on && styles.on, pressed && !on && styles.pressed]}
+        // Equal-width chips flex, and the flex has to sit on the touch target.
+        touchStyle={fill && !grid ? styles.fill : undefined}
+        style={[styles.chip, { minHeight: hit[size] }, on && styles.on]}
+        pressedStyle={on ? undefined : styles.pressed}
       >
         {o.icon}
         {/* Two lines rather than an ellipsis, because "General fitness" cut to
             "General fit…" makes the option unreadable. And on equal-width chips the
             text shrinks to fit: "Maintain" breaking to "Maintai / n" looks broken. */}
-        <Text
+        <FitText
           style={[size === 'gym' ? styles.textGym : styles.text, on && styles.textOn]}
           numberOfLines={2}
           adjustsFontSizeToFit={fill || grid}
           minimumFontScale={0.8}
         >
           {o.label}
-        </Text>
-      </Pressable>
+        </FitText>
+      </Press>
     );
     return grid ? (
       <View key={String(o.value)} style={[styles.cell, { width: `${100 / columns}%` }]}>

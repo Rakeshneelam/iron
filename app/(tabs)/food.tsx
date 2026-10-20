@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { router } from 'expo-router';
 
-import { Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, Sheet, Stepper } from '@/components';
+import { FitText, Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, Sheet, Stepper } from '@/components';
 import { DateStepper, useSelectedDate } from '@/components/DateStepper';
 import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
@@ -251,14 +251,14 @@ function MacroTile({ label, value, target, unit: suffix = '', tone }: { label: s
   const pct = target > 0 ? Math.min(1, value / target) : 0;
   return (
     <View style={styles.tile} accessible accessibilityLabel={`${label}: ${Math.round(value)} of ${target}${suffix}`}>
-      <Text style={[styles.tileValue, tone === 'accent' && styles.accent]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+      <FitText style={[styles.tileValue, tone === 'accent' && styles.accent]} numberOfLines={1} minimumFontScale={0.8}>
         {Math.round(value)}
         <Text style={styles.tileOf}>
           {' '}
           / {target}
           {suffix}
         </Text>
-      </Text>
+      </FitText>
       <Text style={styles.tileLabel}>{label}</Text>
       <View style={styles.track}>
         <View style={[styles.fill, { width: `${pct * 100}%`, backgroundColor: tone === 'accent' ? color.accent : color.textMuted }]} />

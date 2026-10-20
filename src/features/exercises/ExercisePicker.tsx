@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
 import { Icon } from '@/components/Icon';
@@ -7,6 +7,7 @@ import { IconButton } from '@/components/IconButton';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { SectionHeader } from '@/components/SectionHeader';
 import { Stepper } from '@/components/Stepper';
+import { Press } from '@/components/Press';
 import { CATALOG_BY_ID, EQUIPMENT_LABEL, MUSCLE_LABEL, type Equipment, type Muscle } from '@/data/catalog';
 import { createCustomExercise, getExercise, LOAD_TYPES, listExercises, MUSCLES, type Exercise } from '@/db/repositories/exercises';
 import { useSettings } from '@/db/repositories/settings';
@@ -56,9 +57,12 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
   const suggested = suggestions.map((s) => ({ s, e: getExercise(s.id) })).filter((x): x is { s: (typeof suggestions)[number]; e: Exercise } => !!x.e && !excludeIds.includes(x.e.id));
 
   const row = (ex: Exercise, sub: string, i: number, spark = false) => (
-    <Pressable
+    <Press
       key={ex.id}
-      style={({ pressed }) => [styles.item, i > 0 && styles.divider, pressed && styles.pressed]}
+      // A full-width result row, so it lights rather than scales.
+      feedback="highlight"
+      style={[styles.item, i > 0 && styles.divider]}
+      pressedStyle={styles.pressed}
       onPress={() => onPick(ex)}
       accessibilityRole="button"
       accessibilityLabel={`Add ${ex.name}. ${sub}`}
@@ -71,7 +75,7 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
       <View style={styles.plus}>
         <Icon name="plus" size={20} color={color.text} />
       </View>
-    </Pressable>
+    </Press>
   );
   const describe = (ex: Exercise) => `${ex.primaryMuscles.map(muscleLabel).join(', ')} · ${EQUIPMENT_LABEL[ex.loadType as Equipment] ?? ex.loadType}`;
 

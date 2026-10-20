@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
-import { AccessibilityInfo, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
+import Animated, { Extrapolation, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { color, font, layout, space } from '@/theme/tokens';
@@ -75,6 +76,25 @@ export interface ScreenProps {
 export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = true, padded = true, right, strip, dock, tab = false, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const [dockHeight, setDockHeight] = useState(0);
+  /**
+   * How far the content has moved under the chrome.
+   *
+   * The header and the dock each draw a hairline, and each one fades in only once
+   * there is something behind it to separate from. A screen whose content fits has
+   * no rules on it at all; a long one gets them the moment it starts scrolling.
+   * The alternative — drawing them always — puts a line under the title of every
+   * short screen in the app, which is a line that means nothing.
+   *
+   * Deliberately NOT a collapsing header. Shrinking the title on scroll needs the
+   * header box to have a fixed height, and every height here is set by text that
+   * the user may have scaled to 200% (WCAG 1.4.4). A hairline costs no layout and
+   * cannot clip anybody's text.
+   */
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.set(e.contentOffset.y);
+  });
+  const edgeFade = useAnimatedStyle(() => ({ opacity: interpolate(scrollY.get(), [0, 12], [0, 1], Extrapolation.CLAMP) }));
   const hasHeader = title !== undefined || right !== undefined || back !== undefined;
   const bottomInset = tab ? 0 : insets.bottom;
 
@@ -111,27 +131,37 @@ export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = tru
             ) : null}
           </View>
           {right !== undefined ? <View style={styles.headerRight}>{right}</View> : null}
+          {scroll ? <Animated.View style={[styles.hairlineBottom, edgeFade]} pointerEvents="none" /> : null}
         </View>
       ) : null}
 
       {strip ? <View style={styles.strip}>{strip}</View> : null}
 
       {scroll ? (
-        <ScrollView
+        <Animated.ScrollView
           style={styles.flex}
           contentContainerStyle={[body, strip ? styles.afterStrip : null, { paddingBottom: bottomPad }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
         >
           {children}
-        </ScrollView>
+        </Animated.ScrollView>
       ) : (
         <View style={[styles.flex, body]}>{children}</View>
       )}
 
       {dock ? (
         <View style={[styles.dock, { paddingBottom: space.md + bottomInset }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}>
+          {/* A screen that cannot scroll has nothing to pass under the dock, so its
+              rule is simply always there. */}
+          {scroll ? (
+            <Animated.View style={[styles.hairlineTop, edgeFade]} pointerEvents="none" />
+          ) : (
+            <View style={[styles.hairlineTop, styles.hairlineOn]} pointerEvents="none" />
+          )}
           {dock}
         </View>
       ) : null}
@@ -159,6 +189,10 @@ const styles = StyleSheet.create({
   titleSm: { ...font.titleSm, color: color.text },
   subtitle: { ...font.label, color: color.textMuted, marginTop: space.xs },
   subtitleSm: { ...font.caption, color: color.textMuted, marginTop: 2 },
+  /** Absolute, so fading one in never moves the content it sits against. */
+  hairlineBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
+  hairlineTop: { position: 'absolute', left: 0, right: 0, top: 0, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
+  hairlineOn: { opacity: 1 },
   strip: { borderBottomWidth: 1, borderBottomColor: color.border, paddingHorizontal: layout.screenPadding, paddingVertical: space.sm },
   afterStrip: { paddingTop: space.md },
   dock: {
@@ -170,7 +204,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenPadding,
     paddingTop: space.md,
     backgroundColor: color.bg,
-    borderTopWidth: 1,
-    borderTopColor: color.border,
   },
 });

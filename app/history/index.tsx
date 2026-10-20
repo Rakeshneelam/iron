@@ -21,6 +21,7 @@ import { create } from 'zustand';
 import { ChipRow, EmptyState, Icon, IconButton, Pill, TextField } from '@/components';
 import { useLive } from '@/db/live';
 import { searchWorkoutsPage, type HistoryCursor, type HistoryRow } from '@/db/repositories/progress';
+import { isNoTraining } from '@/db/repositories/sessions';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
 import { addDays, fmtDayLabel, parseISODate, todayISO } from '@/lib/date';
 import { kg } from '@/lib/format';
@@ -46,6 +47,14 @@ function monthOf(iso: string): string {
   const d = parseISODate(iso);
   const label = MONTHS[d.getMonth()] ?? '';
   return d.getFullYear() === new Date().getFullYear() ? label : `${label} ${d.getFullYear()}`;
+}
+
+/**
+ * A day marked off has no workout to name, so it is named by what it is — and a
+ * plan-less workout has no day label either, which is what "Workout" is for.
+ */
+function titleOf(r: HistoryRow): string {
+  return r.dayLabel ?? (isNoTraining(r.session.status) ? STATUS_LABEL[r.session.status] : 'Workout');
 }
 
 function minutesOf(r: HistoryRow): number | null {
@@ -176,18 +185,25 @@ export default function HistoryScreen() {
             if (item.kind === 'month') return <Text style={styles.month}>{item.label}</Text>;
             const { r, first, last } = item;
             const mins = minutesOf(r);
+            const name = titleOf(r);
+            // "0 sets · 0 min" under a rest day is noise: the day itself is the entry.
+            const marked = isNoTraining(r.session.status);
             return (
               <Pressable
                 onPress={() => router.push(`/session/summary/${r.session.id}`)}
                 accessibilityRole="button"
-                accessibilityLabel={`${r.dayLabel ?? 'Workout'}, ${fmtDayLabel(r.session.date)}, ${r.sets} sets. Open workout.`}
+                accessibilityLabel={`${name}, ${fmtDayLabel(r.session.date)}${marked ? '' : `, ${r.sets} sets`}. Open it.`}
                 style={({ pressed }) => [styles.row, first && styles.rowFirst, last && styles.rowLast, !first && styles.divider, pressed && styles.pressed]}
               >
                 <View style={styles.flex1}>
                   <Text style={styles.name} numberOfLines={1}>
-                    {r.dayLabel ?? 'Workout'}
+                    {name}
                   </Text>
-                  <Text style={styles.sub}>{[fmtDayLabel(r.session.date), `${r.sets} ${r.sets === 1 ? 'set' : 'sets'}`, mins ? `${mins} min` : null].filter(Boolean).join(' · ')}</Text>
+                  <Text style={styles.sub}>
+                    {[fmtDayLabel(r.session.date), marked ? null : `${r.sets} ${r.sets === 1 ? 'set' : 'sets'}`, marked || !mins ? null : `${mins} min`]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
                   {/* The reason you searched, on the row itself, so you never have to open it. */}
                   {r.top ? (
                     <Text style={styles.top}>

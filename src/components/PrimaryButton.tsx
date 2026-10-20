@@ -1,8 +1,11 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { impact } from '@/lib/haptics';
-import { color, family, font, hit, radius, space } from '@/theme/tokens';
+import type { AnimatedViewStyle } from '@/theme/curves';
+import { color, family, font, hit, material, radius, space } from '@/theme/tokens';
+
+import { Press } from './Press';
 
 /**
  * Three weights, and they have to look like three weights.
@@ -48,6 +51,22 @@ const FG: Record<ButtonTone, string> = {
   ghost: color.textMuted,
 };
 
+/**
+ * Held. The scale comes from `Press`; this is only the colour under it.
+ *
+ * Every tone used to share `opacity: 0.8`, which on a filled button reads as the
+ * button becoming unavailable rather than as it being pressed — the same signal
+ * `disabled` uses, two steps along. A filled tone darkens; an outline or a ghost,
+ * which has no fill to darken, gains one.
+ */
+const HELD: Record<ButtonTone, AnimatedViewStyle> = {
+  accent: { backgroundColor: color.accentFillPressed },
+  danger: { backgroundColor: color.dangerPressed },
+  neutral: { backgroundColor: color.surfaceHigh },
+  dangerOutline: { backgroundColor: color.surfaceHigh },
+  ghost: { backgroundColor: color.surfaceHigh },
+};
+
 export function PrimaryButton({
   label,
   onPress,
@@ -63,7 +82,7 @@ export function PrimaryButton({
   const fg = FG[tone];
   const filled = tone === 'accent' || tone === 'danger';
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
@@ -73,16 +92,21 @@ export function PrimaryButton({
         onPress();
       }}
       onLongPress={onLongPress}
-      style={({ pressed }) => [
+      // Whatever the caller sent is layout — `flex: 1` in a pair, a margin above —
+      // and layout belongs on the target the parent's flexbox measures.
+      touchStyle={style}
+      style={[
         styles.base,
         { minHeight: hit[size], backgroundColor: BG[tone] },
         tone === 'ghost' && styles.ghost,
         tone === 'neutral' && styles.neutral,
         tone === 'dangerOutline' && styles.dangerOutline,
-        pressed && (tone === 'accent' ? { backgroundColor: color.accentFillPressed } : styles.pressed),
+        // The one dominant action carries heat. Nothing else does — a screen where
+        // two things glow has no primary action (see `material.heat`).
+        tone === 'accent' && !disabled && styles.hot,
         disabled && styles.disabled,
-        style,
       ]}
+      pressedStyle={HELD[tone]}
     >
       <View style={styles.row}>
         {icon}
@@ -95,7 +119,7 @@ export function PrimaryButton({
           {label}
         </Text>
       </View>
-    </Pressable>
+    </Press>
   );
 }
 
@@ -118,6 +142,6 @@ const styles = StyleSheet.create({
   // The one thing to do here is set in the display face, as on the boards; the alternatives read as text.
   filledFace: { fontFamily: family.display, fontWeight: '700' },
   textFace: { fontFamily: family.text },
-  pressed: { opacity: 0.8 },
+  hot: { boxShadow: material.heat },
   disabled: { opacity: 0.4 },
 });

@@ -33,6 +33,10 @@ export interface CheckInSheetProps {
   datePicker?: boolean;
   /** Opened from Start: still optional, and both buttons carry on to the workout. */
   onStart?: () => void;
+  /** Carry on without answering anything. Shown beside Save when given. */
+  onSkip?: () => void;
+  /** Overrides "Save and start" — the workout's first stage says "Continue". */
+  startLabel?: string;
 }
 
 /**
@@ -43,7 +47,7 @@ export interface CheckInSheetProps {
  * an untouched number is not an answer, and the sheet no longer claims "Saved as
  * today's weigh-in" before its own Save handler has run (UX-03).
  */
-export function CheckInSheet({ visible, onClose, date, datePicker = false, onStart }: CheckInSheetProps) {
+export function CheckInSheet({ visible, onClose, date, datePicker = false, onStart, onSkip, startLabel }: CheckInSheetProps) {
   const day = date ?? todayISO();
   return (
     <Sheet
@@ -52,12 +56,20 @@ export function CheckInSheet({ visible, onClose, date, datePicker = false, onSta
       title={onStart ? 'Before you start' : day === todayISO() ? 'Daily check-in' : `Check-in · ${fmtDayLabel(day)}`}
     >
       {/* Mounted per opening and per day, so the answers are read fresh without an effect. */}
-      {visible ? <Form key={day} date={day} datePicker={datePicker} onClose={onClose} onStart={onStart} /> : null}
+      {visible ? <CheckInForm key={day} date={day} datePicker={datePicker} onClose={onClose} onStart={onStart} onSkip={onSkip} startLabel={startLabel} /> : null}
     </Sheet>
   );
 }
 
-function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker: boolean } & Omit<CheckInSheetProps, 'visible' | 'date' | 'datePicker'>) {
+/**
+ * The questions themselves, without the sheet around them.
+ *
+ * Exported because the check-in is the workout's first stage now, not an optional
+ * row on Today — the session screen renders this inline as a full screen. One form
+ * either way: a second copy of four optional questions and their clearing rules
+ * would be a second place for them to drift.
+ */
+export function CheckInForm({ date, datePicker, onClose, onStart, onSkip, startLabel }: { date: string; datePicker: boolean } & Omit<CheckInSheetProps, 'visible' | 'date' | 'datePicker'>) {
   const [day, setDay] = useState(date);
   const [existing, setExisting] = useState(() => getCheckIn(date));
   const [weight, setWeight] = useState<WeightDraft>(() => weightDraftFor(date));
@@ -111,29 +123,36 @@ function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker
       </Answer>
 
       {onStart ? (
-        <View style={styles.pair}>
+        <View style={styles.startActions}>
+          {/* Nothing answered is not a reason to stop someone starting, so this is
+              one button whichever way: it saves what there is and carries on. */}
           <PrimaryButton
-            label="Save"
-            tone="neutral"
+            label={startLabel ?? (answered ? 'Save and start' : 'Start without answering')}
             size="gym"
-            disabled={!answered}
-            style={styles.flex}
-            onPress={() => {
-              save();
-              toast(`Check-in saved for ${fmtDayLabel(day)}`);
-              onClose();
-            }}
-          />
-          {/* Nothing answered is not a reason to stop someone starting. */}
-          <PrimaryButton
-            label="Save and start"
-            size="gym"
-            style={styles.flex2}
             onPress={() => {
               if (answered) save();
               onStart();
             }}
           />
+          {onSkip ? (
+            <PrimaryButton
+              label="Skip check-in"
+              tone="ghost"
+              onPress={onSkip}
+              accessibilityLabel="Skip the check-in and go straight to the warm-up. Nothing is saved."
+            />
+          ) : (
+            <PrimaryButton
+              label="Save without starting"
+              tone="ghost"
+              disabled={!answered}
+              onPress={() => {
+                save();
+                toast(`Check-in saved for ${fmtDayLabel(day)}`);
+                onClose();
+              }}
+            />
+          )}
         </View>
       ) : (
         <View style={styles.actions}>
@@ -203,5 +222,5 @@ const styles = StyleSheet.create({
   label: { ...font.caption, fontWeight: '600', color: color.textMuted },
   note: { ...font.caption, fontSize: 12, color: color.textFaint, flexShrink: 1 },
   actions: { gap: space.xs, marginTop: space.sm },
-  pair: { flexDirection: 'row', gap: space.md - 2, marginTop: space.sm },
+  startActions: { gap: space.sm, marginTop: space.sm },
 });

@@ -16,10 +16,12 @@ import { getActiveRoutine, resolveNextDay } from '@/db/repositories/program';
 import { getActiveSession, listSessions } from '@/db/repositories/sessions';
 import { getRaw, getSettings, setRaw, type AppSettings } from '@/db/repositories/settings';
 import { logWater } from '@/db/repositories/water';
+import { toast } from '@/components/Toast';
+import { ml } from '@/lib/format';
 import type { ReminderSlot } from '@/engine/metabolic';
 import { planReminders, type ReminderState } from '@/engine/reminders';
 import { addDays, daysBetweenISO, minutesSinceMidnight, parseISODate, todayISO } from '@/lib/date';
-import { destinationFor } from '@/lib/deepLinks';
+import { destinationFor, parseAmountMl } from '@/lib/deepLinks';
 
 import { hydrationPlan, tomorrowHydrationSlots } from './hydration';
 
@@ -30,6 +32,7 @@ const LEGACY_TAGS = ['weigh-in', 'weekly-review'] as const;
 export const WATER_CATEGORY = 'water-log';
 const REMINDER_CATEGORY = 'reminder';
 const WATER_ACTIONS = [250, 500] as const;
+const WATER_CUSTOM = 'water-custom';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -182,6 +185,24 @@ export function rescheduleAll(): Promise<void> {
 export async function registerCategories(): Promise<void> {
   await Notifications.setNotificationCategoryAsync(WATER_CATEGORY, [
     ...WATER_ACTIONS.map((ml) => ({ identifier: `water-${ml}`, buttonTitle: `+${ml} ml`, options: { opensAppToForeground: true } })),
+    /*
+      Any amount, typed where the reminder is.
+
+      Two preset buttons meant a 330ml can or a 1-litre bottle had to be either
+      rounded to one of them or logged by opening the app, finding Water and
+      opening the custom sheet — four taps for a number the user already knew.
+      `textInput` is the platform's own answer: Android turns it into a
+      RemoteInput, a real text field in the notification shade, and iOS into a
+      text-input action. Whatever is typed arrives as `response.userText`, which
+      `parseAmountMl` reads; anything it cannot read opens the Water screen with
+      the custom sheet up rather than writing a guess.
+    */
+    {
+      identifier: WATER_CUSTOM,
+      buttonTitle: 'Other amount',
+      textInput: { submitButtonTitle: 'Log', placeholder: 'ml, e.g. 330' },
+      options: { opensAppToForeground: true },
+    },
     { identifier: 'water-later', buttonTitle: 'Later', options: { opensAppToForeground: true } },
   ]);
   await Notifications.setNotificationCategoryAsync(REMINDER_CATEGORY, [
@@ -210,6 +231,22 @@ function handleResponse(r: Notifications.NotificationResponse): void {
     void rescheduleAll();
     return;
   }
+  if (r.actionIdentifier === WATER_CUSTOM) {
+    dismiss();
+    const amount = parseAmountMl(r.userText);
+    if (amount !== null) {
+      logWater(amount);
+      void rescheduleAll();
+      // The hydration ring is on the Water screen; nothing else would say the
+      // number landed, and this action's whole point is not having to go there.
+      toast(`Added ${ml(amount)}`);
+      return;
+    }
+    // Unreadable or left empty: ask on the screen that can show the ring moving,
+    // with the amount sheet already open. Never a silent no-op, never a guess.
+    goTo('/water?log=custom');
+    return;
+  }
   if (r.actionIdentifier === 'water-later') {
     dismiss();
     void snooze(r, 30, CHANNELS.hydration);
@@ -222,15 +259,22 @@ function handleResponse(r: Notifications.NotificationResponse): void {
   }
   const data = r.notification.request.content.data as Record<string, unknown> | null;
   const url = destinationFor(data);
-  if (url !== null) {
-    setTimeout(() => {
-      try {
-        router.push(url as never);
-      } catch {
-        /* navigation not ready yet — the app is open, which is what the tap asked for */
-      }
-    }, 0);
-  }
+  if (url !== null) goTo(url);
+}
+
+/**
+ * Navigate from a notification response. Deferred a tick because a cold start
+ * handles the response before the router has mounted its first route, and pushing
+ * onto nothing throws.
+ */
+function goTo(url: string): void {
+  setTimeout(() => {
+    try {
+      router.push(url as never);
+    } catch {
+      /* navigation not ready yet — the app is open, which is what the tap asked for */
+    }
+  }, 0);
 }
 
 /** Mounted once in the root layout. Covers both cold-start and running responses. */

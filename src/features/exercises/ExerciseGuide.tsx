@@ -11,7 +11,6 @@ import { substitutes } from '@/engine/substitute';
 import { toolsOf } from '@/features/profile';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
-import { ExerciseDemo } from './ExerciseDemo';
 import { MuscleMap } from './MuscleMap';
 
 const label = (m: string) => MUSCLE_LABEL[m as Muscle] ?? m;
@@ -36,9 +35,15 @@ export function ExerciseGuide({ exercise, compact = false, onOpen }: { exercise:
 
   return (
     <View style={styles.stack}>
-      <View style={styles.stage}>
-        <ExerciseDemo exercise={exercise} size={compact ? 190 : 230} />
-      </View>
+      {/*
+        No movement demo here. The drawn figure is a schematic of a body doing a
+        pattern, not a demonstration of THIS lift, and the bundled artwork it used
+        to prefer is © Gym visual — 124MB of GIFs that cannot legally ship in a
+        build shared with friends. What the question "how do I do this" actually
+        needs is below: which muscles the work lands on, the setup, the steps and
+        the mistakes. The figure stays where it IS the content: the warm-up and
+        cool-down player, where a drill has no written steps.
+      */}
       <MuscleMap primary={exercise.primaryMuscles} secondary={secondary} body={settings.sex === 'female' ? 'female' : 'male'} height={compact ? 150 : 190} />
       {/* What it trains, as the map's key: the main movers in accent, the helpers muted. */}
       <View style={styles.muscles}>
@@ -134,7 +139,6 @@ const styles = StyleSheet.create({
   // Illustrations need air: text set right under a figure reads as part of the drawing.
   stack: { gap: space.lg, paddingBottom: space.lg },
   flex: { flex: 1 },
-  stage: { alignItems: 'center', backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, paddingVertical: space.lg },
   muscles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2 },
   meta: { ...font.caption, color: color.textMuted },
   block: { gap: space.sm },

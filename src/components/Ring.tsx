@@ -3,8 +3,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
+import { EASE_OUT } from '@/theme/curves';
 import { color, font, motion } from '@/theme/tokens';
 
+import { FitText } from './FitText';
 import { useReducedMotion } from './Screen';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -33,11 +35,13 @@ export function Ring({ progress, size, thickness = 14, label, sublabel, tone = '
   const p = useSharedValue(target);
 
   useEffect(() => {
-    p.value = reduced ? target : withTiming(target, { duration: motion.slow });
+    // `.set`/`.get` rather than `.value`: the same API, but the form the React
+    // Compiler can see through, and the one the Reanimated docs now recommend.
+    p.set(reduced ? target : withTiming(target, { duration: motion.slow, easing: EASE_OUT }));
   }, [p, reduced, target]);
 
   const animatedProps = useAnimatedProps(() => ({
-    strokeDashoffset: circumference * (1 - p.value),
+    strokeDashoffset: circumference * (1 - p.get()),
   }));
 
   return (
@@ -60,9 +64,9 @@ export function Ring({ progress, size, thickness = 14, label, sublabel, tone = '
       <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">
         {children ?? (
           <>
-            <Text style={styles.label} numberOfLines={1} adjustsFontSizeToFit>
+            <FitText style={styles.label} numberOfLines={1}>
               {label}
-            </Text>
+            </FitText>
             {sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : null}
           </>
         )}

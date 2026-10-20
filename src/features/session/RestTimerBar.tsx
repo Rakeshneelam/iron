@@ -1,10 +1,34 @@
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { Icon } from '@/components/Icon';
 import { fmtClock } from '@/lib/date';
 import { selection } from '@/lib/haptics';
 import type { RestTimerView } from '@/services/restTimer';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { CSS_LINEAR, type AnimatedViewStyle } from '@/theme/curves';
+import { color, font, hit, material, radius, space } from '@/theme/tokens';
+
+import { clockStyle, TimerNudge } from './Countdown';
+
+/**
+ * The bar drains smoothly between the timer's own once-a-second updates.
+ *
+ * The remaining time is still the only source of truth — `endsAt - now`,
+ * recomputed on render — and this does not touch it. It just interpolates the
+ * width across the gap between two of those values, so a countdown reads as
+ * draining rather than ticking down in steps.
+ *
+ * Animating `width` is normally the one thing to avoid, because it re-runs layout
+ * for the node and its siblings every frame. This element is the exception the
+ * rule is written around: absolutely positioned, with no children and no
+ * siblings in flow, so nothing re-lays-out — and a `scaleX` would smear its
+ * corners and have to be anchored by hand.
+ */
+const DRAIN: AnimatedViewStyle = {
+  transitionProperty: ['width'],
+  transitionDuration: 1000,
+  transitionTimingFunction: CSS_LINEAR,
+};
 
 export interface RestTimerBarProps {
   timer: RestTimerView;
@@ -29,16 +53,19 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onAutoStart, onStar
     const left = Math.ceil(t.remainingMs / 1000);
     const total = t.totalMs || t.remainingMs;
     return (
-      <View style={styles.row} accessibilityLiveRegion="none">
+      // Running is the one live thing on this screen, so it is the one thing that
+      // glows. See `material.heat`.
+      <View style={[styles.row, styles.live]} accessibilityLiveRegion="none">
         <View style={styles.clockBox} accessible accessibilityLabel={`Rest, ${fmtClock(left)} left`}>
           <Text style={styles.eyebrow}>Rest</Text>
-          <Text style={styles.clock}>{fmtClock(left)}</Text>
+          {/* The same face the drill countdown wears, at dock size — see Countdown. */}
+          <Text style={clockStyle.bar}>{fmtClock(left)}</Text>
         </View>
         <View style={styles.flex} />
-        <Nudge label="−15" a11y="Fifteen seconds less rest" onPress={() => t.add(-15)} />
-        <Nudge label="+30" a11y="Thirty seconds more rest" onPress={() => t.add(30)} />
-        <Nudge label="Skip" a11y="Skip rest" quiet onPress={t.cancel} />
-        <View style={[styles.progress, { width: `${Math.max(0, Math.min(1, t.remainingMs / total)) * 100}%` }]} />
+        <TimerNudge label="−15" a11y="Fifteen seconds less rest" onPress={() => t.add(-15)} />
+        <TimerNudge label="+30" a11y="Thirty seconds more rest" onPress={() => t.add(30)} />
+        <TimerNudge label="Skip" a11y="Skip rest" quiet onPress={t.cancel} />
+        <Animated.View style={[styles.progress, DRAIN, { width: `${Math.max(0, Math.min(1, t.remainingMs / total)) * 100}%` }]} />
       </View>
     );
   }
@@ -73,25 +100,12 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onAutoStart, onStar
   );
 }
 
-function Nudge({ label, a11y, quiet, onPress }: { label: string; a11y: string; quiet?: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={a11y}
-      style={({ pressed }) => [styles.nudge, quiet && styles.nudgeQuiet, pressed && styles.pressed]}
-    >
-      <Text style={[styles.nudgeText, quiet && styles.nudgeTextQuiet]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    minHeight: 64,
+    minHeight: 76,
     paddingLeft: space.lg,
     paddingRight: space.md,
     backgroundColor: color.surface,
@@ -100,28 +114,14 @@ const styles = StyleSheet.create({
     borderColor: color.border,
     overflow: 'hidden',
   },
+  live: { borderColor: color.accent, boxShadow: material.heat },
   flex: { flex: 1, minWidth: 0 },
   idle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default },
-  title: { ...font.label, fontSize: 14, fontWeight: '600', ...font.numeric, color: color.text },
-  sub: { ...font.caption, fontSize: 12, color: color.textFaint },
+  title: { ...font.label, fontSize: 16, fontWeight: '700', ...font.numeric, color: color.text },
+  sub: { ...font.caption, fontSize: 13, color: color.textMuted },
   autoLabel: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textMuted },
-  clockBox: { minWidth: 88 },
+  clockBox: { minWidth: 96 },
   eyebrow: { ...font.eyebrow, fontSize: 10, color: color.textFaint },
-  clock: { ...font.title, fontSize: 30, fontWeight: '800', ...font.numeric, color: color.text },
-  nudge: {
-    minWidth: hit.default,
-    height: hit.default,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.md,
-    backgroundColor: color.surfaceHigh,
-    borderWidth: 1,
-    borderColor: color.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nudgeQuiet: { backgroundColor: 'transparent' },
-  nudgeText: { ...font.label, fontSize: 14, fontWeight: '700', ...font.numeric, color: color.text },
-  nudgeTextQuiet: { fontWeight: '600', color: color.textMuted },
-  pressed: { opacity: 0.7 },
-  progress: { position: 'absolute', left: 0, bottom: 0, height: 3, backgroundColor: color.accent },
+  /** 4px, not 3: the drain is the only thing on screen reporting the timer's state at a glance. */
+  progress: { position: 'absolute', left: 0, bottom: 0, height: 4, backgroundColor: color.accent },
 });

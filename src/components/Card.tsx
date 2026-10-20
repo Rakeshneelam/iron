@@ -1,13 +1,22 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import type { StyleProp } from 'react-native';
+import Animated from 'react-native-reanimated';
 
+import { edgeStyle, type AnimatedViewStyle } from '@/theme/curves';
 import { color, gap, radius, space } from '@/theme/tokens';
+
+import { Press } from './Press';
 
 export type CardTone = 'default' | 'accent' | 'positive' | 'warning' | 'danger';
 
 export interface CardProps {
   children?: ReactNode;
-  style?: StyleProp<ViewStyle>;
+  /**
+   * Animated rather than plain `ViewStyle`, so a caller can hand a card a
+   * transition or a keyframe animation. Ordinary StyleSheet styles still fit.
+   */
+  style?: StyleProp<AnimatedViewStyle>;
   onPress?: () => void;
   onLongPress?: () => void;
   tone?: CardTone;
@@ -23,16 +32,23 @@ const TONE_BORDER: Record<CardTone, string> = {
 
 export function Card({ children, style, onPress, onLongPress, tone = 'default' }: CardProps) {
   const base = [styles.card, { borderColor: TONE_BORDER[tone] }, style];
-  if (!onPress && !onLongPress) return <View style={base}>{children}</View>;
-  return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
-      style={({ pressed }) => [base, pressed && styles.pressed]}
-      accessibilityRole="button"
-    >
+  /**
+   * The light along the top edge. A hairline child rather than a border, so it
+   * costs no layout and does not push the content down a pixel — see `edgeStyle`.
+   */
+  const lit = (
+    <>
+      <View style={edgeStyle} pointerEvents="none" />
       {children}
-    </Pressable>
+    </>
+  );
+  // Animated in both branches, so a card accepts a transition whether or not it
+  // is pressable. With no animated style in the array this renders as a plain view.
+  if (!onPress && !onLongPress) return <Animated.View style={base}>{lit}</Animated.View>;
+  return (
+    <Press onPress={onPress} onLongPress={onLongPress} style={base} pressedStyle={styles.pressed} accessibilityRole="button">
+      {lit}
+    </Press>
   );
 }
 

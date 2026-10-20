@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { color, font, hit, space } from '@/theme/tokens';
+
+import { Press } from './Press';
 
 export interface SectionHeaderProps {
   title: string;
@@ -27,16 +29,15 @@ export function SectionHeader({ title, hint, action, right }: SectionHeaderProps
           {title}
         </Text>
         {action ? (
-          <Pressable
+          <Press
             onPress={action.onPress}
             accessibilityRole="button"
             accessibilityLabel={action.accessibilityLabel ?? action.label}
             // The link is text-sized; the target is not.
             hitSlop={{ top: space.sm, bottom: space.sm, left: space.md, right: space.md }}
-            style={({ pressed }) => pressed && styles.pressed}
           >
             <Text style={styles.action}>{action.label}</Text>
-          </Pressable>
+          </Press>
         ) : null}
         {right}
       </View>
@@ -51,5 +52,4 @@ const styles = StyleSheet.create({
   title: { ...font.eyebrow, color: color.textFaint, flexShrink: 1 },
   action: { ...font.caption, fontWeight: '600', color: color.accent },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
-  pressed: { opacity: 0.6 },
 });

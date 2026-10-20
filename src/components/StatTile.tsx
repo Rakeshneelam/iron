@@ -2,6 +2,8 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { color, font, radius, space } from '@/theme/tokens';
 
+import { FitText } from './FitText';
+
 export type StatTone = 'default' | 'accent' | 'positive' | 'warning' | 'danger' | 'muted';
 
 export interface StatTileProps {
@@ -31,9 +33,9 @@ const TONE: Record<StatTone, string> = {
 export function StatTile({ label, value, hint, tone = 'default' }: StatTileProps) {
   return (
     <View style={styles.tile}>
-      <Text style={[styles.value, { color: TONE[tone] }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+      <FitText style={[styles.value, { color: TONE[tone] }]} numberOfLines={1} minimumFontScale={0.7}>
         {value}
-      </Text>
+      </FitText>
       <Text style={styles.label} numberOfLines={1}>
         {label}
       </Text>

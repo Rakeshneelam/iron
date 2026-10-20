@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Card, EmptyState, Icon, ListCard, ListRow, MiniBars, Pill, PrimaryButton, Screen, SectionHeader, type PillTone } from '@/components';
+import { Press } from '@/components/Press';
 import { MUSCLE_LABEL, type Muscle } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { getCheckIn, listCheckIns, recentCheckIns } from '@/db/repositories/body';
@@ -103,9 +104,9 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
             <Text style={styles.muted}>Optional. Without one, today’s targets come from what you lifted alone.</Text>
           </>
         )}
-        <Pressable onPress={() => setEditing(today)} accessibilityRole="button" hitSlop={space.md} style={({ pressed }) => [styles.linkWrap, pressed && styles.dim]}>
+        <Press onPress={() => setEditing(today)} accessibilityRole="button" hitSlop={space.md} style={styles.linkWrap}>
           <Text style={styles.link}>{answered ? 'Edit check-in' : 'Check in now'}</Text>
-        </Pressable>
+        </Press>
       </Card>
 
       <SectionHeader title="By muscle" right={<Text style={styles.legend}>days since trained</Text>} />

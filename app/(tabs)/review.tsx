@@ -76,7 +76,7 @@ export default function ProgressScreen() {
     week.bodyweight.start !== null && week.bodyweight.end !== null && week.bodyweight.start !== week.bodyweight.end
       ? week.bodyweight.end - week.bodyweight.start
       : null;
-  const empty = done + week.cancelled === 0 && week.skipped === 0;
+  const empty = done + week.cancelled + week.skipped + week.rest === 0;
 
   const apply = (r: Recommendation) => {
     if (!r.change) return;
@@ -122,7 +122,9 @@ export default function ProgressScreen() {
       ) : (
         <Text style={styles.note}>
           {week.sets} sets · {week.exercises} different exercises
-          {week.skipped ? ` · ${week.skipped} skipped` : ''}
+          {week.skipped ? ` · ${week.skipped} missed` : ''}
+          {/* Rest days are stated, never scored: a week with three of them is not a worse week. */}
+          {week.rest ? ` · ${week.rest} rest ${week.rest === 1 ? 'day' : 'days'}` : ''}
           {week.cancelled ? ` · ${week.cancelled} cancelled` : ''}
         </Text>
       )}

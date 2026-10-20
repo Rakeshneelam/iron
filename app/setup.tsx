@@ -149,7 +149,11 @@ export default function Setup() {
     setSetting('setupDone', true);
     // Reminders are off until asked for; this only lays down the channels.
     void rescheduleAll();
-    router.replace(t ? '/' : '/program');
+    // Always Today, template or not (AGENTS §1.2). "Build my own" used to land on
+    // Plans, which taught the one wrong lesson on the first screen after setup:
+    // that a plan has to exist before anything can be logged. It does not — Today
+    // offers "Log a workout" with no plan at all, and Choose a plan is right there.
+    router.replace('/');
   };
 
   return (

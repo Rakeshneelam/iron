@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 import { Icon, type IconName } from './Icon';
+import { Press } from './Press';
 
 export type IconButtonTone = 'plain' | 'neutral' | 'accent' | 'danger';
 
@@ -30,14 +31,18 @@ export function IconButton({ icon, onPress, accessibilityLabel, label, tone = 'p
   const box = hit[size];
   const fg = tone === 'accent' || tone === 'danger' ? color.onAccent : color.text;
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
       onPress={onPress}
       hitSlop={space.xs}
-      style={({ pressed }) => [styles.wrap, disabled && styles.disabled, pressed && styles.pressed, style]}
+      touchStyle={style}
+      style={[styles.wrap, disabled && styles.disabled]}
+      // A `plain` icon button has no fill to darken, and 3% of a 22pt glyph is not
+      // a visible acknowledgement on its own, so the box lights up behind it.
+      pressedStyle={styles.held}
     >
       <View style={[styles.box, { width: box, height: box, backgroundColor: BG[tone] }]}>
         <Icon name={icon} size={size === 'gym' ? 26 : 22} color={fg} />
@@ -47,7 +52,7 @@ export function IconButton({ icon, onPress, accessibilityLabel, label, tone = 'p
           {label}
         </Text>
       ) : null}
-    </Pressable>
+    </Press>
   );
 }
 
@@ -55,6 +60,6 @@ const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: space.xs },
   box: { borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   label: { ...font.caption, color: color.textMuted },
-  pressed: { opacity: 0.6 },
+  held: { backgroundColor: color.surfaceHigh, borderRadius: radius.md },
   disabled: { opacity: 0.35 },
 });

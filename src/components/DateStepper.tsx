@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, StyleSheet, Text, View } from 'react-native';
 
 import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 import { Icon } from './Icon';
+import { Press } from './Press';
 import { PrimaryButton } from './PrimaryButton';
 
 /**
@@ -65,16 +66,18 @@ export function DateStepper({ value, onChange, max }: DateStepperProps) {
 
 function Arrow({ icon, label, disabled, onPress }: { icon: 'chevronLeft' | 'chevronRight'; label: string; disabled?: boolean; onPress: () => void }) {
   return (
-    <Pressable
+    <Press
       onPress={onPress}
       disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
-      style={({ pressed }) => [styles.arrow, pressed && styles.pressed, disabled && styles.disabled]}
+      feedback="highlight"
+      style={[styles.arrow, disabled && styles.disabled]}
+      pressedStyle={styles.pressed}
     >
       <Icon name={icon} size={20} color={color.text} />
-    </Pressable>
+    </Press>
   );
 }
 

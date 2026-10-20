@@ -44,7 +44,7 @@ screens off them, not tabs.
 
 | # | Surface | Purpose |
 |---|---|---|
-| 1 | **Today** | The workout for today, logged set by set, with next-set suggestions. Opens with the workout — the check-in is one optional row, and Start starts |
+| 1 | **Today** | What today is — plan, day, usual time, estimate — in one card, with Start workout under a thumb. No exercise list here (the workout shows it) and no check-in row (Start does) |
 | 2 | **Food** | Calories/macros with one-tap repeats of his real meals, plus a compact Water row for the day on screen |
 | 3 | **Body** | Three sections in one tab: **Weight** (smoothed trend, not raw dots), **Recovery** (check-in, sleep, correctable history), **Measurements**. Each has exactly one primary action |
 | 4 | **Plans** | Any number of plans (templates or custom), one active; days → exercises. Owns the training schedule |
@@ -57,6 +57,21 @@ screens off them, not tabs.
 > daily was the one Body excluded. Its content moved into Body as reusable
 > sections; `/daily` survives only as a redirect, because reminders scheduled by
 > older versions carry it. Do not reintroduce it. See `docs/02-ARCHITECTURE.md`.
+
+### The workout runs in stages
+
+**check-in → warm-up → the lifts → cool-down → summary.** The stage is persisted
+beside the session (`getSessionStage`), never held in React state, so a workout
+force-quit during its warm-up comes back to the warm-up. The walk between stages
+is pure and tested — `src/features/session/stages.ts`, `tests/session-stages.test.ts`
+— and a stage with nothing in it is stepped over rather than shown.
+
+Every stage is skippable in one tap, and skipping is recorded where it changes a
+prescription (a skipped warm-up earns the first big lift an extra ramp set). The
+warm-up and the cool-down share one interactive screen, `DrillStage`: one drill at
+a time, a rep count to tick off or the shared `Countdown`, never a checklist in a
+sheet. A session opened by an older build has no saved stage and resolves to
+`main`, so an upgrade never drops someone into a check-in mid-workout.
 
 The core intelligence is already written and tested in `src/engine/`. **Do not
 rewrite it.** Wire it up.

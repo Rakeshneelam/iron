@@ -5,15 +5,17 @@ export const STATUS_LABEL: Record<SessionStatus, string> = {
   active: 'In progress',
   completed: 'Completed',
   partial: 'Partial',
-  skipped: 'Skipped',
+  skipped: 'Missed',
+  rest: 'Rest day',
   cancelled: 'Cancelled',
 };
 
-/** Skipped is neutral, never a failure colour. */
+/** Neither a missed day nor a rest day is a failure, so neither gets a failure colour. */
 export const STATUS_TONE: Record<SessionStatus, PillTone> = {
   active: 'accent',
   completed: 'positive',
   partial: 'accent',
   skipped: 'muted',
+  rest: 'muted',
   cancelled: 'warning',
 };

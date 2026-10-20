@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
+import { Press } from '@/components/Press';
 import { fmtClockOfDay } from '@/features/settings/time';
 import { color, font, hit, radius } from '@/theme/tokens';
 
@@ -9,13 +10,13 @@ export function TimeAdjuster({ value, onChange, min = 0, max = 1439 }: { value: 
   const set = (v: number) => onChange(Math.min(max, Math.max(min, v)));
   return (
     <View style={styles.adjust}>
-      <Pressable style={({ pressed }) => [styles.btn, pressed && styles.pressed]} onPress={() => set(value - 15)} accessibilityRole="button" accessibilityLabel="Earlier">
+      <Press feedback="highlight" style={styles.btn} pressedStyle={styles.pressed} onPress={() => set(value - 15)} accessibilityRole="button" accessibilityLabel="Earlier">
         <Icon name="minus" size={18} color={color.textMuted} />
-      </Pressable>
+      </Press>
       <Text style={styles.value}>{fmtClockOfDay(value)}</Text>
-      <Pressable style={({ pressed }) => [styles.btn, pressed && styles.pressed]} onPress={() => set(value + 15)} accessibilityRole="button" accessibilityLabel="Later">
+      <Press feedback="highlight" style={styles.btn} pressedStyle={styles.pressed} onPress={() => set(value + 15)} accessibilityRole="button" accessibilityLabel="Later">
         <Icon name="plus" size={18} color={color.textMuted} />
-      </Pressable>
+      </Press>
     </View>
   );
 }

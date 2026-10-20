@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Card, Icon, IconButton, ListCard, ListRow, MiniBars, Pill, PrimaryButton, Ring, Screen, SectionHeader, Sheet, Stepper, toast } from '@/components';
 import { DateStepper, useSelectedDate } from '@/components/DateStepper';
+import { Press } from '@/components/Press';
 import { useLive } from '@/db/live';
 import { useSettings } from '@/db/repositories/settings';
 import { deleteEntry, getDayEntries, getDayTotal, historyMl, logWater, restoreEntry, updateEntry, type WaterEntry } from '@/db/repositories/water';
@@ -35,7 +36,7 @@ type AmountTarget = { mode: 'add' } | { mode: 'edit'; entry: WaterEntry };
  * below reads `date`, and every write is handed it explicitly.
  */
 export default function WaterScreen() {
-  const params = useLocalSearchParams<{ date?: string }>();
+  const params = useLocalSearchParams<{ date?: string; log?: string }>();
   const today = todayISO();
   // Food hands its own selected day over, so browsing yesterday's meals and tapping
   // through to Water does not silently land on today.
@@ -44,7 +45,13 @@ export default function WaterScreen() {
   const settings = useSettings();
 
   const [targetSheet, setTargetSheet] = useState(false);
-  const [sheet, setSheet] = useState<AmountTarget | null>(null);
+  /*
+   * `?log=custom` comes from the water reminder's "Other amount" action when what
+   * was typed into the notification could not be read as an amount — see
+   * `parseAmountMl`. The sheet opens on arrival so the amount is one entry away
+   * rather than one entry plus finding the button again.
+   */
+  const [sheet, setSheet] = useState<AmountTarget | null>(params.log === 'custom' ? { mode: 'add' } : null);
 
   const entries = useLive(() => getDayEntries(date), ['water_log'], [date]);
   const dayTotal = useLive(() => getDayTotal(date), ['water_log'], [date]);
@@ -122,16 +129,17 @@ export default function WaterScreen() {
 
       <View style={styles.quickRow}>
         {QUICK.map((q) => (
-          <Pressable
+          <Press
             key={q.ml}
             onPress={() => log(q.ml)}
             accessibilityRole="button"
             accessibilityLabel={`Add ${ml(q.ml)} to ${isToday ? 'today' : fmtDayLabel(date)}`}
-            style={({ pressed }) => [styles.quick, pressed && styles.pressed]}
+            style={styles.quick}
+            pressedStyle={styles.pressed}
           >
             <Text style={styles.quickAmount}>{q.ml}</Text>
             <Text style={styles.quickLabel}>ml · {q.label}</Text>
-          </Pressable>
+          </Press>
         ))}
       </View>
 
@@ -202,8 +210,10 @@ function AmountForm({ sheet, onClose, onAdd, date }: AmountProps & { sheet: Amou
 
   return (
     <View style={styles.stack}>
-      <Stepper suffix="ml" size="gym" value={amount} step={50} min={50} max={3000} onChange={setAmount} />
-      <Text style={styles.hint}>Long-press the number to type an exact amount.</Text>
+      {/* min 10, not 50: a custom amount means any amount, and the reminder's own
+          "Other amount" field accepts the same range (see `parseAmountMl`). */}
+      <Stepper suffix="ml" size="gym" value={amount} step={50} min={10} max={3000} onChange={setAmount} />
+      <Text style={styles.hint}>Long-press the number to type an exact amount in ml.</Text>
       <PrimaryButton
         label={sheet.mode === 'edit' ? 'Save' : `Add ${ml(amount)}${isToday ? '' : ` to ${fmtDayLabel(day)}`}`}
         size="gym"

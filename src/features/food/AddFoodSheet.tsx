@@ -22,10 +22,12 @@ import {
   MEAL_SLOTS,
   quickAddFoods,
   searchFoods,
+  ZERO,
   type Food,
   type MealSlot,
   type Recipe,
 } from '@/db/repositories/food';
+import { parseMeal, UNSURE, type ParsedItem } from '@/engine/foodText';
 import { fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
@@ -120,6 +122,55 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
     [visible, tab, q, searching],
   );
 
+  /**
+   * The same field understands a whole meal. "2 rotis and a katori of dal" is not
+   * a search term, so when the text describes amounts the sheet offers to log all
+   * of it at once instead of making you find three foods one at a time.
+   *
+   * Deliberately the search box rather than a sixth tab: there is nothing to learn
+   * and nothing to switch to, and a name typed on its own still just searches.
+   * Ordered most-used first, which is how the parser breaks ties (engine/foodText).
+   */
+  // Read once per open, not per keystroke. `tab` is in the deps on purpose: coming
+  // back from New food has to pick up the food that was just created.
+  const allFoods = useMemo(() => (visible ? searchFoods('', 400) : []), [visible, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const byId = useMemo(() => new Map(allFoods.map((f) => [f.id, f])), [allFoods]);
+  const parsed = useMemo(
+    () => (!visible || !searching || (tab !== 'frequent' && tab !== 'search') ? null : parseMeal(q, allFoods)),
+    [visible, tab, q, searching, allFoods],
+  );
+  const canLogText = parsed !== null && parsed.quantified && parsed.items.length > 0;
+  const parsedTotals = useMemo(() => {
+    let out = ZERO;
+    for (const it of parsed?.items ?? []) {
+      const f = byId.get(it.foodId);
+      if (!f) continue;
+      const m = foodMacros(f, it.grams);
+      out = { kcal: out.kcal + m.kcal, protein: out.protein + m.protein, carb: out.carb + m.carb, fat: out.fat + m.fat, fiber: out.fiber + m.fiber };
+    }
+    return out;
+  }, [parsed, byId]);
+
+  const kcalOf = (it: ParsedItem) => {
+    const f = byId.get(it.foodId);
+    return f ? Math.round(foodMacros(f, it.grams).kcal) : 0;
+  };
+
+  /** Each item is its own immediate write (AGENTS §1.3); Undo removes them as one. */
+  const logParsed = () => {
+    if (!parsed) return;
+    const ids = parsed.items
+      .map((it) => logFood({ dateISO, mealSlot: meal, foodId: it.foodId, grams: it.grams }))
+      .filter((x): x is string => x !== null);
+    if (ids.length) {
+      toast(`${ids.length} ${ids.length === 1 ? 'item' : 'items'} → ${meal}${dateISO === todayISO() ? '' : ` on ${fmtDayLabel(dateISO)}`}`, {
+        label: 'Undo',
+        onPress: () => deleteEntries(ids),
+      });
+    }
+    close();
+  };
+
   /** One tap from the list when the meal is known; otherwise the amount step asks which meal. */
   const quickAdd = (f: Food) => {
     if (slot === null) {
@@ -203,16 +254,77 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
             <TextInput
               value={q}
               onChangeText={setQ}
-              placeholder="Search foods"
+              placeholder="Search, or type a meal"
               placeholderTextColor={color.textFaint}
               style={styles.searchInput}
-              accessibilityLabel="Search foods"
+              accessibilityLabel="Search foods, or describe a meal such as two rotis and a katori of dal"
+              autoCapitalize="none"
+              autoCorrect={false}
               returnKeyType="search"
             />
             {searching ? <IconButton icon="close" accessibilityLabel="Clear search" onPress={() => setQ('')} /> : null}
           </View>
-          <SectionHeader title={searching ? 'Results' : 'Your usual foods'} action={{ label: 'Custom food', onPress: () => setTab('newFood') }} />
-          {searching && list.length === 0 ? <Text style={styles.muted}>Nothing matches “{q.trim()}”. Add it as a custom food.</Text> : null}
+          {/*
+            Typed a whole meal rather than a name. Nothing is logged until the
+            button below is pressed, every line says where its number came from,
+            and any line can be opened and corrected (AGENTS §1.5).
+          */}
+          {canLogText && parsed ? (
+            <View style={styles.parsed}>
+              <Text style={styles.parsedHead}>Understood as</Text>
+              {parsed.items.map((it, i) => (
+                <Pressable
+                  key={`${it.foodId}-${i}`}
+                  onPress={() => {
+                    const f = byId.get(it.foodId);
+                    if (!f) return;
+                    setFood(f);
+                    setServings(Math.max(0.5, Math.round(it.servings * 2) / 2));
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${it.name}, ${it.reason}, from "${it.text}". Tap to change the amount or pick a different food.`}
+                  style={({ pressed }) => [styles.parsedRow, pressed && styles.pressed]}
+                >
+                  <View style={styles.flex}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {it.name}
+                      {it.score < UNSURE ? <Text style={styles.unsure}> · check this</Text> : null}
+                    </Text>
+                    <Text style={styles.portion} numberOfLines={2}>
+                      {it.reason} · from “{it.text}”
+                    </Text>
+                  </View>
+                  <Text style={styles.kcal}>{kcalOf(it)}</Text>
+                </Pressable>
+              ))}
+              {parsed.unmatched.length ? (
+                <Text style={styles.muted}>
+                  Not recognised: {parsed.unmatched.map((u) => `“${u}”`).join(', ')}. Search for it below, or add it as a custom food.
+                </Text>
+              ) : null}
+              <Text style={styles.parsedTotal}>
+                {Math.round(parsedTotals.kcal)} kcal · {Math.round(parsedTotals.protein)} g protein · {Math.round(parsedTotals.carb)} g carbs ·{' '}
+                {Math.round(parsedTotals.fat)} g fat
+              </Text>
+              {slot === null ? (
+                <View style={styles.mealPick}>
+                  <Text style={styles.label}>Which meal?</Text>
+                  <ChipRow options={SLOT_CHIPS} value={meal} onChange={setMeal} fill={false} />
+                </View>
+              ) : null}
+              <PrimaryButton label={`Log ${parsed.items.length} ${parsed.items.length === 1 ? 'item' : 'items'} to ${meal}`} size="gym" onPress={logParsed} />
+            </View>
+          ) : null}
+
+          {/* A sentence the parser understood is not a failed search: "Nothing matches
+              “2 rotis and dal”" directly under a card that read it correctly is just
+              confusing, so the empty result list stands down. */}
+          {canLogText && list.length === 0 ? null : (
+            <>
+              <SectionHeader title={searching ? 'Results' : 'Your usual foods'} action={{ label: 'Custom food', onPress: () => setTab('newFood') }} />
+              {searching && list.length === 0 ? <Text style={styles.muted}>Nothing matches “{q.trim()}”. Add it as a custom food.</Text> : null}
+            </>
+          )}
           <View style={styles.list}>
             {list.map((f, i) => (
               <Pressable
@@ -480,6 +592,19 @@ const styles = StyleSheet.create({
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   macro: { ...font.label, ...font.numeric, color: color.textMuted, marginVertical: space.lg },
   mealPick: { marginBottom: space.md },
+  parsed: {
+    gap: space.sm,
+    marginTop: space.md,
+    padding: space.lg,
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.accent,
+  },
+  parsedHead: { ...font.eyebrow, color: color.textFaint },
+  parsedRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default, paddingVertical: space.xs },
+  parsedTotal: { ...font.label, ...font.numeric, color: color.text, marginVertical: space.xs },
+  unsure: { ...font.caption, fontWeight: '600', color: color.warning },
   gap: { marginTop: space.md },
   field: { flex: 1, marginTop: space.sm },
   pair: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },

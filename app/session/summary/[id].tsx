@@ -1,23 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Pill, PrimaryButton, Screen, SectionHeader, StatTile, TextField, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
-import { getExercise } from '@/db/repositories/exercises';
 import { countFinishedWorkouts, recentWorkouts, sessionRecords } from '@/db/repositories/progress';
-import { deleteSession, getSessionSummary, reopenSession, setSessionFeedback, type SetRow } from '@/db/repositories/sessions';
-import { useSettings } from '@/db/repositories/settings';
-import { cooldown, type CooldownLength } from '@/engine/recovery';
+import { deleteSession, getSessionSummary, isNoTraining, reopenSession, setSessionFeedback, type SetRow } from '@/db/repositories/sessions';
 import { workoutMilestone } from '@/engine/records';
-import { drillKit } from '@/features/profile';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { fmtSet } from '@/features/session/prescription';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
 import { BatteryCard } from '@/features/settings/BatteryCard';
 import { minutesLabel } from '@/features/warmup/labels';
-import { RoutineSheet } from '@/features/warmup/RoutineSheet';
 import { fmtDayLabel } from '@/lib/date';
 import { signed } from '@/lib/format';
 import { color, font, gap, hit, radius, space } from '@/theme/tokens';
@@ -29,20 +24,14 @@ const EFFORT = [
   { label: 'Hard', value: 8 },
   { label: 'All-out', value: 10 },
 ];
-const LENGTHS: { label: string; value: CooldownLength }[] = [
-  { label: 'Short', value: 'short' },
-  { label: 'Standard', value: 'standard' },
-];
-
 const measureOf = (exerciseId: string) => CATALOG_BY_ID.get(exerciseId)?.measure ?? 'reps';
 
 /**
  * A workout, whether you just finished it or found it in history.
  *
  * Those are different visits and the screen now says which. Finishing keeps
- * "Workout saved", Done → Today and the cool-down offer. Browsing an old one gets
- * its own date as the title, Back to wherever you came from, and no cool-down
- * suggestion for a session that ended three weeks ago (UX-09).
+ * "Workout saved" and Done → Today; browsing an old one gets its own date as the
+ * title and Back to wherever you came from (UX-09).
  *
  * Every exercise expands into its actual sets, warm-ups included, each opening the
  * same EditSetSheet the session screen uses. Correcting one recomputes that
@@ -54,7 +43,6 @@ export default function SummaryScreen() {
   const id = String(params.id);
   /** Set only by the finish path. Absent means someone navigated here to look. */
   const justFinished = params.just === '1';
-  const settings = useSettings();
   const summary = useLive(() => getSessionSummary(id), ['session', 'session_exercise', 'set_log', 'exercise', 'exercise_session_stat'], [id]);
   const records = useLive(() => sessionRecords(id), ['set_log', 'session', 'exercise'], [id]);
   const milestone = useLive(
@@ -62,16 +50,8 @@ export default function SummaryScreen() {
     ['session'],
     [id, justFinished],
   );
-  const [length, setLength] = useState<CooldownLength>('short');
-  const [cooling, setCooling] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editing, setEditing] = useState<SetRow | null>(null);
-  const kit = drillKit(settings);
-  const routine = useMemo(
-    () => cooldown((summary?.perExercise ?? []).map((e) => ({ primary: getExercise(e.exerciseId)?.primaryMuscles ?? [], sets: e.sets })), length, kit),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [summary?.perExercise.length, length, settings.tools, settings.equipmentPreset],
-  );
 
   /** Back to whoever pushed us; a cold link has no caller, so it falls back. */
   const back = () => (router.canGoBack() ? router.back() : router.replace('/history'));
@@ -92,7 +72,7 @@ export default function SummaryScreen() {
   const remove = () =>
     confirm({
       title: 'Delete this workout?',
-      message: s.status === 'skipped' ? undefined : `${summary.hardSets} sets will be removed from your history.`,
+      message: isNoTraining(s.status) ? undefined : `${summary.hardSets} sets will be removed from your history.`,
       confirmLabel: 'Delete',
       destructive: true,
       onConfirm: () => {
@@ -110,7 +90,7 @@ export default function SummaryScreen() {
   const totalReps = repsOnly.reduce((t, e) => t + e.rows.filter((r) => r.isWarmup === 0).reduce((a, r) => a + r.reps, 0), 0);
   const totalSeconds = timed.reduce((t, e) => t + e.rows.filter((r) => r.isWarmup === 0).reduce((a, r) => a + r.reps, 0), 0);
 
-  const title = justFinished ? (s.status === 'skipped' ? 'Skipped day' : 'Workout saved') : (summary.session.routineDayId ? undefined : 'Workout');
+  const title = justFinished ? (isNoTraining(s.status) ? STATUS_LABEL[s.status] : 'Workout saved') : (summary.session.routineDayId ? undefined : 'Workout');
 
   const perExercise = (
     <>
@@ -176,24 +156,23 @@ export default function SummaryScreen() {
       subtitle={justFinished ? `${fmtDayLabel(s.date)}, ${summary.durationMin} minutes` : `${summary.durationMin} minutes`}
       // Just finished: Done goes to Today. Browsing: Back goes where you came from.
       back={justFinished ? undefined : back}
-      dock={
-        justFinished ? (
-          <>
-            <PrimaryButton label="Done" size="gym" onPress={() => router.replace('/')} />
-            {/* A cool-down belongs to a workout you just did, not one from March. */}
-            {s.status !== 'skipped' && routine.items.length ? (
-              <PrimaryButton label={`Cool-down · ${minutesLabel(routine.seconds)}`} tone="neutral" icon={<Icon name="moon" size={18} />} onPress={() => setCooling(true)} />
-            ) : null}
-          </>
-        ) : undefined
-      }
+      // The cool-down used to be offered here, after the workout had been filed.
+      // It is a stage of the workout now — between the last lift and this screen
+      // (features/session/stages) — so by the time you are reading a summary it
+      // has already been done or skipped, and offering it again would be asking
+      // twice.
+      dock={justFinished ? <PrimaryButton label="Done" size="gym" onPress={() => router.replace('/')} /> : undefined}
     >
       <View style={styles.pills}>
         <Pill label={STATUS_LABEL[s.status]} tone={STATUS_TONE[s.status]} />
         {milestone ? <Pill label={milestone} tone="muted" /> : null}
       </View>
-      {s.status === 'skipped' ? (
-        <Text style={styles.note}>This day was skipped on purpose. It moved your plan on to the next day.</Text>
+      {isNoTraining(s.status) ? (
+        <Text style={styles.note}>
+          {s.status === 'rest'
+            ? 'A day off, on purpose. Your plan is exactly where it was — this costs you nothing.'
+            : 'This planned workout did not happen. Your plan moved on to the next day.'}
+        </Text>
       ) : (
         <>
           <View style={styles.tiles}>
@@ -250,7 +229,7 @@ export default function SummaryScreen() {
       )}
 
       <View style={styles.secondary}>
-        {s.status !== 'skipped' ? <PrimaryButton label="Reopen" tone="ghost" icon={<Icon name="undo" size={16} color={color.textMuted} />} style={styles.flex1} onPress={reopen} /> : null}
+        {!isNoTraining(s.status) ? <PrimaryButton label="Reopen" tone="ghost" icon={<Icon name="undo" size={16} color={color.textMuted} />} style={styles.flex1} onPress={reopen} /> : null}
         {/* Permanent deletion, kept in the corner it belongs in. */}
         <IconButton icon="trash" label="Delete" accessibilityLabel="Delete this workout permanently" onPress={remove} />
       </View>
@@ -262,20 +241,6 @@ export default function SummaryScreen() {
           session's aggregates and touch nothing else. */}
       <EditSetSheet set={editing} step={2.5} correcting onClose={() => setEditing(null)} />
 
-      <RoutineSheet
-        visible={cooling}
-        title="Cool-down"
-        routine={routine}
-        available={kit}
-        onClose={() => setCooling(false)}
-        modes={{ options: LENGTHS, value: length, onChange: setLength }}
-        doneLabel="Done"
-        onDone={() => {
-          setCooling(false);
-          toast('Cool-down done');
-        }}
-        onSkip={() => setCooling(false)}
-      />
     </Screen>
   );
 }

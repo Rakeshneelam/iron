@@ -4,6 +4,7 @@ import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
+import { EASE_OUT } from '@/theme/curves';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 interface ToastData {
@@ -61,6 +62,18 @@ let hostSeq = 0;
 const BASE_MS = 2500;
 const ACTION_MS = 5000;
 
+/**
+ * Built once at module scope. An inline `FadeInDown.duration(180)` in the JSX
+ * rebuilds the builder on every render of the host, which re-registers the
+ * animation each time the message changes.
+ *
+ * It leaves the way it arrived — entering from below and exiting sideways reads as
+ * two unrelated elements — and leaves faster than it came: the arrival deserves
+ * the time, the departure does not, because the user has finished reading.
+ */
+const TOAST_IN = FadeInDown.duration(180).easing(EASE_OUT);
+const TOAST_OUT = FadeOutDown.duration(150).easing(EASE_OUT);
+
 /** Mounted once in the root layout, and once per Sheet. Only the topmost renders. */
 export function ToastHost() {
   const current = useToastStore((s) => s.current);
@@ -113,7 +126,7 @@ export function ToastHost() {
 
   return (
     <View pointerEvents="box-none" style={[styles.host, { bottom: lift + space.sm }]}>
-      <Animated.View key={current.id} entering={FadeInDown.duration(180)} exiting={FadeOutDown.duration(150)} style={styles.toast}>
+      <Animated.View key={current.id} entering={TOAST_IN} exiting={TOAST_OUT} style={styles.toast}>
         <Text style={styles.message} numberOfLines={3}>
           {current.message}
         </Text>
