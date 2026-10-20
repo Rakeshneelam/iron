@@ -228,10 +228,10 @@ const styles = StyleSheet.create({
     borderColor: color.border,
     overflow: 'hidden',
   },
-  /** 132, not 108: a 60pt number needs ~72dp of glyph box, and the label and
-   *  footer take 40dp of the field. At 108 the number could never fit, which is
-   *  what the auto-shrink was quietly papering over. */
-  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 132 },
+  /** 112: a 44pt number needs ~53dp of glyph box and the label and footer take
+   *  40dp. The old 108 with a 60pt number could never fit, which is what the
+   *  auto-shrink was quietly papering over. */
+  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 112 },
   /** The target stretches the full height of the field; the fill inside it follows. */
   btnTouch: { alignSelf: 'stretch' },
   btn: { flex: 1, alignItems: 'center', justifyContent: 'center' },

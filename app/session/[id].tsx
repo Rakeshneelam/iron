@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, EmptyState, FitText, Icon, IconButton, ListCard, ListRow, Pill, type PillTone, Press, PrimaryButton, SectionHeader, setToastObstruction, Sheet, toast, useReducedMotion, type IconName } from '@/components';
+import { Card, EmptyState, Icon, IconButton, ListCard, ListRow, Pill, type PillTone, Press, PrimaryButton, SectionHeader, setToastObstruction, Sheet, toast, useReducedMotion, type IconName } from '@/components';
 import { CATALOG, CATALOG_BY_ID, type Stress } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import type { Exercise } from '@/db/repositories/exercises';
@@ -38,7 +38,7 @@ import {
 } from '@/db/repositories/sessions';
 import { setSetting, useSettings } from '@/db/repositories/settings';
 import { RULE_TEXT } from '@/engine/adjust';
-import { e1RM, type Readiness } from '@/engine/progression';
+import { e1RM } from '@/engine/progression';
 import { cooldown } from '@/engine/recovery';
 import { substitutes } from '@/engine/substitute';
 import { sessionWarmup } from '@/engine/warmup';
@@ -54,7 +54,7 @@ import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { Elapsed } from '@/features/session/Elapsed';
 import { PlateSheet } from '@/features/session/PlateSheet';
 import { nextStage, resolveStage, STAGE_LABEL, stagesShown, type SessionStage, type StageContent } from '@/features/session/stages';
-import { fmtSet, fmtSetList, liftOf, rampFor, readinessFrom, suggestFor, suggestionContext, verdictLabel, VERDICT_TONE, type SuggestionContext } from '@/features/session/prescription';
+import { fmtSet, fmtSetList, liftOf, rampFor, readinessFrom, suggestFor, suggestionContext, verdictLabel, VERDICT_TONE } from '@/features/session/prescription';
 import { RestTimerBar } from '@/features/session/RestTimerBar';
 import { AdvanceButton, SetControls, type Advance } from '@/features/session/SetControls';
 import { minutesLabel, MODE_OPTIONS } from '@/features/warmup/labels';
@@ -62,29 +62,7 @@ import { fmtClock, fmtDayLabel } from '@/lib/date';
 import { kg, kgNum } from '@/lib/format';
 import { success } from '@/lib/haptics';
 import { cancelRest, startRest, useRestTimer } from '@/services/restTimer';
-import { CSS_EASE_OUT, type AnimatedViewStyle } from '@/theme/curves';
 import { color, font, hit, layout, radius, space } from '@/theme/tokens';
-
-/**
- * The one piece of delight in the app, and it fires once per logged set.
- *
- * A tile that has just been filled in starts at the accent and cools to the same
- * grey as the sets before it. That is the whole visual thesis in one transition:
- * heat marks where work is being done, and it fades as the work becomes history.
- * It is also the only acknowledgement of a commit that survives the toast — you
- * can look away, look back, and still see which set you just did.
- *
- * `to` is deliberately identical to the tile's resting style, so when the
- * animation finishes there is nothing to unwind and no fill mode to get wrong.
- */
-const COOLING: AnimatedViewStyle = {
-  animationName: {
-    from: { backgroundColor: color.accentWash, borderColor: color.accent },
-    to: { backgroundColor: color.surface, borderColor: color.border },
-  },
-  animationDuration: 900,
-  animationTimingFunction: CSS_EASE_OUT,
-};
 
 const STATE_COLOR: Record<ExState, string> = {
   done: color.positive,
@@ -147,8 +125,17 @@ export default function SessionScreen() {
   const [whyOpen, setWhyOpen] = useState(false);
   /** Set by "Add another set": keeps the inputs open past the target sets. */
   const [addingExtra, setAddingExtra] = useState(false);
-  /** The set whose tile is still cooling. One id, not a flag — see COOLING. */
+  /**
+   * The set logged a moment ago, drawn hot in the record line and cooled on a
+   * timer. One id rather than a flag, so reopening a session with ten sets
+   * already in it does not set the whole line alight.
+   */
   const [justLogged, setJustLogged] = useState<string | null>(null);
+  useEffect(() => {
+    if (!justLogged) return;
+    const t = setTimeout(() => setJustLogged(null), 900);
+    return () => clearTimeout(t);
+  }, [justLogged]);
   const reduced = useReducedMotion();
 
   const counts = useMemo(() => {
@@ -320,26 +307,6 @@ export default function SessionScreen() {
   const cardio = entry?.pattern === 'conditioning';
   const weightLabel = cardio ? null : loadType === 'band' ? 'band' : loadType === 'bodyweight' ? '+kg' : 'kg';
   const setText = (w: number, r: number) => fmtSet(measure, w, r, loadType);
-
-  /**
-   * A set as a tile: the figure that changes, and the one that qualifies it.
-   *
-   * `fmtSet` gives one string — "102.5×12" — and at the size this number has to
-   * be read at (24pt, see `styles.tile`) that is 96dp of text in a cell 58dp
-   * wide on a 360dp phone with four sets on the row. Which is how it ended up at
-   * 16pt: three numbers were being crammed into a box with room for one.
-   *
-   * So the load gets the big line and the reps the small one, and RIR comes off
-   * the tile. It is still recorded, still in the "why" box's last-time line,
-   * still in the summary, and still one tap away in the editor the tile opens —
-   * it is just not one of the two numbers §3 asks to be readable at arm's length.
-   */
-  const tileText = (w: number, r: number): { big: string; small: string } => {
-    if (measure === 'time') return r >= 180 ? { big: String(Math.round(r / 60)), small: 'min' } : { big: String(r), small: 'sec' };
-    if (loadType === 'band') return w > 0 ? { big: `L${kgNum(w)}`, small: `× ${r}` } : { big: String(r), small: 'reps' };
-    if (w === 0) return { big: String(r), small: 'reps' };
-    return { big: kgNum(w), small: `× ${r}` };
-  };
 
   const workKg = suggestion ? (suggestion.verdict === 'CALIBRATE' ? (current?.slot?.startWeight ?? 0) : suggestion.weight) : 0;
   const ramp = current && liftIdx >= 0 ? rampFor(lifts, liftIdx, workKg, step, warmupState !== 'skipped') : [];
@@ -664,8 +631,6 @@ export default function SessionScreen() {
   const topWeight = exWork.reduce((m, s) => Math.max(m, s.weight), 0);
   const loadDelta = lastWork.length && measure === 'reps' ? Math.round((topWeight - lastTop) * 100) / 100 : 0;
 
-  const tileCount = current && !current.skipped ? Math.max(target, exWork.length) : 0;
-  const cols = Math.min(4, Math.max(3, tileCount));
 
   /**
    * Everything you can do to the exercise you are on.
@@ -815,137 +780,82 @@ export default function SessionScreen() {
                   <View style={styles.reasonIcon}>
                     <Icon name={verdictIcon} size={14} color={verdictTone} strokeWidth={2.4} />
                   </View>
-                  <Text style={styles.reasonText}>
-                    <Text style={[styles.reasonVerdict, { color: verdictTone }]}>{verdictLabel(suggestion)},</Text> {reason}{' '}
-                    <Text style={styles.why}>{whyOpen ? 'Hide' : 'Why?'}</Text>
+                  {/*
+                    Two lines collapsed, not three-plus. AGENTS §1.5 requires the
+                    reason be shown and overridable; it does not require the whole
+                    paragraph to sit above the number it explains. "Why?" is its
+                    own element rather than the tail of the sentence, so clipping
+                    the prose can never clip the way to expand it.
+                  */}
+                  <Text style={styles.reasonText} numberOfLines={whyOpen ? undefined : 2}>
+                    <Text style={[styles.reasonVerdict, { color: verdictTone }]}>{verdictLabel(suggestion)},</Text> {reason}
                   </Text>
+                  <Text style={styles.why}>{whyOpen ? 'Hide' : 'Why?'}</Text>
                 </Pressable>
                 {whyOpen ? (
                   <View style={styles.whyBox}>
-                    {/*
-                      The number you are dialling, drawn against every session of
-                      this lift you have ever logged. The hollow mark IS the
-                      stepper: move the weight and it moves, so "is this more than
-                      last time" is answered by looking rather than by arithmetic.
-                      This is the one place current and historical performance are
-                      the same picture.
-                    */}
-                    <LoadLine sessions={history} proposed={{ weight, reps }} measure={measure} height={120} />
                     <Text style={styles.caption}>{RULE_TEXT[suggestion.verdict]}</Text>
                     {last ? (
                       <Text style={styles.caption}>
                         Last time ({fmtDayLabel(last.date)}
                         {suggestion.daysSinceLast !== null && suggestion.daysSinceLast > 7 ? `, ${suggestion.daysSinceLast} days ago` : ''}):{' '}
-                        {lastWork.map((s) => `${setText(s.weight, s.reps)} @ RIR ${s.rir}`).join(', ')}
+                        {lastWork.map((sr) => `${setText(sr.weight, sr.reps)} @ RIR ${sr.rir}`).join(', ')}
                       </Text>
                     ) : null}
                   </View>
                 ) : null}
               </View>
             ) : null}
-
-            {tileCount ? (
-              <View style={styles.tiles}>
-                {Array.from({ length: tileCount }, (_, i) => {
-                  const s = exWork[i];
-                  const w = { width: `${100 / cols}%` as const };
-                  if (s) {
-                    return (
-                      <View key={s.id} style={[styles.tileCell, w]}>
-                        <Press
-                          onPress={() => setEditing(s)}
-                          accessibilityLabel={`Set ${i + 1}: ${setText(s.weight, s.reps)}${s.painFlag ? ', pain flagged' : ''}. Tap to edit.`}
-                          // The set just logged arrives warm and cools into the row
-                          // of the ones before it. See COOLING.
-                          style={[styles.tile, s.id === justLogged && !reduced && COOLING]}
-                          pressedStyle={styles.tileHeld}
-                        >
-                          <View style={styles.tileHead}>
-                            <Text style={styles.tileLabel}>Set {i + 1}</Text>
-                            <Icon name={s.painFlag ? 'flag' : 'check'} size={13} color={s.painFlag ? color.danger : color.positive} strokeWidth={2.6} />
-                          </View>
-                          <FitText style={styles.tileVal} numberOfLines={1} minimumFontScale={0.65}>
-                            {tileText(s.weight, s.reps).big}
-                          </FitText>
-                          <Text style={styles.tileSub} numberOfLines={1}>
-                            {tileText(s.weight, s.reps).small}
-                          </Text>
-                        </Press>
-                      </View>
-                    );
-                  }
-                  const now = i === exWork.length;
-                  const prev = lastWork[i];
-                  const ghost = prev
-                    ? tileText(prev.weight, prev.reps)
-                    : suggestion && !calibrating
-                      ? tileText(suggestion.weight, suggestion.repTarget[0])
-                      : null;
-                  return (
-                    <View key={`todo-${i}`} style={[styles.tileCell, w]}>
-                      <View style={[styles.tile, now ? styles.tileNow : styles.tileTodo]}>
-                        <Text style={[styles.tileLabel, now && styles.accentText]}>Set {i + 1}</Text>
-                        <FitText style={styles.tileGhost} numberOfLines={1} minimumFontScale={0.65}>
-                          {ghost ? ghost.big : '—'}
-                        </FitText>
-                        {/* The grey number has to say where it came from, or it reads
-                            as a target when it is what you did last Tuesday. */}
-                        <Text style={styles.tileSub} numberOfLines={1}>
-                          {ghost ? `${ghost.small} ${prev ? 'last' : 'target'}` : ' '}
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            ) : null}
-
-            {done && !addingExtra ? (
-              <View style={styles.doneCard}>
-                <View style={styles.doneHead}>
-                  <View style={styles.doneTick}>
-                    <Icon name="check" size={22} color={color.bg} strokeWidth={2.8} />
-                  </View>
-                  <View style={styles.flex1}>
-                    <Text style={styles.doneTitle}>All {exWork.length} sets logged</Text>
-                    {top && measure === 'reps' && top.weight > 0 ? (
-                      <Text style={styles.caption}>
-                        Top set {kgNum(top.weight)} × {top.reps} · est. 1-rep max {Math.round(e1RM(top.weight, top.reps, top.rir))} kg
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-                {lastWork.length ? (
-                  <View style={styles.doneFoot}>
-                    <Text style={[styles.caption, styles.flex1]}>
-                      Last time <Text style={styles.strong}>{setList(lastWork)}</Text>
-                    </Text>
-                    {loadDelta !== 0 ? (
-                      <Text style={[styles.delta, { color: loadDelta > 0 ? color.positive : color.textMuted }]}>
-                        {loadDelta > 0 ? '+' : '−'}
-                        {kg(Math.abs(loadDelta))}
-                      </Text>
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-
-            {done && !addingExtra && next ? <UpNext p={next} readiness={readiness} ctx={ctx} onPress={() => goTo(nextIdx)} /> : null}
 
             {/*
-              Two rows rather than six cells crammed into one. Six 11pt labels
-              across a 360dp phone gives each about 50dp, which clipped "Warm-up
-              3/4" and "Remove" — and the way to remove an exercise is not a
-              feature to hide behind an ellipsis (§3).
+              The record, and today as its newest columns.
+              
+              This replaced an 84dp row of set tiles that could only ever show
+              today. The tiles answered "what did I just do"; the readout line
+              inside this answers that at the same 16pt, and the picture above it
+              also answers "how does that compare to every other time I have done
+              this lift" — which the tiles could not, and which is the question
+              progressive overload actually is (§6).
+
+              The hollow accent mark is bound to the steppers below, so the number
+              under your thumb moves against your own history as you dial it.
             */}
-            <View style={styles.tools}>
-              {tools.map((t) => (
-                <View key={t.label} style={[styles.toolCell, { width: `${100 / toolCols}%` }]}>
-                  <Tool {...t} />
-                </View>
-              ))}
-            </View>
+            {!current.skipped ? (
+              <LoadLine
+                sessions={history}
+                measure={measure}
+                height={116}
+                today={{
+                  sets: exWork,
+                  target,
+                  proposed: done && !addingExtra ? null : { weight, reps },
+                  justLoggedId: reduced ? null : justLogged,
+                  onEditSet: setEditing,
+                }}
+              />
+            ) : null}
+
+            {/*
+              Done, in one line. It used to be a bordered card with a 40dp tick,
+              a title, a top-set line and a footer — directly under three tiles
+              already wearing green ticks, and directly above a dock whose button
+              said the same thing. Three statements of one fact (§29).
+            */}
+            {done && !addingExtra ? (
+              <View style={styles.doneRow}>
+                <Icon name="check" size={16} color={color.positive} strokeWidth={3} />
+                <Text style={styles.doneText}>
+                  All {exWork.length} logged
+                  {top && measure === 'reps' && top.weight > 0 ? ` · top ${kgNum(top.weight)}×${top.reps} · e1RM ${Math.round(e1RM(top.weight, top.reps, top.rir))} kg` : ''}
+                </Text>
+                {loadDelta !== 0 ? (
+                  <Text style={[styles.delta, { color: loadDelta > 0 ? color.positive : color.textMuted }]}>
+                    {loadDelta > 0 ? '+' : '−'}
+                    {kg(Math.abs(loadDelta))}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
 
             {showWarmups && !current.skipped ? (
               <ListCard>
@@ -1013,7 +923,6 @@ export default function SessionScreen() {
                   timer={rest}
                   seconds={cardio ? null : restSeconds}
                   autoStart={settings.restTimerAutoStart}
-                  onAutoStart={(v) => setSetting('restTimerAutoStart', v)}
                   onStart={() => void startRest(id, restSeconds, current.exercise.name)}
                 />
               }
@@ -1039,7 +948,7 @@ export default function SessionScreen() {
             // Skipped, or no exercise at all: rest keeps running, and the way on
             // is the same button a finished exercise gets.
             <View style={styles.restOnlyDock}>
-              <RestTimerBar timer={rest} seconds={null} autoStart={settings.restTimerAutoStart} onAutoStart={() => undefined} onStart={() => undefined} />
+              <RestTimerBar timer={rest} seconds={null} autoStart={settings.restTimerAutoStart} onStart={() => undefined} />
               {current ? <AdvanceButton {...wayOn} /> : null}
             </View>
           )}
@@ -1059,6 +968,39 @@ export default function SessionScreen() {
           </>
         }
       >
+        {/*
+          The per-exercise tools, under the name of the exercise they act on.
+
+          They used to be a 124dp strip in the scroll of the logging screen,
+          between the sets and the steppers — five occasional actions holding the
+          space two constant ones needed, which is what pushed Weight and Reps
+          off an 800dp screen. Moving them here also ends a real ambiguity: on a
+          finished exercise that strip rendered directly under a card titled with
+          the NEXT exercise, so How-to looked like it belonged to a lift it had
+          nothing to do with.
+        */}
+        {current && tools.length ? (
+          <>
+            <SectionHeader title={current.exercise.name} />
+            <View style={styles.tools}>
+              {tools.map((t) => (
+                <View key={t.label} style={[styles.toolCell, { width: `${100 / toolCols}%` }]}>
+                  {/* Every one of these changes the screen behind the sheet, so
+                      every one of them closes it. */}
+                  <Tool
+                    {...t}
+                    onPress={() => {
+                      setMenuOpen(false);
+                      setReordering(false);
+                      t.onPress();
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
+
         <SectionHeader
           title="Today's exercises"
           hint={reordering ? 'Move one up or down, or take it off today. Your plan is not changed.' : undefined}
@@ -1270,34 +1212,6 @@ function StatusMark({ state, now }: { state: ExState; now: boolean }) {
   return <View style={[styles.mark, { borderColor: ring }]}>{now ? <View style={styles.markDot} /> : null}</View>;
 }
 
-/**
- * What comes after this exercise, with its own numbers. A component of its own so
- * its prescription is worked out once when it appears, not on every tick of the
- * rest timer that re-renders the screen around it.
- */
-function UpNext({ p, readiness, ctx, onPress }: { p: PlannedExercise; readiness: Readiness | undefined; ctx: SuggestionContext; onPress: () => void }) {
-  const s = useMemo(() => suggestFor(p.exercise, p.slot, readiness, ctx), [p.exerciseId, readiness, ctx]); // eslint-disable-line react-hooks/exhaustive-deps
-  const lo = p.slot?.repLo ?? s.repTarget[0];
-  const hi = p.slot?.repHi ?? s.repTarget[1];
-  const load = s.verdict === 'CALIBRATE' ? (p.slot?.startWeight ? kg(p.slot.startWeight) : 'your pick') : s.weight > 0 ? kg(s.weight) : '';
-  return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`Up next: ${p.exercise.name}`} style={({ pressed }) => [styles.upNext, pressed && styles.pressed]}>
-      <View style={styles.flex1}>
-        <Text style={styles.eyebrow}>Up next{p.slot?.supersetGroup ? ` · superset ${p.slot.supersetGroup}` : ''}</Text>
-        <Text style={styles.upNextName} numberOfLines={2}>
-          {p.exercise.name}
-        </Text>
-      </View>
-      <View style={styles.upNextNums}>
-        <Text style={styles.upNextSets}>
-          {s.sets} × {s.measure === 'time' ? `${lo}–${hi} s` : `${lo}–${hi}`}
-        </Text>
-        {load ? <Text style={styles.footer}>{load}</Text> : null}
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.xs },
   flex: { flex: 1, backgroundColor: color.bg },
@@ -1339,42 +1253,10 @@ const styles = StyleSheet.create({
   reasonIcon: { width: 24, height: 24, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
   reasonText: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted, flex: 1 },
   reasonVerdict: { fontWeight: '600' },
-  why: { color: color.accent, fontWeight: '600' },
+  why: { ...font.caption, fontSize: 13, lineHeight: 20, color: color.accent, fontWeight: '700' },
   whyBox: { gap: space.sm, backgroundColor: color.surface, borderRadius: radius.md, borderWidth: 1, borderColor: color.border, padding: space.md, marginTop: space.sm },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -space.xs, rowGap: space.sm },
-  tileCell: { paddingHorizontal: space.xs },
-  /**
-   * A logged set, and what you check when you forget what you just did.
-   *
-   * It was 64dp tall with its number set at 16pt in `font.label` — the same size
-   * as a caption, for the one figure on the card that is a fact rather than a
-   * label. At arm's length on a bench that is unreadable. 84dp, 24pt, in the
-   * display face, with the sub-line at textMuted instead of textFaint.
-   */
-  tile: {
-    minHeight: 84,
-    paddingVertical: space.md - 2,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: color.border,
-    justifyContent: 'space-between',
-    gap: 2,
-  },
-  tileHeld: { backgroundColor: color.surfaceHigh },
-  tileNow: { backgroundColor: color.surfaceHigh, borderColor: color.accent },
-  tileTodo: { backgroundColor: 'transparent', borderStyle: 'dashed' },
-  tileHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  tileLabel: { ...font.eyebrow, fontSize: 10, color: color.textFaint },
-  tileVal: { ...font.numeric, fontSize: 24, lineHeight: 29, fontWeight: '800', letterSpacing: -0.6, color: color.text },
-  tileGhost: { ...font.numeric, fontSize: 24, lineHeight: 29, fontWeight: '700', letterSpacing: -0.6, color: color.textFaint },
-  tileSub: { ...font.caption, fontSize: 12, lineHeight: 15, color: color.textMuted },
-  doneCard: { backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.positive, padding: space.lg + 2, gap: space.md },
-  doneHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  doneTick: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: color.positive, alignItems: 'center', justifyContent: 'center' },
-  doneTitle: { ...font.heading, fontWeight: '700', color: color.text },
-  doneFoot: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderTopWidth: 1, borderTopColor: color.border, paddingTop: space.md },
+  doneRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  doneText: { ...font.caption, fontSize: 13, ...font.numeric, color: color.textMuted, flex: 1 },
   strong: { color: color.text, fontWeight: '600' },
   delta: { ...font.caption, fontWeight: '600', ...font.numeric },
   upNext: {
@@ -1389,9 +1271,6 @@ const styles = StyleSheet.create({
     borderColor: color.border,
   },
   eyebrow: { ...font.eyebrow, color: color.textFaint },
-  upNextName: { ...font.label, fontWeight: '600', color: color.text, marginTop: 2 },
-  upNextNums: { alignItems: 'flex-end' },
-  upNextSets: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text },
   tools: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: color.surface, borderRadius: radius.button, borderWidth: 1, borderColor: color.border, overflow: 'hidden' },
   toolCell: { minHeight: hit.gym },
   tool: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, minHeight: hit.gym },

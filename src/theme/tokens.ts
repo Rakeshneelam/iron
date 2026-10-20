@@ -98,7 +98,7 @@ export const font = {
   /** Tabular figures everywhere numbers change — no jitter on steppers or timers. */
   numeric: { fontFamily: family.display, fontVariant: ['tabular-nums'] as ['tabular-nums'] },
   /** The number being logged: weight and reps on the session screen. Nothing on screen is louder. */
-  hero: { fontFamily: family.display, fontSize: 60, lineHeight: 64, fontWeight: '800' as const, letterSpacing: -2 },
+  hero: { fontFamily: family.display, fontSize: 44, lineHeight: 50, fontWeight: '800' as const, letterSpacing: -1.4 },
   display: { fontFamily: family.display, fontSize: 44, lineHeight: 48, fontWeight: '800' as const, letterSpacing: -1.5 },
   title: { fontFamily: family.display, fontSize: 28, lineHeight: 34, fontWeight: '700' as const, letterSpacing: -0.5 },
   /** A pushed screen's title, beside its back arrow. */

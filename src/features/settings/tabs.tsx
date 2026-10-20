@@ -126,7 +126,7 @@ export function WorkoutTab() {
     <>
       <SectionHeader title="Rest timer" />
       <ListCard>
-        <ToggleRow title="Start rest after each set" sub="Runs in the row above Log set. It also has its own switch there." value={s.restTimerAutoStart} onChange={(v) => setSetting('restTimerAutoStart', v)} />
+        <ToggleRow title="Start rest after each set" sub="The timer starts the moment you log a set, in the row above Log set." value={s.restTimerAutoStart} onChange={(v) => setSetting('restTimerAutoStart', v)} />
         <ToggleRow divider title="Haptics" sub="A buzz when a set logs, a number steps or rest ends." value={s.hapticsEnabled} onChange={(v) => setSetting('hapticsEnabled', v)} />
       </ListCard>
       <SectionHeader title="Warm-up" hint="What a workout offers before the first set. You can change it there too." />

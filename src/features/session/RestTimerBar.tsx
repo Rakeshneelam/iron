@@ -1,12 +1,11 @@
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { Icon } from '@/components/Icon';
 import { fmtClock } from '@/lib/date';
-import { selection } from '@/lib/haptics';
 import type { RestTimerView } from '@/services/restTimer';
 import { CSS_LINEAR, type AnimatedViewStyle } from '@/theme/curves';
-import { color, font, hit, material, radius, space } from '@/theme/tokens';
+import { color, font, material, radius, space } from '@/theme/tokens';
 
 import { clockStyle, TimerNudge } from './Countdown';
 
@@ -35,7 +34,6 @@ export interface RestTimerBarProps {
   /** This exercise's planned rest. Null when there is nothing to rest from (cardio, no exercise). */
   seconds: number | null;
   autoStart: boolean;
-  onAutoStart: (on: boolean) => void;
   onStart: () => void;
 }
 
@@ -48,7 +46,7 @@ export interface RestTimerBarProps {
  * rather than subscribed to here: it has to survive the current exercise being
  * skipped, removed or absent, so the screen owns the one subscription.
  */
-export function RestTimerBar({ timer: t, seconds, autoStart, onAutoStart, onStart }: RestTimerBarProps) {
+export function RestTimerBar({ timer: t, seconds, autoStart, onStart }: RestTimerBarProps) {
   if (t.running) {
     const left = Math.ceil(t.remainingMs / 1000);
     const total = t.totalMs || t.remainingMs;
@@ -70,33 +68,28 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onAutoStart, onStar
     );
   }
   if (seconds === null) return null;
+  /*
+   * Idle, this is one thin line, not a card.
+   *
+   * It used to be 76dp carrying a two-line block and a duplicate of the
+   * "Start rest after each set" switch that already lives in Settings — a
+   * preference someone changes once, permanently occupying the dock of the
+   * screen where Weight, Reps and Log set were fighting for room. The switch is
+   * gone; the setting is where settings are.
+   */
   return (
-    <View style={styles.row}>
-      <Pressable
-        style={styles.idle}
-        disabled={autoStart}
-        onPress={onStart}
-        accessibilityRole={autoStart ? undefined : 'button'}
-        accessibilityLabel={autoStart ? `Rest ${fmtClock(seconds)}, starts when you log a set` : `Start ${fmtClock(seconds)} rest now`}
-      >
-        <Icon name="timer" size={22} color={color.textMuted} />
-        <View style={styles.flex}>
-          <Text style={styles.title}>Rest {fmtClock(seconds)}</Text>
-          <Text style={styles.sub}>{autoStart ? 'Starts when you log a set' : 'Tap to start it now'}</Text>
-        </View>
-      </Pressable>
-      <Text style={styles.autoLabel}>Auto-start</Text>
-      <Switch
-        value={autoStart}
-        onValueChange={(v) => {
-          selection();
-          onAutoStart(v);
-        }}
-        accessibilityLabel="Auto-start rest timer"
-        trackColor={{ false: color.border, true: color.accent }}
-        thumbColor={autoStart ? color.onAccent : color.textMuted}
-      />
-    </View>
+    <Pressable
+      style={styles.idleRow}
+      disabled={autoStart}
+      onPress={onStart}
+      accessibilityRole={autoStart ? undefined : 'button'}
+      accessibilityLabel={autoStart ? `Rest ${fmtClock(seconds)}, starts when you log a set` : `Start ${fmtClock(seconds)} rest now`}
+    >
+      <Icon name="timer" size={16} color={color.textFaint} />
+      <Text style={styles.idleText} numberOfLines={1}>
+        Rest {fmtClock(seconds)} <Text style={styles.idleHint}>{autoStart ? 'starts when you log a set' : '· tap to start now'}</Text>
+      </Text>
+    </Pressable>
   );
 }
 
@@ -116,10 +109,9 @@ const styles = StyleSheet.create({
   },
   live: { borderColor: color.accent, boxShadow: material.heat },
   flex: { flex: 1, minWidth: 0 },
-  idle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default },
-  title: { ...font.label, fontSize: 16, fontWeight: '700', ...font.numeric, color: color.text },
-  sub: { ...font.caption, fontSize: 13, color: color.textMuted },
-  autoLabel: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textMuted },
+  idleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, minHeight: 36 },
+  idleText: { ...font.caption, fontSize: 13, ...font.numeric, color: color.textMuted },
+  idleHint: { color: color.textFaint },
   clockBox: { minWidth: 96 },
   eyebrow: { ...font.eyebrow, fontSize: 10, color: color.textFaint },
   /** 4px, not 3: the drain is the only thing on screen reporting the timer's state at a glance. */
