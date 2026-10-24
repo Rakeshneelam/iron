@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Pill, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
+import { ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Pill, Press, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { countFinishedWorkouts, recentWorkouts, sessionRecords } from '@/db/repositories/progress';
@@ -103,8 +103,10 @@ export default function SummaryScreen() {
           const open = expanded === e.exerciseId;
           return (
             <View key={e.exerciseId} style={[i > 0 && styles.divider]}>
-              <Pressable
+              <Press
+                feedback="highlight"
                 style={styles.row}
+                pressedStyle={styles.pressedRow}
                 onPress={() => setExpanded(open ? null : e.exerciseId)}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: open }}
@@ -125,12 +127,14 @@ export default function SummaryScreen() {
                   </Text>
                 ) : null}
                 <Icon name={open ? 'chevronUp' : 'chevronDown'} size={18} color={color.textFaint} />
-              </Pressable>
+              </Press>
               {open
                 ? e.rows.map((r, n) => (
-                    <Pressable
+                    <Press
                       key={r.id}
+                      feedback="highlight"
                       style={styles.setRow}
+                      pressedStyle={styles.pressedRow}
                       onPress={() => setEditing(r)}
                       accessibilityRole="button"
                       accessibilityLabel={`${r.isWarmup === 1 ? 'Warm-up' : `Set ${n + 1}`}: ${fmtSet(measure, r.weight, r.reps)}. Tap to correct.`}
@@ -140,7 +144,7 @@ export default function SummaryScreen() {
                       {r.painFlag === 1 ? <Text style={styles.pain}>pain</Text> : null}
                       {r.isWarmup === 0 && measure === 'reps' ? <Text style={styles.muted}>RIR {r.rir}</Text> : null}
                       <Icon name="edit" size={16} color={color.textMuted} />
-                    </Pressable>
+                    </Press>
                   ))
                 : null}
             </View>
@@ -266,6 +270,7 @@ export default function SummaryScreen() {
 }
 
 const styles = StyleSheet.create({
+  pressedRow: { backgroundColor: color.surfaceHigh },
   flex1: { flex: 1 },
   pills: { flexDirection: 'row', gap: space.sm },
   tiles: { marginTop: space.lg },

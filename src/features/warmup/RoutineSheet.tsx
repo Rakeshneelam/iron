@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
 import { Icon } from '@/components/Icon';
 import { IconButton } from '@/components/IconButton';
+import { Press } from '@/components/Press';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
 import { doseLabel } from '@/data/drills';
@@ -78,12 +79,12 @@ export function RoutineSheet<M extends string>(p: RoutineSheetProps<M>) {
               <View key={it.drill.id}>
                 {header ? <Text style={styles.phase}>{PHASE_LABEL[it.phase]}</Text> : null}
                 <View style={styles.row}>
-                  <Pressable style={styles.flex} onPress={() => setOpen(open === it.drill.id ? null : it.drill.id)} accessibilityHint="Shows how to do it">
+                  <Press feedback="highlight" touchStyle={styles.flex} style={styles.drillText} pressedStyle={styles.pressedRow} onPress={() => setOpen(open === it.drill.id ? null : it.drill.id)} accessibilityHint="Shows how to do it">
                     <Text style={styles.name}>{it.drill.name}</Text>
                     <Text style={styles.muted}>
                       {doseLabel(it.dose)}. {it.why}
                     </Text>
-                  </Pressable>
+                  </Press>
                   <IconButton icon="swap" accessibilityLabel={`Replace ${it.drill.name}`} onPress={() => replace(i)} />
                   <IconButton icon="close" accessibilityLabel={`Remove ${it.drill.name}`} onPress={() => setItems(items.filter((_, j) => j !== i))} />
                 </View>
@@ -115,6 +116,8 @@ export function RoutineSheet<M extends string>(p: RoutineSheetProps<M>) {
 }
 
 const styles = StyleSheet.create({
+  pressedRow: { backgroundColor: color.surfaceHigh },
+  drillText: { paddingVertical: 4, paddingHorizontal: 4, borderRadius: 4 },
   stack: { gap: space.xs, paddingBottom: space.lg },
   flex: { flex: 1 },
   phase: { ...font.label, color: color.textMuted, marginTop: space.lg, marginBottom: space.xs },

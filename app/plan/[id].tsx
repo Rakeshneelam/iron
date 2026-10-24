@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, EmptyState, Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, SectionHeader, Stepper, TextField, toast } from '@/components';
+import { Card, confirm, EmptyState, Icon, IconButton, ListCard, ListRow, Press, PrimaryButton, Screen, SectionHeader, Stepper, TextField, toast } from '@/components';
 import { useLive } from '@/db/live';
 import {
   addDay,
@@ -104,13 +104,13 @@ export default function PlanScreen() {
         onPress={() => router.push(`/program/${addDay(id, `Day ${detail.days.length + 1}`).id}`)}
       />
 
-      <Pressable style={styles.toggle} onPress={() => setShowVolume(!showVolume)} accessibilityRole="button">
+      <Press feedback="highlight" style={styles.toggle} pressedStyle={styles.pressedRow} onPress={() => setShowVolume(!showVolume)} accessibilityRole="button">
         <SectionHeader title="Weekly sets per muscle" />
         <Icon name={showVolume ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
-      </Pressable>
+      </Press>
       {showVolume ? (
         <>
-          <Text style={styles.hint}>Green is the productive range for most people. Grey is below the minimum; red is more than most recover from.</Text>
+          <Text style={styles.hint}>The outline is the productive range for most people. Short of it is below the minimum; past its end is more than most recover from.</Text>
           <VolumeList weekly={detail.weekly} />
         </>
       ) : null}
@@ -156,6 +156,7 @@ export default function PlanScreen() {
 }
 
 const styles = StyleSheet.create({
+  pressedRow: { backgroundColor: color.surfaceHigh },
   flex1: { flex: 1 },
   nameInput: {
     ...font.heading,

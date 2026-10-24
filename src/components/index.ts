@@ -18,7 +18,6 @@ export { Screen, useReducedMotion, type ScreenProps } from './Screen';
 export { SectionHeader, type SectionHeaderProps } from './SectionHeader';
 export { SegmentTabs } from './SegmentTabs';
 export { Sheet, type SheetProps } from './Sheet';
-export { StatTile, type StatTileProps, type StatTone } from './StatTile';
 export { TargetField, type TargetFieldProps } from './TargetField';
 export { TextField, type TextFieldProps } from './TextField';
 export { Stepper, type StepperProps } from './Stepper';

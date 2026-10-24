@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   timer: { alignItems: 'center', gap: space.sm, marginVertical: space.md },
   // fontSize must not exceed the inherited lineHeight or the digits clip: display
   // carries lineHeight 48, so a 48px clock needs its own.
-  clock: { ...font.display, ...font.numeric, fontSize: 48, lineHeight: 54, color: color.text },
+  clock: { ...font.display, fontSize: 56, lineHeight: 60, color: color.text },
   side: { ...font.label, color: color.textMuted },
   nav: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   flex: { flex: 1 },

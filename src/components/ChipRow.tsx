@@ -121,6 +121,6 @@ const styles = StyleSheet.create({
   on: { backgroundColor: color.text, borderColor: color.text },
   pressed: { backgroundColor: color.surfaceHigh },
   text: { ...font.label, fontWeight: '600', color: color.textMuted, textAlign: 'center' },
-  textGym: { ...font.heading, ...font.numeric, color: color.textMuted },
+  textGym: { ...font.measure, fontSize: 20, lineHeight: 24, color: color.textMuted },
   textOn: { color: color.bg },
 });

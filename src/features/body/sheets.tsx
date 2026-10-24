@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { DateStepper } from '@/components/DateStepper';
 import { IconButton } from '@/components/IconButton';
+import { Press } from '@/components/Press';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
 import { Stepper } from '@/components/Stepper';
@@ -255,9 +256,11 @@ export function SiteSheet({ site, rows, onClose }: { site: string | null; rows: 
                 </View>
               </View>
             ) : (
-              <Pressable
+              <Press
                 key={r.id}
+                feedback="highlight"
                 style={styles.row}
+                pressedStyle={styles.pressedRow}
                 onPress={() => {
                   setDraft(r.cm);
                   setDraftDate(r.date);
@@ -277,7 +280,7 @@ export function SiteSheet({ site, rows, onClose }: { site: string | null; rows: 
                     }}
                   />
                 </View>
-              </Pressable>
+              </Press>
             ),
           )}
         </View>
@@ -287,6 +290,7 @@ export function SiteSheet({ site, rows, onClose }: { site: string | null; rows: 
 }
 
 const styles = StyleSheet.create({
+  pressedRow: { backgroundColor: color.surfaceHigh },
   stack: { gap: space.md, paddingBottom: space.lg },
   hint: { ...font.caption, color: color.textMuted },
   center: { textAlign: 'center', marginTop: space.xs },
@@ -294,7 +298,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
   cell: { width: '47%' },
   save: { marginTop: space.xl, marginBottom: space.md },
-  big: { ...font.title, ...font.numeric, color: color.text, textAlign: 'center' },
+  big: { ...font.measure, fontSize: 34, lineHeight: 38, color: color.text, textAlign: 'center' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.border },
   rowEnd: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   editRow: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md },

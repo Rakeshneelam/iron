@@ -10,7 +10,7 @@ import { lastTrainedByMuscle } from '@/db/repositories/progress';
 import { readinessModifier } from '@/engine/progression';
 import { CheckInSheet, sleepLabel } from '@/features/checkin/CheckInSheet';
 import { addDays, daysBetweenISO, fmtDayLabel, lastNDays, parseISODate, todayISO } from '@/lib/date';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { color, font, hit, space } from '@/theme/tokens';
 
 import type { BodySectionProps } from './WeightSection';
 
@@ -22,13 +22,8 @@ const MUSCLES: readonly Muscle[] = ['chest', 'back', 'shoulders', 'quads', 'hams
 
 const mean = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-/**
- * How recovered a muscle is from the days since it last had a working set.
- * ponytail: a fixed 40% + 16%/day ramp, full by day 4 — no volume or soreness
- * input. Weight it by that session's sets if the bars ever disagree with how
- * people feel.
- */
-const recovered = (days: number) => Math.min(1, 0.4 + 0.16 * days);
+/** The window the muscle lines span: two weeks, today at the right. */
+const SPAN_DAYS = 14;
 
 /** The engine's readiness score, in words. It only ever lowers a target, never raises one. */
 const READINESS: Record<string, { title: string; pill: string; tone: PillTone }> = {
@@ -109,33 +104,43 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
         </Press>
       </Card>
 
-      <SectionHeader title="By muscle" right={<Text style={styles.legend}>days since trained</Text>} />
-      <ListCard>
+      {/*
+        The fact, not a verdict on it. These rows used to be fill bars of a
+        "recovered %" from a fixed 40%-plus-16%-a-day ramp, green or amber — a
+        physiological claim the data cannot make (brief §5). Each row is now two
+        weeks on a line, with a solid mark on the day that muscle last got a
+        working set: what happened, in the app's own marks, and nothing inferred.
+      */}
+      <SectionHeader title="By muscle" right={<Text style={styles.legend}>last two weeks, today at the right</Text>} />
+      <View>
         {muscles.map((m, i) => {
           const last = trained.get(m);
           const days = last ? daysBetweenISO(last, today) : null;
-          const pct = days === null ? 1 : recovered(days);
-          const tone = pct >= 0.7 ? color.positive : color.warning;
           const label = MUSCLE_LABEL[m as Muscle] ?? m;
+          const at = days === null ? null : ((SPAN_DAYS - 1 - Math.min(SPAN_DAYS - 1, days)) / (SPAN_DAYS - 1)) * 100;
           return (
             <View
               key={m}
               style={[styles.muscle, i > 0 && styles.divider]}
               accessible
-              accessibilityLabel={`${label}: ${days === null ? 'not trained in two weeks' : `trained ${days === 0 ? 'today' : `${days} days ago`}`}, ${pct >= 0.7 ? 'recovered' : 'still recovering'}`}
+              accessibilityLabel={`${label}: ${days === null ? 'not trained in the last two weeks' : `last trained ${days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`}`}`}
             >
               <Text style={styles.muscleName} numberOfLines={1}>
                 {label}
               </Text>
-              <View style={styles.track}>
-                <View style={[styles.fill, { width: `${pct * 100}%`, backgroundColor: tone }]} />
+              <View style={styles.span}>
+                <View style={styles.spanLine} />
+                {Array.from({ length: SPAN_DAYS }, (_, d) => (
+                  <View key={d} style={[styles.spanTick, { left: `${(d / (SPAN_DAYS - 1)) * 100}%` }]} />
+                ))}
+                {at !== null ? <View style={[styles.spanMark, { left: `${at}%` }]} /> : null}
               </View>
               <Text style={styles.ago}>{days === null ? '—' : days === 0 ? 'today' : `${days} d ago`}</Text>
             </View>
           );
         })}
-      </ListCard>
-      <Text style={styles.footnote}>Green is recovered, amber is still recovering. It never blocks a workout.</Text>
+      </View>
+      <Text style={styles.footnote}>Each mark is the last day that muscle got a working set. It never blocks a workout.</Text>
 
       <SectionHeader title="Sleep" hint="Last 14 nights, from your check-ins." />
       <Card>
@@ -195,8 +200,10 @@ const styles = StyleSheet.create({
   muscle: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 44 },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
   muscleName: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text, width: 88 },
-  track: { flex: 1, height: space.sm, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, overflow: 'hidden' },
-  fill: { height: space.sm, borderRadius: radius.pill },
+  span: { flex: 1, height: 14, justifyContent: 'center' },
+  spanLine: { height: 1, backgroundColor: color.border },
+  spanTick: { position: 'absolute', top: 5, width: 1, height: 4, marginLeft: -0.5, backgroundColor: color.rule },
+  spanMark: { position: 'absolute', top: 2, width: 6, height: 10, marginLeft: -3, borderRadius: 1.5, backgroundColor: color.text },
   ago: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint, width: 52, textAlign: 'right' },
   footnote: { ...font.caption, fontSize: 12, color: color.textFaint },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },

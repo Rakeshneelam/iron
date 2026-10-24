@@ -196,6 +196,24 @@ export function DrillStage(p: DrillStageProps) {
 
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
         <View style={styles.titleBlock}>
+          {/*
+            The routine as its drills, in the marks the workout uses: done solid,
+            the one you are on in heat, the rest open. Tap any to go to it.
+          */}
+          <View style={styles.rail} accessibilityRole="adjustable" accessibilityLabel={`Drill ${idx + 1} of ${items.length}, ${done.size} done`}>
+            {items.map((x, j) => (
+              <Press
+                key={x.drill.id}
+                onPress={() => go(j)}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                hitSlop={{ top: space.sm, bottom: space.sm }}
+                touchStyle={styles.railCell}
+                feedback="none"
+                style={[styles.railMark, done.has(x.drill.id) ? styles.railDone : j === idx ? styles.railNow : styles.railTodo]}
+              />
+            ))}
+          </View>
           <Text style={styles.eyebrow}>
             {PHASE_LABEL[item.phase]}, {idx + 1} of {items.length}
           </Text>
@@ -213,7 +231,7 @@ export function DrillStage(p: DrillStageProps) {
         {total > 0 ? (
           <Countdown timer={timer} total={total} size={192} caption={item.dose.perSide ? 'Hold, each side' : 'Hold'} note={sideNote} />
         ) : (
-          <View style={styles.repsCard}>
+          <View style={styles.repsBlock}>
             <Text style={styles.repsCaption}>{item.dose.perSide ? 'Each side' : 'Reps'}</Text>
             <FitText style={styles.repsValue} numberOfLines={1} minimumFontScale={0.6}>
               {item.dose.reps ?? 8}
@@ -373,21 +391,27 @@ const styles = StyleSheet.create({
   headerMeta: { ...font.caption, color: color.textMuted },
   scroll: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xl, gap: space.lg },
   titleBlock: { gap: space.xs },
+  rail: { flexDirection: 'row', gap: 3, marginBottom: space.sm },
+  railCell: { flex: 1, maxWidth: 28 },
+  railMark: { height: 8, borderRadius: 1.5 },
+  railDone: { backgroundColor: color.text },
+  railNow: { borderWidth: 1.5, borderColor: color.accent },
+  railTodo: { borderWidth: 1, borderColor: color.textFaint },
   eyebrow: { ...font.eyebrow, color: color.textFaint },
   name: { ...font.title, fontSize: 28, lineHeight: 34, color: color.text },
   why: { ...font.label, color: color.textMuted },
 
-  repsCard: {
+  /** The count on its own, in the measuring face — no box: the number is the thing. */
+  repsBlock: {
     alignItems: 'center',
     gap: space.xs,
-    paddingVertical: space.xl,
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
+    paddingVertical: space.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: color.border,
   },
-  repsCaption: { ...font.eyebrow, color: color.textFaint },
-  repsValue: { ...font.numeric, fontSize: 72, lineHeight: 78, fontWeight: '800', letterSpacing: -3, color: color.text },
+  repsCaption: { ...font.eyebrow, color: color.textMuted },
+  repsValue: { ...font.measure, fontSize: 96, lineHeight: 100, fontWeight: '800', letterSpacing: -1, color: color.text },
   repsNote: { ...font.caption, fontSize: 12, color: color.textMuted },
 
 
@@ -396,15 +420,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     minHeight: hit.default,
-    paddingHorizontal: space.lg,
-    backgroundColor: color.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
   },
   cueHeld: { backgroundColor: color.surfaceHigh },
   cueHeadText: { ...font.label, fontWeight: '600', color: color.text, flex: 1 },
-  cues: { gap: space.md, alignItems: 'center', backgroundColor: color.surface, borderRadius: radius.md, borderWidth: 1, borderColor: color.border, padding: space.lg, marginTop: -space.md },
+  cues: { gap: space.md, alignItems: 'center', borderLeftWidth: 2, borderLeftColor: color.border, paddingLeft: space.lg, paddingVertical: space.xs, marginTop: -space.sm },
   cueRow: { flexDirection: 'row', gap: space.md - 2, alignItems: 'flex-start' },
   cue: { ...font.label, color: color.text, flex: 1, lineHeight: 22 },
 

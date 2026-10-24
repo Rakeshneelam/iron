@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
 import { Icon } from '@/components/Icon';
+import { Press } from '@/components/Press';
 import { SectionHeader } from '@/components/SectionHeader';
 import { SegmentTabs } from '@/components/SegmentTabs';
 import { IconButton } from '@/components/IconButton';
@@ -273,8 +274,10 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
             <View style={styles.parsed}>
               <Text style={styles.parsedHead}>Understood as</Text>
               {parsed.items.map((it, i) => (
-                <Pressable
+                <Press
                   key={`${it.foodId}-${i}`}
+                  feedback="highlight"
+                  pressedStyle={styles.pressed}
                   onPress={() => {
                     const f = byId.get(it.foodId);
                     if (!f) return;
@@ -283,7 +286,7 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
                   }}
                   accessibilityRole="button"
                   accessibilityLabel={`${it.name}, ${it.reason}, from "${it.text}". Tap to change the amount or pick a different food.`}
-                  style={({ pressed }) => [styles.parsedRow, pressed && styles.pressed]}
+                  style={styles.parsedRow}
                 >
                   <View style={styles.flex}>
                     <Text style={styles.name} numberOfLines={1}>
@@ -295,7 +298,7 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
                     </Text>
                   </View>
                   <Text style={styles.kcal}>{kcalOf(it)}</Text>
-                </Pressable>
+                </Press>
               ))}
               {parsed.unmatched.length ? (
                 <Text style={styles.muted}>
@@ -327,9 +330,11 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
           )}
           <View style={styles.list}>
             {list.map((f, i) => (
-              <Pressable
+              <Press
                 key={f.id}
-                style={({ pressed }) => [styles.foodRow, i > 0 && styles.divider, pressed && styles.pressed]}
+                feedback="highlight"
+                style={[styles.foodRow, i > 0 && styles.divider]}
+                pressedStyle={styles.pressed}
                 accessibilityRole="button"
                 accessibilityLabel={`${f.name}, ${Math.round(f.kcal)} kcal. Choose an amount.`}
                 onPress={() => {
@@ -347,15 +352,16 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
                   <Text style={styles.kcal}>{Math.round(f.kcal)}</Text>
                   <Text style={styles.portion}>{Math.round(f.protein)} g P</Text>
                 </View>
-                <Pressable
+                <Press
                   onPress={() => quickAdd(f)}
                   accessibilityRole="button"
                   accessibilityLabel={slot ? `Add ${f.name} to ${meal}` : `Add ${f.name}`}
-                  style={({ pressed }) => [styles.plus, pressed && styles.plusPressed]}
+                  style={styles.plus}
+                  pressedStyle={styles.plusPressed}
                 >
                   <Icon name="plus" size={20} color={color.text} />
-                </Pressable>
-              </Pressable>
+                </Press>
+              </Press>
             ))}
           </View>
         </>
@@ -368,9 +374,11 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
           </>
         ) : (
           recipes.map((r) => (
-            <Pressable
+            <Press
               key={r.id}
+              feedback="highlight"
               style={styles.item}
+              pressedStyle={styles.pressed}
               accessibilityRole="button"
               accessibilityLabel={`${r.name}, ${Math.round(getRecipeMacros(r.id).kcal)} kcal per serving`}
               onPress={() => {
@@ -380,7 +388,7 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
             >
               <Text style={styles.name}>{r.name}</Text>
               <Text style={styles.muted}>{Math.round(getRecipeMacros(r.id).kcal)} kcal per serving</Text>
-            </Pressable>
+            </Press>
           ))
         )
       ) : null}
@@ -533,10 +541,10 @@ function NewRecipe({
       />
       {results.length === 0 ? <Text style={[styles.muted, styles.gap]}>Nothing matches “{q.trim()}”.</Text> : null}
       {results.map((f) => (
-        <Pressable key={f.id} style={styles.item} onPress={() => add(f)} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}>
+        <Press key={f.id} feedback="highlight" style={styles.item} pressedStyle={styles.pressed} onPress={() => add(f)} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}>
           <Text style={styles.name}>{f.name}</Text>
           <Text style={styles.muted}>{f.servingLabel ?? `${f.servingG} g`}</Text>
-        </Pressable>
+        </Press>
       ))}
       <PrimaryButton label="Create a new ingredient" tone="neutral" style={styles.gap} onPress={onCreateIngredient} />
 
@@ -577,14 +585,15 @@ const styles = StyleSheet.create({
     borderColor: color.border,
   },
   searchInput: { ...font.body, color: color.text, flex: 1, minHeight: hit.gym },
-  list: { backgroundColor: color.bg, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.lg },
-  foodRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 60, paddingVertical: space.xs },
+  /** An open list on hairlines, not a box in a sheet: the sheet is already the container. */
+  list: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.border },
+  foodRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 60, paddingVertical: space.xs, paddingHorizontal: space.xs, borderRadius: radius.sm },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  pressed: { opacity: 0.7 },
+  pressed: { backgroundColor: color.surfaceHigh },
   portion: { ...font.caption, fontSize: 12, color: color.textFaint },
   nums: { alignItems: 'flex-end' },
-  kcal: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text },
-  plus: { width: hit.default, height: hit.default, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
+  kcal: { ...font.measure, fontSize: 19, lineHeight: 23, color: color.text },
+  plus: { width: hit.default, height: hit.default, borderRadius: radius.button, borderWidth: 1, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
   plusPressed: { backgroundColor: color.border },
   name: { ...font.label, fontWeight: '600', color: color.text },
   strong: { color: color.text, fontWeight: '600' },

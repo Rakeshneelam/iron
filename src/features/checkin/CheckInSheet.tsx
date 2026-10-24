@@ -204,8 +204,10 @@ export function CheckInForm({ date, datePicker, onClose, onStart, onSkip, startL
 function Answer({ label, hint, children }: { label: string; hint: string | null; children: React.ReactNode }) {
   return (
     <View>
+      {/* The label, a leader rule, then its scale — the same signpost as every section header. */}
       <View style={styles.labelRow}>
         <Text style={styles.label}>{label}</Text>
+        <View style={styles.leader} />
         {hint ? <Text style={styles.note}>{hint}</Text> : null}
       </View>
       {children}
@@ -217,9 +219,10 @@ const styles = StyleSheet.create({
   stack: { gap: space.lg, paddingBottom: space.lg },
   flex: { flex: 1 },
   flex2: { flex: 2 },
-  labelRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginBottom: space.sm },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
+  leader: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
   hint: { ...font.caption, color: color.textMuted },
-  label: { ...font.caption, fontWeight: '600', color: color.textMuted },
+  label: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text },
   note: { ...font.caption, fontSize: 12, color: color.textFaint, flexShrink: 1 },
   actions: { gap: space.xs, marginTop: space.sm },
   startActions: { gap: space.sm, marginTop: space.sm },

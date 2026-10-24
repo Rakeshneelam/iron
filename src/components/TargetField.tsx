@@ -82,6 +82,6 @@ export function TargetField({ label, value, auto, basis, step, min, max, suffix,
 const styles = StyleSheet.create({
   wrap: { gap: space.sm, marginTop: space.lg },
   label: { ...font.label, color: color.text, fontWeight: '600' },
-  value: { ...font.title, ...font.numeric, color: color.text },
+  value: { ...font.measure, fontSize: 30, lineHeight: 34, color: color.text },
   hint: { ...font.caption, color: color.textMuted },
 });

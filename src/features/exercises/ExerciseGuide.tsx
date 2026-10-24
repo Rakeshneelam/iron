@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Icon } from '@/components/Icon';
+import { Press } from '@/components/Press';
 import { Pill } from '@/components/Pill';
 import { CATALOG, CATALOG_BY_ID, EQUIPMENT_LABEL, MUSCLE_LABEL, type Muscle } from '@/data/catalog';
 import type { Exercise } from '@/db/repositories/exercises';
@@ -125,13 +126,13 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 
 function LinkRow({ title, hint, onPress }: { title: string; hint: string; onPress: () => void }) {
   return (
-    <Pressable style={({ pressed }) => [styles.link, pressed && styles.pressed]} onPress={onPress} accessibilityRole="button">
+    <Press feedback="highlight" style={styles.link} pressedStyle={styles.pressed} onPress={onPress} accessibilityRole="button">
       <View style={styles.flex}>
         <Text style={styles.linkTitle}>{title}</Text>
         <Text style={styles.linkHint}>{hint}</Text>
       </View>
       <Icon name="chevronRight" size={18} color={color.textMuted} />
-    </Pressable>
+    </Press>
   );
 }
 
@@ -142,7 +143,7 @@ const styles = StyleSheet.create({
   muscles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2 },
   meta: { ...font.caption, color: color.textMuted },
   block: { gap: space.sm },
-  blockTitle: { ...font.eyebrow, color: color.textFaint },
+  blockTitle: { ...font.label, fontSize: 14, fontWeight: '700', color: color.text },
   line: { flexDirection: 'row', gap: space.md, alignItems: 'flex-start' },
   num: { width: 22, height: 22, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, borderWidth: 1, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
   numText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '700', ...font.numeric, color: color.text },
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
   quiet: { ...font.caption, color: color.textMuted, flex: 1 },
   safety: { flexDirection: 'row', gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: 1, borderColor: color.warning },
   link: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.default, paddingVertical: space.xs },
-  pressed: { opacity: 0.7 },
+  pressed: { backgroundColor: color.surfaceHigh },
   linkTitle: { ...font.body, color: color.text },
   linkHint: { ...font.caption, color: color.textMuted },
 });

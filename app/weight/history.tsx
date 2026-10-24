@@ -1,10 +1,10 @@
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { EmptyState, PrimaryButton } from '@/components';
+import { EmptyState, Press, PrimaryButton } from '@/components';
 import { useLive } from '@/db/live';
 import { countWeighIns, pageWeighIns } from '@/db/repositories/body';
 import { WeighInSheet, type WeighEntry } from '@/features/body/sheets';
@@ -57,8 +57,10 @@ export default function WeightHistory() {
             // Newest first, so the row below is the older reading.
             const older = rows[index + 1];
             return (
-              <Pressable
+              <Press
+                feedback="highlight"
                 style={styles.row}
+                pressedStyle={styles.pressedRow}
                 onPress={() => setWeigh({ date: item.date })}
                 accessibilityRole="button"
                 accessibilityLabel={`${fmtDayLabel(item.date)}: ${kg(item.kg)}. Tap to edit or delete.`}
@@ -68,7 +70,7 @@ export default function WeightHistory() {
                   {older ? <Text style={styles.delta}>{signed(item.kg - older.kg)}</Text> : null}
                   <Text style={styles.value}>{kg(item.kg)}</Text>
                 </View>
-              </Pressable>
+              </Press>
             );
           }}
         />
@@ -80,6 +82,7 @@ export default function WeightHistory() {
 }
 
 const styles = StyleSheet.create({
+  pressedRow: { backgroundColor: color.surfaceHigh },
   root: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   padded: { paddingHorizontal: layout.screenPadding },

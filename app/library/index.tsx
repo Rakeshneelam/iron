@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChipRow, Icon, IconButton, PrimaryButton, Sheet } from '@/components';
+import { ChipRow, Icon, IconButton, Press, PrimaryButton, Sheet } from '@/components';
 import { CATALOG_BY_ID, categoryOf, EQUIPMENT_LABEL, LIBRARY_CATEGORIES, MUSCLE_LABEL, type Equipment, type Muscle } from '@/data/catalog';
 import { DRILLS, doseLabel, type Drill } from '@/data/drills';
 import { useLive } from '@/db/live';
@@ -93,8 +93,10 @@ export default function Library() {
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + space.xl }]}
         ListEmptyComponent={<Text style={styles.empty}>Nothing matches. Try another word or filter.</Text>}
         renderItem={({ item }) => (
-          <Pressable
-            style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+          <Press
+            feedback="highlight"
+            style={styles.row}
+            pressedStyle={styles.pressed}
             onPress={() => (item.kind === 'exercise' ? router.push(`/exercise/${item.id}`) : setDrill(item.drill ?? null))}
             accessibilityRole="button"
           >
@@ -103,7 +105,7 @@ export default function Library() {
               <Text style={styles.sub}>{item.sub}</Text>
             </View>
             <Icon name="chevronRight" size={18} color={color.textMuted} />
-          </Pressable>
+          </Press>
         )}
       />
       <Sheet visible={drill !== null} onClose={() => setDrill(null)} title={drill?.name}>
@@ -149,7 +151,7 @@ const styles = StyleSheet.create({
   input: { ...font.body, color: color.text, flex: 1, minHeight: hit.gym },
   list: { paddingHorizontal: layout.screenPadding },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.gym, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.border },
-  pressed: { backgroundColor: color.surface },
+  pressed: { backgroundColor: color.surfaceHigh },
   name: { ...font.label, color: color.text, fontWeight: '600' },
   sub: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: 2 },
   empty: { ...font.label, color: color.textMuted, textAlign: 'center', marginTop: space.xl },

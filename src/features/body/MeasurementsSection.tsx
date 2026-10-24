@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, Icon, ListCard, PrimaryButton, Screen, Stepper } from '@/components';
+import { Card, Icon, ListCard, Press, PrimaryButton, Screen, Stepper } from '@/components';
 import { useLive } from '@/db/live';
 import { addMeasurement, listMeasurements, updateMeasurement, type Measurement } from '@/db/repositories/body';
 import { useSettings } from '@/db/repositories/settings';
 import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
 import { kgNum, signed } from '@/lib/format';
-import { color, font, hit, space } from '@/theme/tokens';
+import { color, font, hit, radius, space } from '@/theme/tokens';
 
 import { MeasureSheet, readingBefore, SiteSheet } from './sheets';
 import { SITES } from './sites';
@@ -76,8 +76,11 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
                 : `${signed(delta)} ${s.unit} since ${fmtDayLabel(prev?.date ?? '')}`;
           return (
             <View key={s.key} style={[styles.row, i > 0 && styles.divider]}>
-              <Pressable
+              <Press
+                feedback="highlight"
+                touchStyle={styles.nameTouch}
                 style={styles.name}
+                pressedStyle={styles.held}
                 onPress={() => (latest ? setSite(s.key) : undefined)}
                 disabled={!latest}
                 accessibilityRole={latest ? 'button' : undefined}
@@ -87,7 +90,7 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
                 <Text style={styles.sub} numberOfLines={1}>
                   {sub}
                 </Text>
-              </Pressable>
+              </Press>
               <View style={styles.field}>
                 <Stepper accessibilityLabel={s.label} suffix={s.unit} value={latest?.cm ?? s.fallback} step={0.5} min={1} max={250} onChange={(v) => log(s.key, v)} />
               </View>
@@ -118,7 +121,9 @@ const styles = StyleSheet.create({
   lead: { ...font.caption, color: color.textMuted, marginBottom: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 64 },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  name: { flex: 1, minWidth: 0, minHeight: hit.default, justifyContent: 'center' },
+  nameTouch: { flex: 1, minWidth: 0 },
+  name: { minHeight: hit.default, justifyContent: 'center', paddingHorizontal: space.xs, borderRadius: radius.sm },
+  held: { backgroundColor: color.surfaceHigh },
   title: { ...font.label, fontWeight: '600', color: color.text },
   sub: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint },
   field: { width: 176 },
@@ -127,5 +132,5 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   body: { ...font.body, color: color.text },
-  value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600', flexShrink: 1 },
+  value: { ...font.measure, fontSize: 28, lineHeight: 32, color: color.text, flexShrink: 1 },
 });

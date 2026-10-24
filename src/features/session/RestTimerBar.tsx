@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { Icon } from '@/components/Icon';
+import { Press } from '@/components/Press';
 import { fmtClock } from '@/lib/date';
 import type { RestTimerView } from '@/services/restTimer';
 import { CSS_LINEAR, type AnimatedViewStyle } from '@/theme/curves';
@@ -78,8 +79,10 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onStart }: RestTime
    * gone; the setting is where settings are.
    */
   return (
-    <Pressable
+    <Press
+      feedback="highlight"
       style={styles.idleRow}
+      pressedStyle={styles.idleHeld}
       disabled={autoStart}
       onPress={onStart}
       accessibilityRole={autoStart ? undefined : 'button'}
@@ -87,13 +90,15 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onStart }: RestTime
     >
       <Icon name="timer" size={16} color={color.textFaint} />
       <Text style={styles.idleText} numberOfLines={1}>
-        Rest {fmtClock(seconds)} <Text style={styles.idleHint}>{autoStart ? 'starts when you log a set' : ', tap to start now'}</Text>
+        Rest {fmtClock(seconds)}
+        <Text style={styles.idleHint}>{autoStart ? '. Starts when you log a set' : '. Tap to start it now'}</Text>
       </Text>
-    </Pressable>
+    </Press>
   );
 }
 
 const styles = StyleSheet.create({
+  idleHeld: { backgroundColor: color.surfaceHigh },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

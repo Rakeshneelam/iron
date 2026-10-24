@@ -81,18 +81,11 @@ export function VolumeList({ weekly }: { weekly: Record<string, number> }) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border,
-    padding: space.lg,
-    gap: space.md,
-  },
+  card: { gap: space.md, paddingTop: space.xs },
   row: { gap: space.xs },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: space.sm },
   name: { ...font.label, color: color.text },
-  count: { ...font.label, ...font.numeric, color: color.text, fontWeight: '700' },
+  count: { ...font.measure, fontSize: 18, lineHeight: 22, color: color.text },
   meta: { ...font.caption, color: color.textMuted, fontWeight: '400' },
   group: { gap: space.sm },
   groupLabel: { ...font.label, color: color.textMuted },
@@ -101,7 +94,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
     borderRadius: radius.md,
-    backgroundColor: color.surfaceHigh,
+    borderWidth: 1,
+    borderColor: color.border,
   },
   chipText: { ...font.caption, color: color.textMuted },
   chipNum: { ...font.caption, ...font.numeric, color: color.text, fontWeight: '700' },

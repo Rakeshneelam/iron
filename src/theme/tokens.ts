@@ -79,6 +79,9 @@ export const color = {
   dangerPressed: '#A9352B',
   onDanger: '#FFFFFF',
 
+  /** What a sheet dims the screen behind it with. */
+  scrim: 'rgba(5,6,7,0.62)',
+
   /** Derived lines (a trend, an estimate) are drawn in chalk: they are read, not acted on. */
   chart: '#EFEBE4',
   chartFaint: 'rgba(239,235,228,0.32)',

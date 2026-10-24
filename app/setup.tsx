@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChipRow, Icon, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, type IconName } from '@/components';
+import { ChipRow, Icon, Press, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, type IconName } from '@/components';
 import { CATALOG_BY_ID, type Level, type Stress } from '@/data/catalog';
 import { PLAN_TEMPLATES, type EquipmentPreset, type Goal } from '@/data/templates';
 import { getLatestWeight, upsertWeighIn } from '@/db/repositories/body';
@@ -298,7 +298,7 @@ function Pledge({ icon, title, sub }: { icon: IconName; title: string; sub: stri
 
 function Choice({ title, subtitle, selected, badge, onPress }: { title: string; subtitle: string; selected: boolean; badge?: string; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} style={({ pressed }) => [styles.choice, selected && styles.choiceOn, pressed && styles.pressed]}>
+    <Press onPress={onPress} accessibilityRole="radio" accessibilityState={{ selected }} feedback="highlight" style={[styles.choice, selected && styles.choiceOn]} pressedStyle={styles.pressed}>
       <View style={styles.flex1}>
         <View style={styles.titleRow}>
           <Text style={styles.choiceTitle}>{title}</Text>
@@ -307,7 +307,7 @@ function Choice({ title, subtitle, selected, badge, onPress }: { title: string; 
         <Text style={styles.choiceSub}>{subtitle}</Text>
       </View>
       <View style={[styles.radio, selected && styles.radioOn]}>{selected ? <View style={styles.radioDot} /> : null}</View>
-    </Pressable>
+    </Press>
   );
 }
 

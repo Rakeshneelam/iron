@@ -1311,7 +1311,8 @@ const styles = StyleSheet.create({
   reasonText: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted, flex: 1 },
   reasonVerdict: { fontWeight: '600' },
   why: { ...font.caption, fontSize: 13, lineHeight: 20, color: color.text, fontWeight: '700', textDecorationLine: 'underline' },
-  whyBox: { gap: space.sm, backgroundColor: color.surface, borderRadius: radius.md, borderWidth: 1, borderColor: color.border, padding: space.md, marginTop: space.sm },
+  /** The rule behind the number, as a note in the margin: commentary, not another card. */
+  whyBox: { gap: space.sm, borderLeftWidth: 2, borderLeftColor: color.border, paddingLeft: space.md, paddingVertical: space.xs, marginTop: space.sm, marginLeft: space.xs },
   doneRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   doneText: { ...font.caption, fontSize: 13, ...font.numeric, color: color.textMuted, flex: 1 },
   strong: { color: color.text, fontWeight: '600' },

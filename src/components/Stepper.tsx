@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   footer: { minHeight: 26, justifyContent: 'center' },
   valueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0, alignSelf: 'stretch' },
   value: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text, textAlign: 'center' },
-  valueGym: { ...font.heading, fontSize: 22, fontWeight: '700', ...font.numeric, color: color.text, textAlign: 'center' },
+  valueGym: { ...font.measure, fontSize: 26, lineHeight: 30, color: color.text, textAlign: 'center' },
   valueHero: { ...font.hero, color: color.text, textAlign: 'center' },
   suffix: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textFaint },
   suffixHero: { ...font.measure, fontSize: 22, fontWeight: '600', letterSpacing: 0, color: color.textFaint },

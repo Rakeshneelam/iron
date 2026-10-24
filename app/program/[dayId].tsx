@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, PrimaryButton, Screen, Sheet, Stepper, TextField, toast } from '@/components';
+import { ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Press, PrimaryButton, Screen, Sheet, Stepper, TextField, TitleBlock, toast } from '@/components';
 import { useLive } from '@/db/live';
 import { updateExercise, type Exercise } from '@/db/repositories/exercises';
 import { CATALOG_BY_ID } from '@/data/catalog';
@@ -115,12 +115,14 @@ export default function DayEditor() {
           const isOpen = open === sl.id;
           return (
             <View key={sl.id} style={i > 0 && styles.divider}>
-              <Pressable
+              <Press
+                feedback="highlight"
+                pressedStyle={styles.held}
                 onPress={() => setOpen(isOpen ? null : sl.id)}
                 accessibilityRole="button"
                 accessibilityState={{ expanded: isOpen }}
                 accessibilityLabel={`${sl.exercise.name}, ${sl.targetSets} sets of ${sl.repLo} to ${sl.repHi}. ${isOpen ? 'Close' : 'Edit'}.`}
-                style={({ pressed }) => [styles.slotHead, pressed && styles.dim]}
+                style={styles.slotHead}
               >
                 <View style={styles.flex1}>
                   <Text style={styles.name}>{sl.exercise.name}</Text>
@@ -129,7 +131,7 @@ export default function DayEditor() {
                   </Text>
                 </View>
                 <Icon name={isOpen ? 'chevronUp' : 'chevronDown'} size={18} color={color.textFaint} />
-              </Pressable>
+              </Press>
               {isOpen ? (
                 <SlotEditor
                   slot={sl}
@@ -146,11 +148,15 @@ export default function DayEditor() {
       </ListCard>
 
       {slots.length ? (
-        <View style={styles.estimate}>
-          <Text style={styles.estimateLabel}>Estimated</Text>
-          <Text style={styles.estimateValue}>
-            {sets} sets, about {minutes} min
-          </Text>
+        <View style={styles.gapTop}>
+          {/* The same title block Today shows for this day, so the two never disagree in form. */}
+          <TitleBlock
+            cells={[
+              { label: slots.length === 1 ? 'Lift' : 'Lifts', value: String(slots.length) },
+              { label: 'Sets', value: String(sets) },
+              { label: 'About', value: String(minutes), unit: 'min' },
+            ]}
+          />
         </View>
       ) : null}
 
@@ -295,6 +301,7 @@ function SlotEditor({
 }
 
 const styles = StyleSheet.create({
+  held: { backgroundColor: color.surfaceHigh },
   flex1: { flex: 1 },
   noteInput: { ...font.body, color: color.text, backgroundColor: color.surfaceHigh, borderRadius: radius.md, paddingHorizontal: space.md, minHeight: hit.default },
   nameInput: {

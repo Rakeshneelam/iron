@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, PrimaryButton, Screen, SectionHeader, StatTile, TextField, toast } from '@/components';
+import { Card, confirm, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
 import { inspectBackup, restoreBackup, type BackupSummary } from '@/db/repositories/restore';
 import { PHRASE_CHARS, formatPhrase, normalisePhrase } from '@/lib/recoveryPhrase';
 import { inspectDriveBackup, listBackups, type DriveFile } from '@/services/backup';
@@ -143,9 +143,13 @@ export default function RestoreScreen() {
             </Text>
             <Text style={styles.hint}>From {loaded.from}</Text>
             <View style={styles.tiles}>
-              <StatTile label="Workouts" value={String(loaded.summary.workouts)} tone="accent" />
-              <StatTile label="Weigh-ins" value={String(loaded.summary.weighIns)} />
-              <StatTile label="Days of food" value={String(loaded.summary.foodDays)} />
+              <TitleBlock
+                cells={[
+                  { label: 'Workouts', value: String(loaded.summary.workouts) },
+                  { label: 'Weigh-ins', value: String(loaded.summary.weighIns) },
+                  { label: 'Days of food', value: String(loaded.summary.foodDays) },
+                ]}
+              />
             </View>
             {loaded.summary.from && loaded.summary.to ? (
               <Text style={styles.span}>
@@ -254,7 +258,7 @@ const styles = StyleSheet.create({
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   gap: { marginTop: space.md },
   when: { ...font.title, color: color.text, marginBottom: space.xs },
-  tiles: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  tiles: { marginTop: space.md },
   span: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   phraseInput: { ...font.numeric, marginTop: space.md, letterSpacing: 1 },
   // Never textFaint: this is the most important sentence on the screen.

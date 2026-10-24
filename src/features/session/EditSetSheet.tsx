@@ -62,8 +62,8 @@ function EditSetForm({ set, step, correcting, onClose }: { set: SetRow; step: nu
       </View>
       <ChipRow options={RIR_OPTIONS} value={rir} onChange={setRir} size="gym" />
       <View style={styles.pair}>
-        <ChipRow options={[{ label: pain ? 'Pain ✓' : 'Pain', value: 1 }]} value={pain ? 1 : null} onChange={() => setPain(!pain)} />
-        <ChipRow options={[{ label: warmup ? 'Warm-up ✓' : 'Warm-up', value: 1 }]} value={warmup ? 1 : null} onChange={() => setWarmup(!warmup)} />
+        <ChipRow options={[{ label: 'Pain', value: 1 }]} value={pain ? 1 : null} onChange={() => setPain(!pain)} />
+        <ChipRow options={[{ label: 'Warm-up', value: 1 }]} value={warmup ? 1 : null} onChange={() => setWarmup(!warmup)} />
       </View>
       <View style={styles.pair}>
         <PrimaryButton

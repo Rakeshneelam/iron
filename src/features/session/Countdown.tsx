@@ -130,16 +130,18 @@ export interface CountdownProps {
  */
 export function Countdown({ timer, total, caption, note, size = 208, nudges = true }: CountdownProps) {
   const t = timer;
-  // Finished draws a FULL ring in positive, not an empty one. An empty ring is
-  // what "not started" looks like, and the two states must not share a picture.
+  // Finished draws a FULL ring, not an empty one: an empty ring is what "not
+  // started" looks like, and the two states must not share a picture. Heat only
+  // while it runs — a stopped dial is not live — and finished is chalk, because
+  // finishing a hold is the normal case and green is kept for a best.
   const progress = t.finished ? 1 : total > 0 ? t.remaining / total : 0;
-  const tone = t.finished ? 'positive' : 'accent';
+  const tone = t.running ? 'accent' : 'chalk';
 
   return (
     <View style={styles.wrap}>
       {/* Running is live, so it glows; stopped, it is just a dial (see material.heat). */}
       <View style={[styles.dial, t.running && styles.dialLive]}>
-        <Ring progress={progress} size={size} thickness={12} tone={tone}>
+        <Ring progress={progress} size={size} thickness={10} tone={tone} graduations={60}>
           {caption ? <Text style={styles.caption}>{caption}</Text> : null}
           <FitText style={styles.clock} numberOfLines={1} minimumFontScale={0.6}>
             {fmtClock(t.remaining)}
@@ -205,7 +207,7 @@ export function TimerNudge({ label, a11y, quiet, onPress }: { label: string; a11
  * top on Android.
  */
 export const clockStyle = StyleSheet.create({
-  bar: { ...font.numeric, fontSize: 34, lineHeight: 40, fontWeight: '800', letterSpacing: -1, color: color.text },
+  bar: { ...font.measure, fontSize: 38, lineHeight: 42, fontWeight: '800', letterSpacing: -0.6, color: color.text },
 });
 
 const styles = StyleSheet.create({
@@ -213,7 +215,7 @@ const styles = StyleSheet.create({
   dial: { borderRadius: radius.pill },
   dialLive: { boxShadow: material.heat },
   caption: { ...font.eyebrow, color: color.textFaint },
-  clock: { ...font.numeric, fontSize: 56, lineHeight: 62, fontWeight: '800', letterSpacing: -2, color: color.text },
+  clock: { ...font.measure, fontSize: 64, lineHeight: 68, fontWeight: '800', letterSpacing: -1, color: color.text },
   note: { ...font.caption, fontSize: 12, color: color.textMuted },
   controls: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   play: {
@@ -245,6 +247,6 @@ const styles = StyleSheet.create({
   },
   nudgeQuiet: { backgroundColor: 'transparent' },
   nudgeHeld: { backgroundColor: color.border },
-  nudgeText: { ...font.label, fontSize: 15, fontWeight: '700', ...font.numeric, color: color.text },
+  nudgeText: { ...font.measure, fontSize: 18, lineHeight: 22, color: color.text },
   nudgeTextQuiet: { fontWeight: '600', color: color.textMuted },
 });
