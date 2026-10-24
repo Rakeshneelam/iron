@@ -25,3 +25,5 @@ export { Stepper, type StepperProps } from './Stepper';
 export { dismissToast, setToastObstruction, toast, ToastHost } from './Toast';
 export { ToggleChips } from './ToggleChips';
 export { TrendChart, type TrendChartProps } from './TrendChart';
+export { Rule, type RuleMark, type RuleProps } from './Rule';
+export { TitleBlock, useNow, type TitleCell } from './TitleBlock';

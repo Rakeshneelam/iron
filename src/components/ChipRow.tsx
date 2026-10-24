@@ -44,9 +44,13 @@ interface ChipsProps<T extends string | number> {
 
 /**
  * The one chip. Single-select rows and multi-select sets look identical: an
- * unchosen option is an outline in muted text, a chosen one is lifted onto the
- * raised surface with an accent edge. A solid accent block per answer made a
- * screen of settings read as a screen of buttons to press.
+ * unchosen option is an outline in muted text, a chosen one is solid chalk with
+ * graphite text.
+ *
+ * Chalk, not heat. An answer you gave is a fact, and facts are written in chalk
+ * across the whole app (docs/13); heat is for the one live thing, and a row of
+ * RIR chips with one glowing would have competed with Log set for it. Solid also
+ * reads at arm's length in a way a 1px coloured edge never did.
  */
 export function Chips<T extends string | number>({ options, isOn, onPress, role, size = 'default', fill = true, columns, haptics = true }: ChipsProps<T>) {
   const grid = columns !== undefined;
@@ -114,9 +118,9 @@ const styles = StyleSheet.create({
     borderColor: color.border,
   },
   fill: { flex: 1 },
-  on: { backgroundColor: color.surfaceHigh, borderColor: color.accent },
-  pressed: { backgroundColor: color.surface },
+  on: { backgroundColor: color.text, borderColor: color.text },
+  pressed: { backgroundColor: color.surfaceHigh },
   text: { ...font.label, fontWeight: '600', color: color.textMuted, textAlign: 'center' },
   textGym: { ...font.heading, ...font.numeric, color: color.textMuted },
-  textOn: { color: color.text },
+  textOn: { color: color.bg },
 });

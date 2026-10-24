@@ -62,11 +62,29 @@ describe('filled controls', () => {
     assert.ok(contrast(color.onAccent, color.accentFillPressed) >= TARGET);
   });
 
-  test('danger and its label too', () => {
-    assert.ok(contrast(color.onAccent, color.danger) >= 3, 'danger is a background for white text');
+  test('the filled destructive button carries its own label, held or not', () => {
+    assert.ok(contrast(color.onDanger, color.dangerFill) >= TARGET, `onDanger on dangerFill is ${contrast(color.onDanger, color.dangerFill).toFixed(2)} : 1`);
+    assert.ok(contrast(color.onDanger, color.dangerPressed) >= TARGET);
   });
+});
 
-  test('accent stays usable as text on a dark ground — that is what it is for', () => {
-    assert.ok(contrast(color.accent, color.bg) >= TARGET);
-  });
+/**
+ * Each meaning-ink is also set as text — "+2.5 kg", "pain", "1.6 L", "worth a look" —
+ * so each has to read as text on every ground, not just as a stroke.
+ */
+describe('meaning inks read as text', () => {
+  for (const [name, ink] of [
+    ['accent (heat)', color.accent],
+    ['cold (water)', color.cold],
+    ['positive (a best)', color.positive],
+    ['warning (worth a look)', color.warning],
+    ['danger (pain)', color.danger],
+  ] as [string, string][]) {
+    test(`${name} is readable on every surface`, () => {
+      for (const [groundName, ground] of GROUNDS) {
+        const ratio = contrast(ink, ground);
+        assert.ok(ratio >= TARGET, `${name} on ${groundName} is ${ratio.toFixed(2)} : 1, below ${TARGET}`);
+      }
+    });
+  }
 });

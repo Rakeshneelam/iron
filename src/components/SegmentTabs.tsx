@@ -8,8 +8,10 @@ import type { ChipOption } from './ChipRow';
 import { Press } from './Press';
 
 /**
- * The parts of one screen, always in view: Body's Weight · Measures · Recovery,
- * Settings' five tabs. Pills, so they never read as the answer chips below them.
+ * The parts of one screen, always in view: Body's Weight, Measures and Recovery;
+ * Settings' five tabs. Words over a rule, the selected one underlined in chalk —
+ * a drawing's section marker, so they never read as the answer chips below them,
+ * which are boxes.
  *
  * Deliberately NOT a sliding indicator. These get switched tens of times a day,
  * and at that frequency motion has to be imperceptible or absent — a pill
@@ -54,16 +56,16 @@ export function SegmentTabs<T extends string>({ options, value, onChange }: { op
 const SELECT_FADE = transition(['backgroundColor', 'borderColor']);
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
+  row: { flexDirection: 'row', columnGap: space.xl, rowGap: space.xs, flexWrap: 'wrap' },
   pill: {
     height: hit.default - space.md,
-    paddingHorizontal: space.md,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: color.border,
+    borderBottomWidth: 2,
+    borderColor: 'transparent',
+    borderTopLeftRadius: radius.sm,
+    borderTopRightRadius: radius.sm,
     justifyContent: 'center',
   },
-  on: { backgroundColor: color.surfaceHigh, borderColor: color.accent },
-  text: { ...font.caption, fontWeight: '600', color: color.textMuted },
+  on: { borderColor: color.text },
+  text: { ...font.label, fontWeight: '600', color: color.textFaint },
   textOn: { color: color.text },
 });

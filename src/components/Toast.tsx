@@ -165,5 +165,5 @@ const styles = StyleSheet.create({
   },
   message: { ...font.label, color: color.text, flex: 1, paddingVertical: space.sm },
   action: { minHeight: hit.default, minWidth: hit.default, paddingHorizontal: space.md, alignItems: 'center', justifyContent: 'center' },
-  actionText: { ...font.body, color: color.accent, fontWeight: '700' },
+  actionText: { ...font.body, color: color.text, fontWeight: '700', textDecorationLine: 'underline' },
 });

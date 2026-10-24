@@ -18,6 +18,6 @@ export function ReasonLine({ text }: ReasonLineProps) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
-  rule: { width: 3, borderRadius: radius.sm, backgroundColor: color.accent },
+  rule: { width: 3, borderRadius: radius.sm, backgroundColor: color.textFaint },
   text: { ...font.label, color: color.textMuted, flex: 1 },
 });

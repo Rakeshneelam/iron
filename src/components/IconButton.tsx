@@ -24,12 +24,12 @@ const BG: Record<IconButtonTone, string> = {
   plain: 'transparent',
   neutral: color.surfaceHigh,
   accent: color.accent,
-  danger: color.danger,
+  danger: color.dangerFill,
 };
 
 export function IconButton({ icon, onPress, accessibilityLabel, label, tone = 'plain', size = 'default', disabled, style }: IconButtonProps) {
   const box = hit[size];
-  const fg = tone === 'accent' || tone === 'danger' ? color.onAccent : color.text;
+  const fg = tone === 'accent' ? color.onAccent : tone === 'danger' ? color.onDanger : color.text;
   return (
     <Press
       accessibilityRole="button"

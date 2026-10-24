@@ -15,11 +15,13 @@ export interface SectionHeaderProps {
 }
 
 /**
- * The small tracked label that opens a group — "This week", "Recent workouts".
+ * The small label that opens a group — "This week", "Recent workouts".
  *
- * It is a signpost, not a heading: the card under it carries the content, and a
+ * It is a signpost, not a heading: the content under it carries the meaning, and a
  * card's own title stays full-strength. Use one only when the group is not already
- * self-evident. The optional action is the group's one way further in.
+ * self-evident. The optional action is the group's one way further in, and a
+ * hairline leads from the label to it, the way a drawing leads a callout to what it
+ * names — so "See all" reads as belonging to this group and not the next.
  */
 export function SectionHeader({ title, hint, action, right }: SectionHeaderProps) {
   return (
@@ -28,6 +30,7 @@ export function SectionHeader({ title, hint, action, right }: SectionHeaderProps
         <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
           {title}
         </Text>
+        <View style={styles.leader} />
         {action ? (
           <Press
             onPress={action.onPress}
@@ -48,8 +51,9 @@ export function SectionHeader({ title, hint, action, right }: SectionHeaderProps
 
 const styles = StyleSheet.create({
   wrap: { marginTop: space.lg, marginBottom: space.sm },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md, minHeight: hit.default - space.lg },
-  title: { ...font.eyebrow, color: color.textFaint, flexShrink: 1 },
-  action: { ...font.caption, fontWeight: '600', color: color.accent },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default - space.lg },
+  title: { ...font.eyebrow, fontSize: 13, color: color.textMuted, flexShrink: 1 },
+  leader: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
+  action: { ...font.caption, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
 });

@@ -95,7 +95,7 @@ export function ToggleRow({ title, sub, value, onChange, divider }: { title: str
           selection();
           onChange(v);
         }}
-        trackColor={{ false: color.border, true: color.accent }}
+        trackColor={{ false: color.border, true: color.text }}
         thumbColor={value ? color.onAccent : color.textMuted}
         importantForAccessibility="no-hide-descendants"
       />

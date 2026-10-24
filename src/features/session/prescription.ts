@@ -135,9 +135,12 @@ export function rampFor(lifts: readonly SessionLift[], index: number, workKg: nu
 
 /* ================================ labels ================================= */
 
-/** Colour by meaning: going up is positive, easing off is a warning, first time is neutral. */
+/**
+ * Colour by meaning: going up is positive, easing off is "worth a look" (never red —
+ * red is pain), and first time is neutral. Not heat: heat is for the live thing only.
+ */
 export const VERDICT_TONE: Record<Prescription['verdict'], PillTone> = {
-  CALIBRATE: 'accent',
+  CALIBRATE: 'muted',
   ADD_LOAD: 'positive',
   ADD_REPS: 'positive',
   ADD_SET: 'positive',

@@ -7,6 +7,7 @@ import { color, font, hit, radius, space } from '@/theme/tokens';
 import { FitText } from './FitText';
 import { Icon } from './Icon';
 import { Press } from './Press';
+import { Rule, type RuleMark, type RuleProps } from './Rule';
 
 export interface StepperProps {
   value: number;
@@ -27,6 +28,17 @@ export interface StepperProps {
   suffix?: string;
   /** Under the value, inside a hero card: the target, or a "Use target" chip. */
   footer?: ReactNode;
+  /**
+   * Hero only: the graduated tape under the number, with last time and the plan
+   * marked on it (components/Rule). Replaces the footer when given — the marks
+   * say what the footer said, on a scale instead of in small print.
+   */
+  rule?: Pick<RuleProps, 'marks' | 'band' | 'major'>;
+  /**
+   * What a screen reader hears after the value: "last time 97.5, target 100". The
+   * rule draws this; it is hidden from assistive tech, so it has to be said here.
+   */
+  context?: string;
   /** Replaces the built-in keyboard entry on long-press of the value. */
   onLongPress?: () => void;
   /** Opt out per instance; the user's Haptics setting already gates it globally. */
@@ -55,6 +67,8 @@ export function Stepper({
   accessibilityLabel,
   suffix,
   footer,
+  rule,
+  context,
   onLongPress,
   haptics = true,
 }: StepperProps) {
@@ -120,6 +134,7 @@ export function Stepper({
   };
 
   const hero = size === 'hero';
+  const markActions = (rule?.marks ?? []).filter((m) => m.onPress && Math.abs(m.value - value) > 1e-9);
   const valueStyle = hero ? styles.valueHero : size === 'gym' ? styles.valueGym : styles.value;
   const box = hero ? HERO_BUTTON : hit[size];
 
@@ -142,13 +157,21 @@ export function Stepper({
       style={styles.valueBox}
       onLongPress={typeIt}
       accessibilityRole="adjustable"
-      accessibilityLabel={`${name ?? 'Value'}: ${value.toFixed(dp)}${suffix ? ` ${suffix}` : ''}`}
+      accessibilityLabel={`${name ?? 'Value'}: ${value.toFixed(dp)}${suffix ? ` ${suffix}` : ''}${context ? `. ${context}` : ''}`}
       accessibilityHint="Long-press to type a value"
-      accessibilityActions={[{ name: 'activate', label: 'Type a value' }, { name: 'increment' }, { name: 'decrement' }]}
+      accessibilityActions={[
+        { name: 'activate', label: 'Type a value' },
+        { name: 'increment' },
+        { name: 'decrement' },
+        // The rule's marks are taps on a tape a screen reader cannot see; these are the same doors.
+        ...markActions.map((m) => ({ name: m.kind, label: MARK_ACTION[m.kind] })),
+      ]}
       onAccessibilityAction={(e) => {
-        if (e.nativeEvent.actionName === 'increment') bump(1);
-        else if (e.nativeEvent.actionName === 'decrement') bump(-1);
-        else typeIt();
+        const name = e.nativeEvent.actionName;
+        if (name === 'increment') bump(1);
+        else if (name === 'decrement') bump(-1);
+        else if (name === 'activate') typeIt();
+        else markActions.find((m) => m.kind === name)?.onPress?.();
       }}
     >
       {/*
@@ -194,7 +217,11 @@ export function Stepper({
         <View style={styles.heroMid}>
           {label ? <Text style={styles.labelHero}>{label}</Text> : null}
           {readout}
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
+          {rule ? (
+            <Rule value={value} step={step} min={min} max={max} {...rule} onChange={onChange} />
+          ) : footer ? (
+            <View style={styles.footer}>{footer}</View>
+          ) : null}
         </View>
         {button(1)}
       </View>
@@ -213,6 +240,8 @@ export function Stepper({
   );
 }
 
+const MARK_ACTION: Record<RuleMark['kind'], string> = { target: 'Use the target', last: 'Use last time', trend: 'Use the trend' };
+
 /** Wider than a thumb, so a mid-set tap on − never lands on the number. */
 const HERO_BUTTON = 76;
 
@@ -228,23 +257,25 @@ const styles = StyleSheet.create({
     borderColor: color.border,
     overflow: 'hidden',
   },
-  /** 112: a 44pt number needs ~53dp of glyph box and the label and footer take
-   *  40dp. The old 108 with a 60pt number could never fit, which is what the
-   *  auto-shrink was quietly papering over. */
-  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 112 },
+  /**
+   * 114: the label (16), a 52pt condensed number in a 56dp line, and the rule (33).
+   * Condensed figures are why 52 fits where 44 used to: the same width, a taller
+   * number, read from a bench.
+   */
+  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 114 },
   /** The target stretches the full height of the field; the fill inside it follows. */
   btnTouch: { alignSelf: 'stretch' },
   btn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   btnPressed: { backgroundColor: color.border },
-  heroMid: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: space.sm },
+  heroMid: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingTop: space.xs + 2, paddingBottom: 2 },
   labelHero: { ...font.eyebrow, color: color.textFaint },
   footer: { minHeight: 26, justifyContent: 'center' },
   valueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0, alignSelf: 'stretch' },
   value: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text, textAlign: 'center' },
   valueGym: { ...font.heading, fontSize: 22, fontWeight: '700', ...font.numeric, color: color.text, textAlign: 'center' },
-  valueHero: { ...font.hero, ...font.numeric, color: color.text, textAlign: 'center' },
+  valueHero: { ...font.hero, color: color.text, textAlign: 'center' },
   suffix: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textFaint },
-  suffixHero: { ...font.label, fontSize: 16, fontWeight: '600', letterSpacing: 0, color: color.textFaint },
+  suffixHero: { ...font.measure, fontSize: 22, fontWeight: '600', letterSpacing: 0, color: color.textFaint },
   input: {
     flex: 1,
     minWidth: 0,

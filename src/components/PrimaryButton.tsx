@@ -35,10 +35,10 @@ export interface PrimaryButtonProps {
 }
 
 const BG: Record<ButtonTone, string> = {
-  // accentFill, not accent: white on #E8552E measures 3.64 : 1 (UX-11).
+  // Graphite on heat, 8.9 : 1 — see `color.onAccent`.
   accent: color.accentFill,
   neutral: 'transparent',
-  danger: color.danger,
+  danger: color.dangerFill,
   dangerOutline: 'transparent',
   ghost: 'transparent',
 };
@@ -46,7 +46,7 @@ const BG: Record<ButtonTone, string> = {
 const FG: Record<ButtonTone, string> = {
   accent: color.onAccent,
   neutral: color.text,
-  danger: color.onAccent,
+  danger: color.onDanger,
   dangerOutline: color.danger,
   ghost: color.textMuted,
 };
