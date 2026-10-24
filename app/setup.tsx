@@ -200,7 +200,7 @@ export default function Setup() {
             </View>
           </View>
           <Field
-            label={weightGiven ? 'Weight today' : 'Weight today · optional'}
+            label={weightGiven ? 'Weight today' : 'Weight today (optional)'}
             hint={weightGiven ? "Saved as today's weigh-in when you finish." : 'Skip it and no weigh-in is created. Targets use a calculation until you weigh in.'}
           >
             <View style={styles.weight}>
@@ -264,7 +264,7 @@ export default function Setup() {
               <Choice
                 key={m.template.id}
                 title={m.template.name}
-                subtitle={`${m.template.daysPerWeek} days · about ${m.template.minutes} min · ${m.reasons.slice(0, 2).join(', ')}`}
+                subtitle={`${m.template.daysPerWeek} days, about ${m.template.minutes} min, ${m.reasons.slice(0, 2).join(', ')}`}
                 badge={i === 0 ? 'Best match' : undefined}
                 selected={choice === m.template.id}
                 onPress={() => setPicked(m.template.id)}
@@ -286,7 +286,7 @@ function Pledge({ icon, title, sub }: { icon: IconName; title: string; sub: stri
   return (
     <View style={styles.promise} accessible accessibilityLabel={`${title}. ${sub}`}>
       <View style={styles.promiseIcon}>
-        <Icon name={icon} size={20} color={color.accent} />
+        <Icon name={icon} size={20} color={color.text} />
       </View>
       <View style={styles.flex1}>
         <Text style={styles.promiseTitle}>{title}</Text>
@@ -313,11 +313,13 @@ function Choice({ title, subtitle, selected, badge, onPress }: { title: string; 
 
 const styles = StyleSheet.create({
   welcome: { flex: 1, backgroundColor: color.bg, paddingHorizontal: space.xl, overflow: 'hidden' },
-  ghost: { position: 'absolute', top: '36%', left: space.lg, ...font.hero, fontSize: 214, lineHeight: 230, letterSpacing: -8, color: color.surface },
+  /** A measurement, so the measuring face — as texture, at a size nothing else in the app reaches. */
+  ghost: { position: 'absolute', top: '34%', left: space.lg, ...font.hero, fontSize: 240, lineHeight: 250, letterSpacing: -6, color: color.surface },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginBottom: space.xl },
   brandLogo: { width: 44, height: 44, borderRadius: radius.md },
   wordmark: { ...font.heading, fontWeight: '800', letterSpacing: 2, color: color.text },
-  hello: { ...font.display, fontSize: 46, lineHeight: 52, color: color.text },
+  /** A sentence, so the naming face: condensed figures are for numbers. */
+  hello: { fontFamily: font.title.fontFamily, fontSize: 44, lineHeight: 48, fontWeight: '800', letterSpacing: -1.4, color: color.text },
   pitch: { ...font.body, color: color.textMuted, marginTop: space.md },
   promise: { flexDirection: 'row', alignItems: 'center', gap: space.md + 2, minHeight: 60 },
   promiseIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: color.surfaceHigh, borderWidth: 1, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
@@ -336,13 +338,13 @@ const styles = StyleSheet.create({
   hint: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.xs },
   restore: { marginTop: space.xxl },
   choice: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 68, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, backgroundColor: color.surface, marginBottom: space.sm },
-  choiceOn: { borderColor: color.accent },
+  choiceOn: { borderColor: color.text },
   pressed: { backgroundColor: color.surfaceHigh },
   titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' },
   choiceTitle: { ...font.label, color: color.text, fontWeight: '600' },
   choiceSub: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: 2 },
-  badge: { ...font.caption, fontSize: 12, color: color.accent, fontWeight: '700' },
+  badge: { ...font.caption, fontSize: 12, color: color.text, fontWeight: '700', textDecorationLine: 'underline' },
   radio: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 2, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
-  radioOn: { borderColor: color.accent },
-  radioDot: { width: 12, height: 12, borderRadius: radius.pill, backgroundColor: color.accent },
+  radioOn: { borderColor: color.text },
+  radioDot: { width: 12, height: 12, borderRadius: radius.pill, backgroundColor: color.text },
 });

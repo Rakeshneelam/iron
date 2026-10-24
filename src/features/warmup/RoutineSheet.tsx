@@ -57,7 +57,7 @@ export function RoutineSheet<M extends string>(p: RoutineSheetProps<M>) {
   };
 
   return (
-    <Sheet visible={p.visible} onClose={p.onClose} title={`${p.title} · ${minutesLabel(total)}`}>
+    <Sheet visible={p.visible} onClose={p.onClose} title={`${p.title}, ${minutesLabel(total)}`}>
       {playing ? (
         <DrillPlayer
           items={items}
@@ -81,7 +81,7 @@ export function RoutineSheet<M extends string>(p: RoutineSheetProps<M>) {
                   <Pressable style={styles.flex} onPress={() => setOpen(open === it.drill.id ? null : it.drill.id)} accessibilityHint="Shows how to do it">
                     <Text style={styles.name}>{it.drill.name}</Text>
                     <Text style={styles.muted}>
-                      {doseLabel(it.dose)} · {it.why}
+                      {doseLabel(it.dose)}. {it.why}
                     </Text>
                   </Pressable>
                   <IconButton icon="swap" accessibilityLabel={`Replace ${it.drill.name}`} onPress={() => replace(i)} />

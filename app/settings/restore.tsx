@@ -78,7 +78,7 @@ export default function RestoreScreen() {
     void inspectDriveBackup(f, phrase)
       .then((found) => {
         if (found.ok) {
-          setLoaded({ summary: found.summary, tables: found.tables, from: `${fmtDayLabel(f.createdTime.slice(0, 10))} · Google Drive` });
+          setLoaded({ summary: found.summary, tables: found.tables, from: `${fmtDayLabel(f.createdTime.slice(0, 10))}, Google Drive` });
           setProblem(null);
         } else {
           setLoaded(null);
@@ -192,7 +192,7 @@ export default function RestoreScreen() {
                 {cloud.map((f) => (
                   <PrimaryButton
                     key={f.id}
-                    label={`${fmtDayLabel(f.createdTime.slice(0, 10))} · ${Math.max(1, Math.round(f.size / 1024))} KB`}
+                    label={`${fmtDayLabel(f.createdTime.slice(0, 10))}, ${Math.max(1, Math.round(f.size / 1024))} KB`}
                     tone={picked?.id === f.id ? 'neutral' : 'ghost'}
                     accessibilityLabel={`${picked?.id === f.id ? 'Chosen: ' : 'Choose '}the backup from ${fmtDayLabel(f.createdTime.slice(0, 10))}`}
                     onPress={() => {

@@ -78,14 +78,14 @@ export default function PlanScreen() {
         <Text style={styles.hint}>Days run in order, one after another — a missed day waits for you instead of being skipped.</Text>
       </Card>
 
-      <SectionHeader title={`Days · ${detail.days.length}`} />
+      <SectionHeader title={`Days, ${detail.days.length}`} />
       <ListCard>
         {detail.days.map(({ day, slots }, i) => (
           <ListRow
             key={day.id}
             divider={i > 0}
             title={day.label}
-            sub={slots.length ? slots.map((s) => s.exercise.name).join(' · ') : 'No exercises yet — tap to add'}
+            sub={slots.length ? slots.map((s) => s.exercise.name).join(', ') : 'No exercises yet — tap to add'}
             chevron={false}
             onPress={() => router.push(`/program/${day.id}`)}
             right={

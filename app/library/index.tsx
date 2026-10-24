@@ -45,14 +45,14 @@ export default function Library() {
         if (!matches(e.name, c?.aka)) continue;
         if (cat !== 'All' && (c ? categoryOf(c) : null) !== cat && !(cat !== 'All' && !c && e.primaryMuscles.some((m) => MUSCLE_LABEL[m as Muscle] === cat))) continue;
         if (equip !== 'all' && e.loadType !== equip) continue;
-        out.push({ kind: 'exercise', id: e.id, name: e.name, sub: `${e.primaryMuscles.map((m) => MUSCLE_LABEL[m as Muscle] ?? m).join(', ')} · ${EQUIPMENT_LABEL[e.loadType as Equipment] ?? e.loadType}` });
+        out.push({ kind: 'exercise', id: e.id, name: e.name, sub: `${e.primaryMuscles.map((m) => MUSCLE_LABEL[m as Muscle] ?? m).join(', ')}, ${EQUIPMENT_LABEL[e.loadType as Equipment] ?? e.loadType}` });
       }
     }
     if ((cat === 'All' && equip === 'all') || drillKinds) {
       for (const d of DRILLS) {
         if (drillKinds && !drillKinds.includes(d.kind)) continue;
         if (!matches(d.name)) continue;
-        out.push({ kind: 'drill', id: d.id, name: d.name, sub: `${d.kind === 'stretch' ? 'Stretch' : d.kind === 'mobility' ? 'Mobility' : 'Warm-up'} · ${doseLabel(d.dose)}`, drill: d });
+        out.push({ kind: 'drill', id: d.id, name: d.name, sub: `${d.kind === 'stretch' ? 'Stretch' : d.kind === 'mobility' ? 'Mobility' : 'Warm-up'}, ${doseLabel(d.dose)}`, drill: d });
       }
     }
     return out;
@@ -155,6 +155,6 @@ const styles = StyleSheet.create({
   empty: { ...font.label, color: color.textMuted, textAlign: 'center', marginTop: space.xl },
   drill: { gap: space.md, paddingBottom: space.lg },
   stage: { alignItems: 'center', backgroundColor: color.bg, borderRadius: radius.lg, paddingVertical: space.lg, marginBottom: space.sm },
-  dose: { ...font.body, color: color.accent, fontWeight: '600' },
+  dose: { ...font.body, color: color.text, fontWeight: '600' },
   cue: { ...font.body, color: color.text },
 });

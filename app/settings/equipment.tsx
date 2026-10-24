@@ -63,7 +63,7 @@ export default function EquipmentScreen() {
             {rows.map((r) => (
               <View key={r.id} style={styles.row}>
                 <Text style={styles.value}>
-                  {kgNum(r.valueKg)} kg{r.machineName ? `  ·  ${r.machineName}` : ''}
+                  {kgNum(r.valueKg)} kg{r.machineName ? `, ${r.machineName}` : ''}
                 </Text>
                 <View style={styles.count}>
                   <Stepper value={r.count} step={1} min={0} max={40} suffix="×" onChange={(v) => updateEquipment(r.id, { count: v })} />

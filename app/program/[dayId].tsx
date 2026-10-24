@@ -125,7 +125,7 @@ export default function DayEditor() {
                 <View style={styles.flex1}>
                   <Text style={styles.name}>{sl.exercise.name}</Text>
                   <Text style={styles.muted}>
-                    {sl.targetSets} × {sl.repLo}–{sl.repHi} · {sl.supersetGroup ? `pair with ${sl.supersetGroup}` : `rest ${fmtClock(sl.restSeconds)}`}
+                    {sl.targetSets} × {sl.repLo}–{sl.repHi}, {sl.supersetGroup ? `pair with ${sl.supersetGroup}` : `rest ${fmtClock(sl.restSeconds)}`}
                   </Text>
                 </View>
                 <Icon name={isOpen ? 'chevronUp' : 'chevronDown'} size={18} color={color.textFaint} />
@@ -149,7 +149,7 @@ export default function DayEditor() {
         <View style={styles.estimate}>
           <Text style={styles.estimateLabel}>Estimated</Text>
           <Text style={styles.estimateValue}>
-            {sets} sets · about {minutes} min
+            {sets} sets, about {minutes} min
           </Text>
         </View>
       ) : null}

@@ -36,7 +36,7 @@ export default function WeightHistory() {
         <View style={styles.flex1}>
           <Text style={styles.title}>Weigh-ins</Text>
           <Text style={styles.subtitle}>
-            {total === 0 ? 'Nothing logged yet' : `${total} readings · showing ${Math.min(limit, total)}`}
+            {total === 0 ? 'Nothing logged yet' : `${total} readings, showing ${Math.min(limit, total)}`}
           </Text>
         </View>
         <PrimaryButton label="Back" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/body?section=weight'))} />

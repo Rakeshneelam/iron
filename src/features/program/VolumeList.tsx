@@ -48,7 +48,7 @@ export function VolumeList({ weekly }: { weekly: Record<string, number> }) {
               {r.sets}
               <Text style={styles.meta}>
                 {' '}
-                / {r.mev}–{r.mrv} · {STATUS_WORD[r.status]}
+                / {r.mev}–{r.mrv}, {STATUS_WORD[r.status]}
               </Text>
             </Text>
           </View>

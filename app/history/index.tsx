@@ -202,12 +202,12 @@ export default function HistoryScreen() {
                   <Text style={styles.sub}>
                     {[fmtDayLabel(r.session.date), marked ? null : `${r.sets} ${r.sets === 1 ? 'set' : 'sets'}`, marked || !mins ? null : `${mins} min`]
                       .filter(Boolean)
-                      .join(' · ')}
+                      .join(', ')}
                   </Text>
                   {/* The reason you searched, on the row itself, so you never have to open it. */}
                   {r.top ? (
                     <Text style={styles.top}>
-                      {r.top.name} · {r.top.weight > 0 ? `${kg(r.top.weight)} × ` : ''}
+                      {r.top.name}: {r.top.weight > 0 ? `${kg(r.top.weight)} × ` : ''}
                       {r.top.reps}
                     </Text>
                   ) : null}
@@ -262,6 +262,6 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: color.surfaceHigh },
   name: { ...font.label, fontWeight: '600', color: color.text },
   sub: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint, marginTop: 2 },
-  top: { ...font.caption, fontWeight: '600', ...font.numeric, color: color.accent, marginTop: 2 },
+  top: { ...font.caption, fontWeight: '600', ...font.numeric, color: color.text, marginTop: 2 },
   footer: { ...font.caption, color: color.textMuted, textAlign: 'center', paddingVertical: space.lg },
 });

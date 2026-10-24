@@ -67,7 +67,7 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
       accessibilityRole="button"
       accessibilityLabel={`Add ${ex.name}. ${sub}`}
     >
-      {spark ? <Icon name="spark" size={16} color={color.accent} /> : null}
+      {spark ? <Icon name="spark" size={16} color={color.text} /> : null}
       <View style={styles.flex}>
         <Text style={styles.name}>{ex.name}</Text>
         <Text style={styles.meta}>{sub}</Text>
@@ -77,7 +77,7 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
       </View>
     </Press>
   );
-  const describe = (ex: Exercise) => `${ex.primaryMuscles.map(muscleLabel).join(', ')} · ${EQUIPMENT_LABEL[ex.loadType as Equipment] ?? ex.loadType}`;
+  const describe = (ex: Exercise) => `${ex.primaryMuscles.map(muscleLabel).join(', ')}, ${EQUIPMENT_LABEL[ex.loadType as Equipment] ?? ex.loadType}`;
 
   return (
     <View>

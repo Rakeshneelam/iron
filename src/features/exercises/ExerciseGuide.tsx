@@ -111,7 +111,7 @@ export function ExerciseGuide({ exercise, compact = false, onOpen }: { exercise:
 export function guideMeta(exercise: Exercise): string {
   const entry = CATALOG_BY_ID.get(exercise.id);
   if (!entry) return 'Custom exercise';
-  return [EQUIPMENT_LABEL[entry.equipment], LEVEL[entry.level], entry.compound ? 'Compound' : 'Isolation', entry.unilateral ? 'one side at a time' : ''].filter(Boolean).join(' · ');
+  return [EQUIPMENT_LABEL[entry.equipment], LEVEL[entry.level], entry.compound ? 'Compound' : 'Isolation', entry.unilateral ? 'one side at a time' : ''].filter(Boolean).join(', ');
 }
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {

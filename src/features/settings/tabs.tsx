@@ -72,7 +72,7 @@ export function TrainingTab() {
       <ListCard style={styles.flush}>
         <ListRow
           title="Current plan"
-          sub={plan ? `${plan} · edit days and exercises in Plans` : 'None yet — pick one in Plans'}
+          sub={plan ? `${plan}. Edit its days and exercises in Plans.` : 'None yet — pick one in Plans'}
           chevron={false}
           right={<Text style={styles.link}>Change</Text>}
           onPress={() => router.push('/program')}
@@ -340,7 +340,7 @@ export function DataTab() {
         <Text style={styles.eyebrow}>Last backup</Text>
         <Text style={styles.backupWhen}>{lastAt ? fmtWhen(lastAt) : 'Never'}</Text>
         <Text style={styles.hint}>
-          {workouts} {workouts === 1 ? 'workout' : 'workouts'} ·{' '}
+          {workouts} {workouts === 1 ? 'workout' : 'workouts'},{' '}
           {!isConfigured() ? 'Drive backup is not available in this build' : account ? `Google Drive, ${account}` : 'stored only on this phone'}
         </Text>
       </Card>
@@ -395,7 +395,7 @@ export function DataTab() {
 
       <SectionHeader title="Danger zone" />
       <PrimaryButton label="Delete all data" tone="dangerOutline" onPress={() => setDeleting(true)} />
-      <Text style={styles.version}>Iron {Constants.expoConfig?.version ?? ''} · no account, no server</Text>
+      <Text style={styles.version}>Iron {Constants.expoConfig?.version ?? ''}. No account, no server.</Text>
 
       <DeleteSheet visible={deleting} workouts={workouts} onBackUp={isConfigured() ? backup : undefined} onClose={() => setDeleting(false)} />
     </>
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
   footnote: { ...font.caption, fontSize: 12, color: color.textFaint, marginBottom: space.sm },
   warn: { ...font.label, color: color.warning, marginBottom: space.xs },
   value: { ...font.label, fontSize: 16, fontWeight: '700', ...font.numeric, color: color.text },
-  link: { ...font.caption, fontSize: 14, fontWeight: '600', color: color.accent },
+  link: { ...font.caption, fontSize: 14, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
   sub: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm, paddingVertical: space.md },
   subLabel: { ...font.caption, fontWeight: '600', color: color.textMuted, flex: 1 },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
@@ -461,6 +461,6 @@ const styles = StyleSheet.create({
   backup: { gap: 2 },
   eyebrow: { ...font.eyebrow, color: color.textFaint },
   backupWhen: { ...font.titleSm, color: color.text },
-  phrase: { ...font.body, ...font.numeric, color: color.accent, fontWeight: '700', letterSpacing: 0.5 },
+  phrase: { ...font.body, ...font.numeric, color: color.text, fontWeight: '700', letterSpacing: 0.5 },
   version: { ...font.caption, fontSize: 12, color: color.textFaint, textAlign: 'center', marginTop: space.lg, borderRadius: radius.sm },
 });
