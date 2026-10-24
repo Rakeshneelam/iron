@@ -1,23 +1,19 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, Pill, PrimaryButton, Screen, SectionHeader, StatTile, TextField, toast } from '@/components';
+import { ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Pill, Press, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
-import { getExercise } from '@/db/repositories/exercises';
 import { countFinishedWorkouts, recentWorkouts, sessionRecords } from '@/db/repositories/progress';
-import { deleteSession, getSessionSummary, reopenSession, setSessionFeedback, type SetRow } from '@/db/repositories/sessions';
-import { useSettings } from '@/db/repositories/settings';
-import { cooldown, type CooldownLength } from '@/engine/recovery';
+import { deleteSession, getSessionSummary, isNoTraining, reopenSession, setSessionFeedback, type SetRow } from '@/db/repositories/sessions';
 import { workoutMilestone } from '@/engine/records';
-import { drillKit } from '@/features/profile';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
+import { SessionScore } from '@/features/session/SessionScore';
 import { fmtSet } from '@/features/session/prescription';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
 import { BatteryCard } from '@/features/settings/BatteryCard';
 import { minutesLabel } from '@/features/warmup/labels';
-import { RoutineSheet } from '@/features/warmup/RoutineSheet';
 import { fmtDayLabel } from '@/lib/date';
 import { signed } from '@/lib/format';
 import { color, font, gap, hit, radius, space } from '@/theme/tokens';
@@ -29,20 +25,14 @@ const EFFORT = [
   { label: 'Hard', value: 8 },
   { label: 'All-out', value: 10 },
 ];
-const LENGTHS: { label: string; value: CooldownLength }[] = [
-  { label: 'Short', value: 'short' },
-  { label: 'Standard', value: 'standard' },
-];
-
 const measureOf = (exerciseId: string) => CATALOG_BY_ID.get(exerciseId)?.measure ?? 'reps';
 
 /**
  * A workout, whether you just finished it or found it in history.
  *
  * Those are different visits and the screen now says which. Finishing keeps
- * "Workout saved", Done → Today and the cool-down offer. Browsing an old one gets
- * its own date as the title, Back to wherever you came from, and no cool-down
- * suggestion for a session that ended three weeks ago (UX-09).
+ * "Workout saved" and Done → Today; browsing an old one gets its own date as the
+ * title and Back to wherever you came from (UX-09).
  *
  * Every exercise expands into its actual sets, warm-ups included, each opening the
  * same EditSetSheet the session screen uses. Correcting one recomputes that
@@ -54,7 +44,6 @@ export default function SummaryScreen() {
   const id = String(params.id);
   /** Set only by the finish path. Absent means someone navigated here to look. */
   const justFinished = params.just === '1';
-  const settings = useSettings();
   const summary = useLive(() => getSessionSummary(id), ['session', 'session_exercise', 'set_log', 'exercise', 'exercise_session_stat'], [id]);
   const records = useLive(() => sessionRecords(id), ['set_log', 'session', 'exercise'], [id]);
   const milestone = useLive(
@@ -62,16 +51,8 @@ export default function SummaryScreen() {
     ['session'],
     [id, justFinished],
   );
-  const [length, setLength] = useState<CooldownLength>('short');
-  const [cooling, setCooling] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editing, setEditing] = useState<SetRow | null>(null);
-  const kit = drillKit(settings);
-  const routine = useMemo(
-    () => cooldown((summary?.perExercise ?? []).map((e) => ({ primary: getExercise(e.exerciseId)?.primaryMuscles ?? [], sets: e.sets })), length, kit),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [summary?.perExercise.length, length, settings.tools, settings.equipmentPreset],
-  );
 
   /** Back to whoever pushed us; a cold link has no caller, so it falls back. */
   const back = () => (router.canGoBack() ? router.back() : router.replace('/history'));
@@ -92,7 +73,7 @@ export default function SummaryScreen() {
   const remove = () =>
     confirm({
       title: 'Delete this workout?',
-      message: s.status === 'skipped' ? undefined : `${summary.hardSets} sets will be removed from your history.`,
+      message: isNoTraining(s.status) ? undefined : `${summary.hardSets} sets will be removed from your history.`,
       confirmLabel: 'Delete',
       destructive: true,
       onConfirm: () => {
@@ -110,71 +91,149 @@ export default function SummaryScreen() {
   const totalReps = repsOnly.reduce((t, e) => t + e.rows.filter((r) => r.isWarmup === 0).reduce((a, r) => a + r.reps, 0), 0);
   const totalSeconds = timed.reduce((t, e) => t + e.rows.filter((r) => r.isWarmup === 0).reduce((a, r) => a + r.reps, 0), 0);
 
-  const title = justFinished ? (s.status === 'skipped' ? 'Skipped day' : 'Workout saved') : (summary.session.routineDayId ? undefined : 'Workout');
+  const title = justFinished ? (isNoTraining(s.status) ? STATUS_LABEL[s.status] : 'Workout saved') : (summary.session.routineDayId ? undefined : 'Workout');
+
+  const perExercise = (
+    <>
+      <SectionHeader title="What you did" hint="Tap an exercise to see and fix its sets." />
+      <ListCard>
+        {summary.perExercise.map((e, i) => {
+          const measure = measureOf(e.exerciseId);
+          const delta = e.prevBestE1rm === null ? null : e.bestE1rm - e.prevBestE1rm;
+          const open = expanded === e.exerciseId;
+          return (
+            <View key={e.exerciseId} style={[i > 0 && styles.divider]}>
+              <Press
+                feedback="highlight"
+                style={styles.row}
+                pressedStyle={styles.pressedRow}
+                onPress={() => setExpanded(open ? null : e.exerciseId)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: open }}
+                accessibilityLabel={`${e.name}, ${e.sets} sets, best ${fmtSet(measure, e.topWeight, e.topReps)}. ${open ? 'Hide' : 'Show'} its sets.`}
+              >
+                <View style={styles.flex1}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {e.name}
+                  </Text>
+                  <Text style={styles.muted}>
+                    {e.sets} {e.sets === 1 ? 'set' : 'sets'}, best {fmtSet(measure, e.topWeight, e.topReps)}
+                  </Text>
+                </View>
+                {/* An estimated 1RM means nothing for a timed hold, so it is not shown. */}
+                {measure === 'reps' ? (
+                  <Text style={[styles.delta, { color: delta !== null && delta > 0.05 ? color.positive : color.textMuted }]}>
+                    {delta === null ? 'first' : `${signed(delta)} kg`}
+                  </Text>
+                ) : null}
+                <Icon name={open ? 'chevronUp' : 'chevronDown'} size={18} color={color.textFaint} />
+              </Press>
+              {open
+                ? e.rows.map((r, n) => (
+                    <Press
+                      key={r.id}
+                      feedback="highlight"
+                      style={styles.setRow}
+                      pressedStyle={styles.pressedRow}
+                      onPress={() => setEditing(r)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${r.isWarmup === 1 ? 'Warm-up' : `Set ${n + 1}`}: ${fmtSet(measure, r.weight, r.reps)}. Tap to correct.`}
+                    >
+                      <Text style={styles.setIdx}>{r.isWarmup === 1 ? 'warm-up' : `set ${n + 1}`}</Text>
+                      <Text style={[styles.setVal, styles.flex1]}>{fmtSet(measure, r.weight, r.reps)}</Text>
+                      {r.painFlag === 1 ? <Text style={styles.pain}>pain</Text> : null}
+                      {r.isWarmup === 0 && measure === 'reps' ? <Text style={styles.muted}>RIR {r.rir}</Text> : null}
+                      <Icon name="edit" size={16} color={color.textMuted} />
+                    </Press>
+                  ))
+                : null}
+            </View>
+          );
+        })}
+      </ListCard>
+      <Text style={styles.legend}>Change is in estimated 1-rep max vs last time.</Text>
+    </>
+  );
 
   return (
     <Screen
       title={title ?? fmtDayLabel(s.date)}
       subtitle={justFinished ? `${fmtDayLabel(s.date)}, ${summary.durationMin} minutes` : `${summary.durationMin} minutes`}
       // Just finished: Done goes to Today. Browsing: Back goes where you came from.
-      right={justFinished ? undefined : <PrimaryButton label="Back" tone="ghost" onPress={back} />}
+      back={justFinished ? undefined : back}
+      // The cool-down used to be offered here, after the workout had been filed.
+      // It is a stage of the workout now — between the last lift and this screen
+      // (features/session/stages) — so by the time you are reading a summary it
+      // has already been done or skipped, and offering it again would be asking
+      // twice.
+      dock={justFinished ? <PrimaryButton label="Done" size="gym" onPress={() => router.replace('/')} /> : undefined}
     >
       <View style={styles.pills}>
         <Pill label={STATUS_LABEL[s.status]} tone={STATUS_TONE[s.status]} />
         {milestone ? <Pill label={milestone} tone="muted" /> : null}
       </View>
-      {s.status === 'skipped' ? (
-        <Text style={styles.note}>This day was skipped on purpose. It moved your plan on to the next day.</Text>
+      {isNoTraining(s.status) ? (
+        <Text style={styles.note}>
+          {s.status === 'rest'
+            ? 'A day off, on purpose. Your plan is exactly where it was — this costs you nothing.'
+            : 'This planned workout did not happen. Your plan moved on to the next day.'}
+        </Text>
       ) : (
         <>
           <View style={styles.tiles}>
-            <StatTile label="Volume" value={`${Math.round(summary.totalTonnage)} kg`} />
-            <StatTile label="Sets" value={String(summary.hardSets)} />
-            {/* Whichever the workout actually was. Never both totals in one number. */}
-            {totalReps > 0 || totalSeconds === 0 ? (
-              <StatTile label="Reps" value={String(totalReps)} />
-            ) : (
-              <StatTile label="Time under load" value={minutesLabel(totalSeconds)} />
-            )}
+            <TitleBlock
+              cells={[
+                { label: 'Sets', value: String(summary.hardSets) },
+                { label: 'Lifted', value: summary.totalTonnage >= 10000 ? `${(summary.totalTonnage / 1000).toFixed(1)}k` : String(Math.round(summary.totalTonnage)), unit: 'kg' },
+                { label: 'Time', value: String(summary.durationMin), unit: 'min' },
+                { label: 'New bests', value: String(records.length), tone: records.length ? ('positive' as const) : undefined },
+              ]}
+            />
           </View>
-          {totalReps > 0 && totalSeconds > 0 ? <Text style={styles.note}>Plus {minutesLabel(totalSeconds)} of timed work.</Text> : null}
+          {/* Seconds held are not reps: timed work gets its own sentence, never a sum with reps (UX-09). */}
+          {totalSeconds > 0 ? (
+            <Text style={styles.note}>
+              {totalReps > 0 ? `${totalReps} reps, plus ${minutesLabel(totalSeconds)} of timed work.` : `${minutesLabel(totalSeconds)} of timed work.`}
+            </Text>
+          ) : null}
           {summary.progress.planned > 0 ? (
             <Text style={styles.note}>
               {summary.progress.done} of {summary.progress.planned} planned exercises done
-              {summary.progress.skipped ? ` · ${summary.progress.skipped} skipped` : ''}
+              {summary.progress.skipped ? `, ${summary.progress.skipped} skipped` : ''}
             </Text>
           ) : null}
 
+          {/*
+            The hour as it went: every set at the minute it was logged, a lane per
+            exercise (features/session/SessionScore). The list below has the numbers;
+            this has the shape.
+          */}
+          <SectionHeader title="How it went" />
+          <SessionScore
+            lanes={summary.perExercise.map((e) => ({ exerciseId: e.exerciseId, name: e.name, rows: e.rows, isPR: e.isPR }))}
+            startedAt={s.startedAt}
+            endedAt={s.endedAt}
+          />
+
+          {/*
+            A best is a fact with a number attached, set as a datum would be: a green
+            rule and the lifts that crossed it. No trophy, no confetti (AGENTS §6).
+          */}
           {records.length ? (
-            <>
-              <SectionHeader title="Personal records" />
-              <Card style={styles.list}>
-                {records.map((r, i) => (
-                  <View key={r.exerciseId} style={[styles.row, i > 0 && styles.divider]}>
-                    <Icon name="star" size={16} color={color.positive} />
-                    <View style={styles.flex1}>
-                      <Text style={styles.name}>{r.name}</Text>
-                      <Text style={styles.muted}>{r.events.map((e) => e.label).join(', ')}</Text>
-                    </View>
-                  </View>
-                ))}
-              </Card>
-            </>
+            <View style={styles.records}>
+              <Text style={styles.recordsTitle}>
+                {records.length === 1 ? 'One lift went past its best' : `${records.length} lifts went past their best`}
+              </Text>
+              {records.map((r) => (
+                <Text key={r.exerciseId} style={styles.recordLine}>
+                  <Text style={styles.recordName}>{r.name}</Text>
+                  {`  ${r.events.map((e) => e.label).join(', ')}`}
+                </Text>
+              ))}
+            </View>
           ) : null}
 
-          {/* A cool-down belongs to a workout you just did, not one from March. */}
-          {justFinished && routine.items.length ? (
-            <Card onPress={() => setCooling(true)}>
-              <View style={styles.row}>
-                <Icon name="moon" size={20} color={color.accent} />
-                <View style={styles.flex1}>
-                  <Text style={styles.name}>Cool-down · {minutesLabel(routine.seconds)}</Text>
-                  <Text style={styles.muted}>Optional — easy stretches for what you trained</Text>
-                </View>
-                <Icon name="chevronRight" size={18} color={color.textMuted} />
-              </View>
-            </Card>
-          ) : null}
+          {perExercise}
 
           <SectionHeader title="How did it feel?" />
           <ChipRow options={EFFORT} value={s.sessionRpe} onChange={(v) => setSessionFeedback(id, { sessionRpe: v })} />
@@ -185,60 +244,6 @@ export default function SummaryScreen() {
             multiline
             style={styles.input}
           />
-
-          <SectionHeader title="Per exercise" hint="Tap an exercise to see and fix its sets." />
-          <Card style={styles.list}>
-            {summary.perExercise.map((e, i) => {
-              const measure = measureOf(e.exerciseId);
-              const delta = e.prevBestE1rm === null ? null : e.bestE1rm - e.prevBestE1rm;
-              const open = expanded === e.exerciseId;
-              return (
-                <View key={e.exerciseId} style={[i > 0 && styles.divider]}>
-                  <Pressable
-                    style={styles.row}
-                    onPress={() => setExpanded(open ? null : e.exerciseId)}
-                    accessibilityRole="button"
-                    accessibilityState={{ expanded: open }}
-                    accessibilityLabel={`${e.name}, ${e.sets} sets, best ${fmtSet(measure, e.topWeight, e.topReps)}. ${open ? 'Hide' : 'Show'} its sets.`}
-                  >
-                    <View style={styles.flex1}>
-                      <Text style={styles.name} numberOfLines={1}>
-                        {e.name}
-                      </Text>
-                      <Text style={styles.muted}>
-                        {e.sets} {e.sets === 1 ? 'set' : 'sets'}, best {fmtSet(measure, e.topWeight, e.topReps)}
-                      </Text>
-                    </View>
-                    {/* An estimated 1RM means nothing for a timed hold, so it is not shown. */}
-                    {measure === 'reps' ? (
-                      <Text style={[styles.delta, { color: delta !== null && delta > 0.05 ? color.positive : color.textMuted }]}>
-                        {delta === null ? 'first' : `${signed(delta)} kg`}
-                      </Text>
-                    ) : null}
-                    <Icon name={open ? 'chevronUp' : 'chevronDown'} size={18} color={color.textMuted} />
-                  </Pressable>
-                  {open
-                    ? e.rows.map((r, n) => (
-                        <Pressable
-                          key={r.id}
-                          style={styles.setRow}
-                          onPress={() => setEditing(r)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${r.isWarmup === 1 ? 'Warm-up' : `Set ${n + 1}`}: ${fmtSet(measure, r.weight, r.reps)}. Tap to correct.`}
-                        >
-                          <Text style={styles.setIdx}>{r.isWarmup === 1 ? 'warm-up' : `set ${n + 1}`}</Text>
-                          <Text style={[styles.setVal, styles.flex1]}>{fmtSet(measure, r.weight, r.reps)}</Text>
-                          {r.painFlag === 1 ? <Text style={styles.pain}>pain</Text> : null}
-                          {r.isWarmup === 0 && measure === 'reps' ? <Text style={styles.muted}>RIR {r.rir}</Text> : null}
-                          <Icon name="edit" size={16} color={color.textMuted} />
-                        </Pressable>
-                      ))
-                    : null}
-                </View>
-              );
-            })}
-          </Card>
-          <Text style={styles.legend}>Change is in estimated 1-rep max vs last time.</Text>
           {justFinished ? (
             <View style={styles.aside}>
               <BatteryCard />
@@ -247,13 +252,8 @@ export default function SummaryScreen() {
         </>
       )}
 
-      {justFinished ? (
-        <PrimaryButton label="Done" size="gym" style={styles.gapTop} onPress={() => router.replace('/')} />
-      ) : (
-        <PrimaryButton label="Back" size="gym" tone="neutral" style={styles.gapTop} onPress={back} />
-      )}
       <View style={styles.secondary}>
-        {s.status !== 'skipped' ? <PrimaryButton label="Reopen" tone="ghost" icon={<Icon name="undo" size={16} />} style={styles.flex1} onPress={reopen} /> : null}
+        {!isNoTraining(s.status) ? <PrimaryButton label="Reopen" tone="ghost" icon={<Icon name="undo" size={16} color={color.textMuted} />} style={styles.flex1} onPress={reopen} /> : null}
         {/* Permanent deletion, kept in the corner it belongs in. */}
         <IconButton icon="trash" label="Delete" accessibilityLabel="Delete this workout permanently" onPress={remove} />
       </View>
@@ -265,28 +265,15 @@ export default function SummaryScreen() {
           session's aggregates and touch nothing else. */}
       <EditSetSheet set={editing} step={2.5} correcting onClose={() => setEditing(null)} />
 
-      <RoutineSheet
-        visible={cooling}
-        title="Cool-down"
-        routine={routine}
-        available={kit}
-        onClose={() => setCooling(false)}
-        modes={{ options: LENGTHS, value: length, onChange: setLength }}
-        doneLabel="Done"
-        onDone={() => {
-          setCooling(false);
-          toast('Cool-down done');
-        }}
-        onSkip={() => setCooling(false)}
-      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  pressedRow: { backgroundColor: color.surfaceHigh },
   flex1: { flex: 1 },
   pills: { flexDirection: 'row', gap: space.sm },
-  tiles: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
+  tiles: { marginTop: space.lg },
   note: { ...font.label, color: color.textMuted, marginTop: space.md },
   input: {
     ...font.body,
@@ -298,8 +285,11 @@ const styles = StyleSheet.create({
     minHeight: hit.gym,
     marginTop: space.md,
   },
-  list: { paddingVertical: space.xs },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.md, minHeight: hit.default },
+  records: { gap: space.xs, marginTop: space.lg, borderLeftWidth: 2, borderLeftColor: color.positive, paddingLeft: space.md },
+  recordsTitle: { ...font.label, fontWeight: '700', color: color.positive },
+  recordLine: { ...font.caption, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'], color: color.textMuted },
+  recordName: { color: color.text, fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, minHeight: hit.gym },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -318,6 +308,5 @@ const styles = StyleSheet.create({
   delta: { ...font.label, ...font.numeric },
   legend: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   aside: { marginTop: gap.section },
-  gapTop: { marginTop: space.xl },
   secondary: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
 });

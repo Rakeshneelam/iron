@@ -1,8 +1,7 @@
-import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Card, ChipRow, PrimaryButton, Screen, SectionHeader, Stepper, ToggleChips } from '@/components';
+import { Card, ChipRow, Icon, Press, PrimaryButton, Screen, SectionHeader, Stepper, ToggleChips } from '@/components';
 import { useLive } from '@/db/live';
 import { addEquipment, deleteEquipment, listEquipment, updateEquipment, type EquipmentKind } from '@/db/repositories/equipment';
 import { setSetting, useSettings } from '@/db/repositories/settings';
@@ -36,7 +35,7 @@ export default function EquipmentScreen() {
     <Screen
       title="Equipment"
       subtitle="Suggestions only offer what you can actually do."
-      right={<PrimaryButton label="Back" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/settings'))} />}
+      back
     >
       <SectionHeader title="Where you train" />
       <Card>
@@ -64,14 +63,14 @@ export default function EquipmentScreen() {
             {rows.map((r) => (
               <View key={r.id} style={styles.row}>
                 <Text style={styles.value}>
-                  {kgNum(r.valueKg)} kg{r.machineName ? `  ·  ${r.machineName}` : ''}
+                  {kgNum(r.valueKg)} kg{r.machineName ? `, ${r.machineName}` : ''}
                 </Text>
                 <View style={styles.count}>
                   <Stepper value={r.count} step={1} min={0} max={40} suffix="×" onChange={(v) => updateEquipment(r.id, { count: v })} />
                 </View>
-                <Pressable style={styles.del} onPress={() => deleteEquipment(r.id)} accessibilityLabel="Remove">
-                  <Text style={styles.delText}>✕</Text>
-                </Pressable>
+                <Press style={styles.del} pressedStyle={styles.pressedRow} onPress={() => deleteEquipment(r.id)} accessibilityRole="button" accessibilityLabel="Remove">
+                  <Icon name="close" size={18} color={color.textMuted} />
+                </Press>
               </View>
             ))}
           </View>
@@ -108,6 +107,7 @@ export default function EquipmentScreen() {
 }
 
 const styles = StyleSheet.create({
+  pressedRow: { backgroundColor: color.surfaceHigh },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.xs },
   value: { ...font.body, ...font.numeric, color: color.text, flex: 1 },
   count: { width: 170 },

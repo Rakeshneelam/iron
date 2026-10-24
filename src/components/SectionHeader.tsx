@@ -1,32 +1,47 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { color, font, gap, space } from '@/theme/tokens';
+import { color, font, hit, space } from '@/theme/tokens';
+
+import { Press } from './Press';
 
 export interface SectionHeaderProps {
   title: string;
   /** One line of context, so the explanation stops being tacked onto the content. */
   hint?: string;
+  /** A text link at the right edge: "See all", "Custom food". */
+  action?: { label: string; onPress: () => void; accessibilityLabel?: string };
   right?: ReactNode;
 }
 
 /**
- * A heading for a group of content.
+ * The small label that opens a group — "This week", "Recent workouts".
  *
- * It used to upper-case every title and set it in 12px muted grey with tracked
- * letters. Settings carried twenty of them, so WEIGHT TREND, BREAKFAST and YOUR DATA
- * all arrived at identical weight — which is the same as having no hierarchy, and
- * shouted while saying it.
- *
- * Sentence case at body size in full-strength text reads as what it is: a heading.
- * Use one only when the content below it is not already self-evident — "Breakfast"
- * above a button that says "Add to breakfast" was telling the user nothing twice.
+ * It is a signpost, not a heading: the content under it carries the meaning, and a
+ * card's own title stays full-strength. Use one only when the group is not already
+ * self-evident. The optional action is the group's one way further in, and a
+ * hairline leads from the label to it, the way a drawing leads a callout to what it
+ * names — so "See all" reads as belonging to this group and not the next.
  */
-export function SectionHeader({ title, hint, right }: SectionHeaderProps) {
+export function SectionHeader({ title, hint, action, right }: SectionHeaderProps) {
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
+          {title}
+        </Text>
+        <View style={styles.leader} />
+        {action ? (
+          <Press
+            onPress={action.onPress}
+            accessibilityRole="button"
+            accessibilityLabel={action.accessibilityLabel ?? action.label}
+            // The link is text-sized; the target is not.
+            hitSlop={{ top: space.sm, bottom: space.sm, left: space.md, right: space.md }}
+          >
+            <Text style={styles.action}>{action.label}</Text>
+          </Press>
+        ) : null}
         {right}
       </View>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
@@ -35,8 +50,10 @@ export function SectionHeader({ title, hint, right }: SectionHeaderProps) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: gap.section, marginBottom: space.md },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md },
-  title: { ...font.heading, color: color.text, flexShrink: 1 },
+  wrap: { marginTop: space.lg, marginBottom: space.sm },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default - space.lg },
+  title: { ...font.eyebrow, fontSize: 13, color: color.textMuted, flexShrink: 1 },
+  leader: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
+  action: { ...font.caption, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
 });

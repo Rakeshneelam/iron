@@ -14,16 +14,18 @@
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
-import { Card, ChipRow, EmptyState, PrimaryButton, TextField } from '@/components';
+import { ChipRow, EmptyState, Icon, IconButton, Pill, Press, TextField } from '@/components';
 import { useLive } from '@/db/live';
-import { searchWorkoutsPage, type HistoryCursor } from '@/db/repositories/progress';
-import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
+import { searchWorkoutsPage, type HistoryCursor, type HistoryRow } from '@/db/repositories/progress';
+import { isNoTraining } from '@/db/repositories/sessions';
+import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
+import { addDays, fmtDayLabel, parseISODate, todayISO } from '@/lib/date';
 import { kg } from '@/lib/format';
-import { color, font, hit, layout, space } from '@/theme/tokens';
+import { color, font, hit, layout, radius, space } from '@/theme/tokens';
 
 /** Null = everything. Ranges people actually think in, not a date picker. */
 const RANGES = [
@@ -36,6 +38,30 @@ const RANGES = [
 ] as const;
 
 const PAGE = 40;
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** A month label, then that month's workouts as the rows of one card. */
+type Item = { kind: 'month'; key: string; label: string } | { kind: 'row'; key: string; r: HistoryRow; first: boolean; last: boolean };
+
+function monthOf(iso: string): string {
+  const d = parseISODate(iso);
+  const label = MONTHS[d.getMonth()] ?? '';
+  return d.getFullYear() === new Date().getFullYear() ? label : `${label} ${d.getFullYear()}`;
+}
+
+/**
+ * A day marked off has no workout to name, so it is named by what it is — and a
+ * plan-less workout has no day label either, which is what "Workout" is for.
+ */
+function titleOf(r: HistoryRow): string {
+  return r.dayLabel ?? (isNoTraining(r.session.status) ? STATUS_LABEL[r.session.status] : 'Workout');
+}
+
+function minutesOf(r: HistoryRow): number | null {
+  if (!r.session.endedAt) return null;
+  const m = Math.round((Date.parse(r.session.endedAt) - Date.parse(r.session.startedAt)) / 60000);
+  return Number.isFinite(m) && m > 0 ? m : null;
+}
 
 /**
  * Filters survive leaving the screen.
@@ -80,6 +106,19 @@ export default function HistoryScreen() {
     [text, sinceISO, pages],
   );
 
+  const items = useMemo(() => {
+    const out: Item[] = [];
+    page.rows.forEach((r, i) => {
+      const month = monthOf(r.session.date);
+      const prev = page.rows[i - 1];
+      const next = page.rows[i + 1];
+      const first = !prev || monthOf(prev.session.date) !== month;
+      if (first) out.push({ kind: 'month', key: `m-${month}`, label: month });
+      out.push({ kind: 'row', key: r.session.id, r, first, last: !next || monthOf(next.session.date) !== month });
+    });
+    return out;
+  }, [page.rows]);
+
   const searching = text.trim().length > 0;
   const clear = () => {
     setDraft('');
@@ -89,30 +128,36 @@ export default function HistoryScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
+        <IconButton icon="chevronLeft" accessibilityLabel="Back" onPress={() => (router.canGoBack() ? router.back() : router.replace('/review'))} />
         <View style={styles.flex1}>
-          <Text style={styles.title}>History</Text>
+          <Text style={styles.title} accessibilityRole="header">
+            Workout history
+          </Text>
           <Text style={styles.subtitle}>
             {page.rows.length} {page.rows.length === 1 ? 'workout' : 'workouts'}
             {page.next ? ' so far' : ''}
+            {!page.next && page.rows.length ? ` since ${monthOf(page.rows[page.rows.length - 1]?.session.date ?? todayISO())}` : ''}
           </Text>
         </View>
-        <PrimaryButton label="Back" tone="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/review'))} />
       </View>
 
       <View style={styles.filters}>
-        <TextField
-          value={draft}
-          onType={(t) => {
-            setDraft(t);
-            // Every keystroke, not on blur: waiting for a blur meant the list sat
-            // there unchanged while you typed, which reads as broken.
-            set({ text: t, pages: 1 });
-          }}
-          onCommit={(t) => set({ text: t, pages: 1 })}
-          placeholder="Search a lift — bench, squat, row"
-          accessibilityLabel="Search workouts by exercise"
-          style={styles.input}
-        />
+        <View style={styles.search}>
+          <Icon name="search" size={20} color={color.textFaint} />
+          <TextField
+            value={draft}
+            onType={(t) => {
+              setDraft(t);
+              // Every keystroke, not on blur: waiting for a blur meant the list sat
+              // there unchanged while you typed, which reads as broken.
+              set({ text: t, pages: 1 });
+            }}
+            onCommit={(t) => set({ text: t, pages: 1 })}
+            placeholder="Search a lift — bench, squat, row"
+            accessibilityLabel="Search workouts by exercise"
+            style={styles.input}
+          />
+        </View>
         <ChipRow options={RANGES} value={days} onChange={(v) => set({ days: v, pages: 1 })} />
       </View>
 
@@ -127,61 +172,127 @@ export default function HistoryScreen() {
         </View>
       ) : (
         <FlashList
-          data={page.rows}
-          keyExtractor={(r) => r.session.id}
+          data={items}
+          keyExtractor={(it) => it.key}
+          getItemType={(it) => it.kind}
           contentContainerStyle={{ paddingHorizontal: layout.screenPadding, paddingBottom: insets.bottom + space.xl }}
           onEndReachedThreshold={0.6}
           onEndReached={() => {
             if (page.next) set((s) => ({ pages: s.pages + 1 }));
           }}
           ListFooterComponent={page.next ? <Text style={styles.footer}>Loading older workouts…</Text> : null}
-          renderItem={({ item: r }) => (
-            <Pressable
-              onPress={() => router.push(`/session/summary/${r.session.id}`)}
-              accessibilityRole="button"
-              accessibilityLabel={`${fmtDayLabel(r.session.date)}, ${r.sets} sets. Open workout.`}
-            >
-              <Card>
-                <View style={styles.row}>
-                  <Text style={styles.date}>{fmtDayLabel(r.session.date)}</Text>
-                  {r.session.status === 'cancelled' ? <Text style={styles.muted}>cancelled</Text> : null}
-                </View>
-                <Text style={styles.muted}>{[r.dayLabel, `${r.sets} ${r.sets === 1 ? 'set' : 'sets'}`].filter(Boolean).join(' · ')}</Text>
-                {/* The reason you searched, on the row itself, so you never have to open it. */}
-                {r.top ? (
-                  <Text style={styles.top}>
-                    {r.top.name} · {r.top.weight > 0 ? `${kg(r.top.weight)} × ` : ''}
-                    {r.top.reps}
+          renderItem={({ item }) => {
+            if (item.kind === 'month') return <Text style={styles.month}>{item.label}</Text>;
+            const { r, first, last } = item;
+            const mins = minutesOf(r);
+            const name = titleOf(r);
+            // "0 sets · 0 min" under a rest day is noise: the day itself is the entry.
+            const marked = isNoTraining(r.session.status);
+            return (
+              <Press
+                onPress={() => router.push(`/session/summary/${r.session.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={`${name}, ${fmtDayLabel(r.session.date)}${marked ? '' : `, ${r.sets} sets`}. Open it.`}
+                feedback="highlight"
+                style={[styles.row, first && styles.rowFirst, last && styles.rowLast, !first && styles.divider]}
+                pressedStyle={styles.pressed}
+              >
+                <View style={styles.flex1}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {name}
                   </Text>
-                ) : null}
-              </Card>
-            </Pressable>
-          )}
+                  <Text style={styles.sub}>
+                    {[fmtDayLabel(r.session.date), marked ? null : `${r.sets} ${r.sets === 1 ? 'set' : 'sets'}`, marked || !mins ? null : `${mins} min`]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </Text>
+                  {/* The workout as its sets — the same marks the session rail draws. */}
+                  <SetMarks sets={r.sets} status={r.session.status} />
+                  {/* The reason you searched, on the row itself, so you never have to open it. */}
+                  {r.top ? (
+                    <Text style={styles.top}>
+                      {r.top.name}: {r.top.weight > 0 ? `${kg(r.top.weight)} × ` : ''}
+                      {r.top.reps}
+                    </Text>
+                  ) : null}
+                </View>
+                {r.session.status !== 'completed' ? <Pill label={STATUS_LABEL[r.session.status]} tone={STATUS_TONE[r.session.status]} /> : null}
+              </Press>
+            );
+          }}
         />
       )}
     </View>
   );
 }
 
+/** Marks drawn before the rest become a number: a long workout should not out-shout the row's name. */
+const MAX_MARKS = 28;
+
+/**
+ * A workout's sets as marks: solid because they were logged; a cancelled one's in
+ * outline, because cancelling never counts as done (AGENTS §1.4); a day off as one
+ * short rule. Hidden from screen readers — the row's label already says it in words.
+ */
+function SetMarks({ sets, status }: { sets: number; status: HistoryRow['session']['status'] }) {
+  if (status === 'rest' || status === 'skipped') return <View style={styles.offMark} importantForAccessibility="no-hide-descendants" />;
+  if (sets === 0) return null;
+  const open = status === 'cancelled';
+  return (
+    <View style={styles.marks} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+      {Array.from({ length: Math.min(sets, MAX_MARKS) }, (_, i) => (
+        <View key={i} style={[styles.mark, open && styles.markOpen]} />
+      ))}
+      {sets > MAX_MARKS ? <Text style={styles.more}>+{sets - MAX_MARKS}</Text> : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  marks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2, marginTop: space.xs + 2 },
+  mark: { width: 5, height: 9, borderRadius: 1, backgroundColor: color.text, opacity: 0.85 },
+  markOpen: { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.textFaint, opacity: 1 },
+  offMark: { width: 14, height: 2, borderRadius: 1, backgroundColor: color.textFaint, marginTop: space.sm },
+  more: { ...font.caption, fontSize: 11, lineHeight: 12, fontVariant: ['tabular-nums'], color: color.textFaint, marginLeft: 2 },
   root: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   padded: { paddingHorizontal: layout.screenPadding },
-  header: {
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingLeft: space.sm, paddingRight: layout.screenPadding, paddingTop: space.md, paddingBottom: space.sm },
+  title: { ...font.titleSm, color: color.text },
+  subtitle: { ...font.caption, color: color.textMuted, marginTop: 2 },
+  filters: { paddingHorizontal: layout.screenPadding, gap: space.sm, paddingBottom: space.sm },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md - 2,
+    minHeight: hit.gym,
+    paddingLeft: space.lg,
+    backgroundColor: color.surfaceHigh,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  input: { flex: 1, minHeight: hit.gym, backgroundColor: 'transparent', paddingHorizontal: 0 },
+  month: { ...font.label, fontSize: 14, fontWeight: '700', color: color.text, marginTop: space.lg, marginBottom: space.sm },
+  // One card per month, drawn by its rows: the first rounds the top, the last the bottom.
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    paddingBottom: space.sm,
+    minHeight: 60,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.lg,
+    backgroundColor: color.surface,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: color.border,
   },
-  title: { ...font.title, color: color.text },
-  subtitle: { ...font.label, color: color.textMuted, marginTop: space.xs },
-  filters: { paddingHorizontal: layout.screenPadding, gap: space.sm, paddingBottom: space.md },
-  input: { minHeight: hit.default },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  date: { ...font.body, color: color.text, fontWeight: '600' },
-  muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
-  top: { ...font.body, color: color.accent, marginTop: space.xs },
+  rowFirst: { borderTopWidth: 1, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  rowLast: { borderBottomWidth: 1, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth },
+  pressed: { backgroundColor: color.surfaceHigh },
+  name: { ...font.label, fontWeight: '600', color: color.text },
+  sub: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint, marginTop: 2 },
+  top: { ...font.caption, fontWeight: '600', ...font.numeric, color: color.text, marginTop: 2 },
   footer: { ...font.caption, color: color.textMuted, textAlign: 'center', paddingVertical: space.lg },
 });

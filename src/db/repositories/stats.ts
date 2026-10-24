@@ -81,9 +81,9 @@ export function weeklySetsPerMuscle(weekStart: string = weekStartISO(todayISO())
   return out;
 }
 
-export function e1rmSeries(exerciseId: string, limit = 60): { date: string; e1rm: number }[] {
+export function e1rmSeries(exerciseId: string, limit = 60): { sessionId: string; date: string; e1rm: number }[] {
   return db
-    .select({ date: schema.exerciseSessionStat.date, e1rm: schema.exerciseSessionStat.bestE1rm })
+    .select({ sessionId: schema.exerciseSessionStat.sessionId, date: schema.exerciseSessionStat.date, e1rm: schema.exerciseSessionStat.bestE1rm })
     .from(schema.exerciseSessionStat)
     .where(eq(schema.exerciseSessionStat.exerciseId, exerciseId))
     .orderBy(desc(schema.exerciseSessionStat.date))

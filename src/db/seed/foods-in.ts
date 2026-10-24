@@ -55,4 +55,11 @@ export const FOODS_IN: SeedFood[] = [
   { id: 'milk-toned', name: 'Milk, toned', servingG: 200, servingLabel: '1 glass', kcal: 116, protein: 6.4, carb: 9.8, fat: 6 },
   { id: 'banana', name: 'Banana', servingG: 118, servingLabel: '1 medium', kcal: 105, protein: 1.3, carb: 27, fat: 0.4, fiber: 3 },
   { id: 'sabzi-mixed', name: 'Mixed vegetable sabzi', servingG: 150, servingLabel: '1 katori', kcal: 130, protein: 3, carb: 14, fat: 7, fiber: 4 },
+
+  // ---- Drinks
+  // Two rows, not one, because "tea" means either and they are 45× apart: a cup of
+  // chai is a small snack, black tea is nothing. One combined row would silently
+  // mis-count whichever he drinks four times a day.
+  { id: 'tea-chai', name: 'Tea / chai (milk, sugar)', servingG: 150, servingLabel: '1 cup', kcal: 90, protein: 2.5, carb: 12, fat: 3 },
+  { id: 'tea-black', name: 'Tea, black (no milk)', servingG: 240, servingLabel: '1 cup', kcal: 2, protein: 0, carb: 0.4, fat: 0 },
 ];

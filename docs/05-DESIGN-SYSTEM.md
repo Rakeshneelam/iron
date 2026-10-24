@@ -13,23 +13,40 @@ optional and comes last.
 
 ## Type
 
-One family (system default, or Inter). Six sizes. Numbers use tabular figures so
-weights don't jitter when they change during a countdown or a stepper hold.
+Three widths of two families, embedded at build time by the `expo-font` config
+plugin (`app.json`), so nothing loads at runtime. **Width carries meaning:** IBM Plex
+Sans for everything you read, **Archivo** for names (titles, headings, filled buttons,
+exercise names), **Archivo Condensed** for measurements (the weight under your thumb,
+the trend, litres today). All OFL; the files and licences are in `assets/fonts/`. The
+family names live in `family` in the tokens — never write one in a screen. Numbers use
+tabular figures so weights don't jitter during a countdown or a stepper hold.
+`font.hero`, `font.display` and `font.measure` carry their own family — never spread
+`font.numeric` after them, it resets the width.
 
 The logged number is the hero: weight and reps are the largest text on the screen,
 larger than any heading.
 
 ## Colour
 
-Near-black background, one warm accent for action, semantic colours reserved for
-meaning:
+Three materials and one live thing — see `docs/13-THE-RECORD.md` §5 for why:
 
-- accent — the primary action (log set, quick add)
-- positive — progression, a new e1RM high
-- warning — stalled, approaching MRV
-- danger — pain flag, backoff (never used for "you missed a day")
+- **graphite** (`bg`, `surface`, `surfaceHigh`) — the ground
+- **chalk** (`text`) — the ink of everything logged
+- **heat** (`accent`) — only what is live: the primary action, the needle, the set under
+  your thumb, a running rest, the set just logged. Text links and selections are chalk.
 
-Never colour a missed day red. Never use red for bodyweight going up.
+Then one meaning per ink: `cold` water, `positive` a new best, `warning` worth a look
+(a stall, a lighter week — violet, never an alarm), `danger` pain and nothing else.
+
+Never colour a missed day red. Never use red for bodyweight going up, or for eating
+over a target.
+
+## Drawing conventions
+
+Every instrument draws by the same rules (docs/13 §3): **solid** is logged, **hollow or
+dashed** is planned, a **line** is derived, **heat** is live, a **datum** is a best, a
+**dimension** is a measured difference in its own unit. An estimate never shares a lane
+with what you lifted.
 
 ## Gym usability rules (non-negotiable)
 
@@ -55,7 +72,8 @@ Never colour a missed day red. Never use red for bodyweight going up.
 
 ## Charts
 
-- Trend line thick and opaque; raw data thin and 30% opacity
+- Trend line thick and opaque; raw data small solid dots at ~30% opacity
+- Lanes share a time axis, never a unit: sets, kilograms and calories each keep their own scale
 - No gridlines unless they carry information
 - Touch to scrub, with a value readout — no tooltip that requires precision
 - Downsample beyond ~200 points

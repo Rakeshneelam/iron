@@ -82,7 +82,7 @@ export const routineSlot = sqliteTable('routine_slot', {
 
 /* ============================= Logging ================================== */
 
-export const SESSION_STATUSES = ['active', 'completed', 'partial', 'skipped', 'cancelled'] as const;
+export const SESSION_STATUSES = ['active', 'completed', 'partial', 'skipped', 'rest', 'cancelled'] as const;
 export type SessionStatus = (typeof SESSION_STATUSES)[number];
 
 export const session = sqliteTable('session', {
@@ -94,8 +94,13 @@ export const session = sqliteTable('session', {
   endedAt: text('ended_at'),
   /**
    * active → in progress. completed / partial → finished (all / some planned work).
-   * skipped → the day was skipped on purpose (no sets). cancelled → stopped early,
-   * logged sets kept but the day does NOT count as done.
+   * skipped → the planned workout was missed (no sets); the plan moves on without it.
+   * rest → a day taken off on purpose (no sets); the plan day stays next, so a rest
+   * day costs nothing. cancelled → stopped early, logged sets kept but the day does
+   * NOT count as done.
+   *
+   * The column is plain text with no CHECK constraint, so a new value here needs no
+   * migration — an older build simply shows an unknown status it will never write.
    */
   status: text('status', { enum: SESSION_STATUSES }).notNull().default('completed'),
   bodyweightKg: real('bodyweight_kg'),

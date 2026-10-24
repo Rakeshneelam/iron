@@ -48,7 +48,7 @@ function EditSetForm({ set, step, correcting, onClose }: { set: SetRow; step: nu
 
   return (
     <>
-      <View style={styles.pair}>
+      <View style={styles.stack}>
         <Stepper label="kg" value={weight} step={step} min={0} max={500} size="gym" onChange={setWeight} />
         <Stepper
           label={timed ? 'sec' : 'reps'}
@@ -62,8 +62,8 @@ function EditSetForm({ set, step, correcting, onClose }: { set: SetRow; step: nu
       </View>
       <ChipRow options={RIR_OPTIONS} value={rir} onChange={setRir} size="gym" />
       <View style={styles.pair}>
-        <ChipRow options={[{ label: pain ? 'Pain ✓' : 'Pain', value: 1 }]} value={pain ? 1 : null} onChange={() => setPain(!pain)} />
-        <ChipRow options={[{ label: warmup ? 'Warm-up ✓' : 'Warm-up', value: 1 }]} value={warmup ? 1 : null} onChange={() => setWarmup(!warmup)} />
+        <ChipRow options={[{ label: 'Pain', value: 1 }]} value={pain ? 1 : null} onChange={() => setPain(!pain)} />
+        <ChipRow options={[{ label: 'Warm-up', value: 1 }]} value={warmup ? 1 : null} onChange={() => setWarmup(!warmup)} />
       </View>
       <View style={styles.pair}>
         <PrimaryButton
@@ -95,5 +95,7 @@ function EditSetForm({ set, step, correcting, onClose }: { set: SetRow; step: nu
 
 const styles = StyleSheet.create({
   pair: { flexDirection: 'row', gap: space.md, marginVertical: space.md },
+  // One full-width row each: side by side, 102.5 had about 58dp between its buttons.
+  stack: { gap: space.md, marginVertical: space.md },
   flex: { flex: 1 },
 });

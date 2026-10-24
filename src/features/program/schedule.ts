@@ -41,8 +41,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
  */
 export function scheduleLabel({ rotation, scheduledDays }: ScheduleFacts): string {
   const left = `${plural(rotation, 'workout')} in rotation`;
-  if (scheduledDays === 0) return `${left} · no days scheduled yet`;
-  return `${left} · ${plural(scheduledDays, 'scheduled day')} per week`;
+  if (scheduledDays === 0) return `${left}, no days scheduled yet`;
+  return `${left}, ${plural(scheduledDays, 'scheduled day')} per week`;
 }
 
 /** The shorter form, for a card that already carries the plan's name. */

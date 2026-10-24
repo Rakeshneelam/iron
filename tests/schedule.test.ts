@@ -27,15 +27,15 @@ describe('the weekly target', () => {
 
 describe('saying both numbers out loud', () => {
   test('a four-workout rotation on three weekdays says exactly that', () => {
-    assert.equal(scheduleLabel({ rotation: 4, scheduledDays: 3 }), '4 workouts in rotation · 3 scheduled days per week');
+    assert.equal(scheduleLabel({ rotation: 4, scheduledDays: 3 }), '4 workouts in rotation, 3 scheduled days per week');
   });
 
   test('singulars read as singulars', () => {
-    assert.equal(scheduleLabel({ rotation: 1, scheduledDays: 1 }), '1 workout in rotation · 1 scheduled day per week');
+    assert.equal(scheduleLabel({ rotation: 1, scheduledDays: 1 }), '1 workout in rotation, 1 scheduled day per week');
   });
 
   test('no weekdays chosen says so rather than implying a number', () => {
-    assert.equal(scheduleLabel({ rotation: 3, scheduledDays: 0 }), '3 workouts in rotation · no days scheduled yet');
+    assert.equal(scheduleLabel({ rotation: 3, scheduledDays: 0 }), '3 workouts in rotation, no days scheduled yet');
   });
 
   test('the short form never calls a rotation "days a week"', () => {

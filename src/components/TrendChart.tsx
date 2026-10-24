@@ -119,11 +119,15 @@ export function TrendChart({ trend, raw = [], markers = [], height = 180, onScru
       >
         {width > 0 ? (
           <Svg width={width} height={height}>
+            {/* The floor, so the trend sits on something rather than floating. */}
+            <Line x1={0} y1={height - 0.5} x2={width} y2={height - 0.5} stroke={color.border} strokeWidth={1} />
+            {/* What you logged: small, solid, faint — present, never the headline (AGENTS §6). */}
             {r.map((p, i) => (
-              <Circle key={`r${i}`} cx={sx(p.x)} cy={sy(p.y)} r={2.5} fill={color.chartFaint} />
+              <Circle key={`r${i}`} cx={sx(p.x)} cy={sy(p.y)} r={2.2} fill={color.chartFaint} />
             ))}
+            {/* What it means: derived, so a line, and the thickest thing here. */}
             {t.length > 1 ? (
-              <Path d={trendPath} stroke={color.chart} strokeWidth={3} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+              <Path d={trendPath} stroke={color.chart} strokeWidth={2.6} fill="none" strokeLinejoin="round" strokeLinecap="round" />
             ) : null}
             {t.length === 1 && last ? <Circle cx={sx(last.x)} cy={sy(last.y)} r={4} fill={color.chart} /> : null}
             {markers.map((p, i) => (
@@ -131,8 +135,9 @@ export function TrendChart({ trend, raw = [], markers = [], height = 180, onScru
             ))}
             {scrub ? (
               <>
-                <Line x1={sx(scrub.x)} x2={sx(scrub.x)} y1={PAD} y2={height - PAD} stroke={color.border} strokeWidth={1} />
-                <Circle cx={sx(scrub.x)} cy={sy(scrub.y)} r={5} fill={color.chart} />
+                {/* The finger is the live thing on a chart being scrubbed. */}
+                <Line x1={sx(scrub.x)} x2={sx(scrub.x)} y1={PAD} y2={height - PAD} stroke={color.accent} strokeWidth={1.5} />
+                <Circle cx={sx(scrub.x)} cy={sy(scrub.y)} r={4.5} fill={color.bg} stroke={color.accent} strokeWidth={2} />
               </>
             ) : null}
           </Svg>
@@ -144,6 +149,6 @@ export function TrendChart({ trend, raw = [], markers = [], height = 180, onScru
 
 const styles = StyleSheet.create({
   readout: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginBottom: space.xs },
-  readValue: { ...font.heading, ...font.numeric, color: color.text },
+  readValue: { ...font.measure, fontSize: 22, lineHeight: 26, color: color.text },
   readLabel: { ...font.caption, color: color.textMuted },
 });

@@ -33,6 +33,10 @@ export interface CheckInSheetProps {
   datePicker?: boolean;
   /** Opened from Start: still optional, and both buttons carry on to the workout. */
   onStart?: () => void;
+  /** Carry on without answering anything. Shown beside Save when given. */
+  onSkip?: () => void;
+  /** Overrides "Save and start" — the workout's first stage says "Continue". */
+  startLabel?: string;
 }
 
 /**
@@ -43,21 +47,29 @@ export interface CheckInSheetProps {
  * an untouched number is not an answer, and the sheet no longer claims "Saved as
  * today's weigh-in" before its own Save handler has run (UX-03).
  */
-export function CheckInSheet({ visible, onClose, date, datePicker = false, onStart }: CheckInSheetProps) {
+export function CheckInSheet({ visible, onClose, date, datePicker = false, onStart, onSkip, startLabel }: CheckInSheetProps) {
   const day = date ?? todayISO();
   return (
     <Sheet
       visible={visible}
       onClose={onClose}
-      title={onStart ? 'Before you start' : day === todayISO() ? 'Daily check-in' : `Check-in · ${fmtDayLabel(day)}`}
+      title={onStart ? 'Before you start' : day === todayISO() ? 'Daily check-in' : `Check-in, ${fmtDayLabel(day)}`}
     >
       {/* Mounted per opening and per day, so the answers are read fresh without an effect. */}
-      {visible ? <Form key={day} date={day} datePicker={datePicker} onClose={onClose} onStart={onStart} /> : null}
+      {visible ? <CheckInForm key={day} date={day} datePicker={datePicker} onClose={onClose} onStart={onStart} onSkip={onSkip} startLabel={startLabel} /> : null}
     </Sheet>
   );
 }
 
-function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker: boolean } & Omit<CheckInSheetProps, 'visible' | 'date' | 'datePicker'>) {
+/**
+ * The questions themselves, without the sheet around them.
+ *
+ * Exported because the check-in is the workout's first stage now, not an optional
+ * row on Today — the session screen renders this inline as a full screen. One form
+ * either way: a second copy of four optional questions and their clearing rules
+ * would be a second place for them to drift.
+ */
+export function CheckInForm({ date, datePicker, onClose, onStart, onSkip, startLabel }: { date: string; datePicker: boolean } & Omit<CheckInSheetProps, 'visible' | 'date' | 'datePicker'>) {
   const [day, setDay] = useState(date);
   const [existing, setExisting] = useState(() => getCheckIn(date));
   const [weight, setWeight] = useState<WeightDraft>(() => weightDraftFor(date));
@@ -92,35 +104,55 @@ function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker
     <View style={styles.stack}>
       {datePicker ? <DateStepper value={day} onChange={goTo} /> : null}
       <Text style={styles.hint}>
-        {onStart ? "Optional. A rough night lowers today's targets; nothing here raises them." : 'Optional. Only what you answer is saved, and any answer can go back to Not recorded.'}
+        {onStart
+          ? "Optional. A rough night lowers today's targets; nothing here raises them. Tap an answer again to clear it."
+          : 'Optional. Only what you answer is saved. Tap an answer again to clear it.'}
       </Text>
 
-      <View>
-        <Text style={styles.label}>Morning weight</Text>
-        <WeightField draft={weight} onChange={setWeight} pendingLabel="Will save with the check-in" />
-      </View>
-
-      <Answer label="Sleep last night" cleared={recorded(sleep)}>
+      <Answer label="Morning weight" hint={weight.given ? null : 'Saves with the check-in'}>
+        <WeightField draft={weight} onChange={setWeight} pendingLabel="Will save with the check-in" size="gym" />
+      </Answer>
+      <Answer label="Sleep last night" hint={recorded(sleep)}>
         <ChipRow options={SLEEP} value={sleep} onChange={toggle(sleep, setSleep)} />
       </Answer>
-      <Answer label="Soreness: 1 fresh, 5 wrecked" cleared={recorded(soreness)}>
+      <Answer label="Soreness" hint={recorded(soreness) ?? '1 fresh, 5 wrecked'}>
         <ChipRow options={SCALE} value={soreness} onChange={toggle(soreness, setSoreness)} />
       </Answer>
-      <Answer label="Stress: 1 calm, 5 fried" cleared={recorded(stress)}>
+      <Answer label="Stress" hint={recorded(stress) ?? '1 calm, 5 stressed'}>
         <ChipRow options={SCALE} value={stress} onChange={toggle(stress, setStress)} />
       </Answer>
 
       {onStart ? (
-        <View style={styles.actions}>
+        <View style={styles.startActions}>
+          {/* Nothing answered is not a reason to stop someone starting, so this is
+              one button whichever way: it saves what there is and carries on. */}
           <PrimaryButton
-            label="Save and start"
+            label={startLabel ?? (answered ? 'Save and start' : 'Start without answering')}
             size="gym"
             onPress={() => {
               if (answered) save();
               onStart();
             }}
           />
-          <PrimaryButton label="Start without saving" tone="ghost" onPress={onStart} />
+          {onSkip ? (
+            <PrimaryButton
+              label="Skip check-in"
+              tone="ghost"
+              onPress={onSkip}
+              accessibilityLabel="Skip the check-in and go straight to the warm-up. Nothing is saved."
+            />
+          ) : (
+            <PrimaryButton
+              label="Save without starting"
+              tone="ghost"
+              disabled={!answered}
+              onPress={() => {
+                save();
+                toast(`Check-in saved for ${fmtDayLabel(day)}`);
+                onClose();
+              }}
+            />
+          )}
         </View>
       ) : (
         <View style={styles.actions}>
@@ -168,12 +200,15 @@ function Form({ date, datePicker, onClose, onStart }: { date: string; datePicker
   );
 }
 
-function Answer({ label, cleared, children }: { label: string; cleared: string | null; children: React.ReactNode }) {
+/** A question: its label, a faint hint beside it (the scale, or "Not recorded"), then the answers. */
+function Answer({ label, hint, children }: { label: string; hint: string | null; children: React.ReactNode }) {
   return (
     <View>
+      {/* The label, a leader rule, then its scale — the same signpost as every section header. */}
       <View style={styles.labelRow}>
-        <Text style={[styles.label, styles.flex]}>{label}</Text>
-        {cleared ? <Text style={styles.note}>{cleared}</Text> : null}
+        <Text style={styles.label}>{label}</Text>
+        <View style={styles.leader} />
+        {hint ? <Text style={styles.note}>{hint}</Text> : null}
       </View>
       {children}
     </View>
@@ -183,9 +218,12 @@ function Answer({ label, cleared, children }: { label: string; cleared: string |
 const styles = StyleSheet.create({
   stack: { gap: space.lg, paddingBottom: space.lg },
   flex: { flex: 1 },
-  labelRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  flex2: { flex: 2 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
+  leader: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
   hint: { ...font.caption, color: color.textMuted },
-  label: { ...font.label, color: color.text, fontWeight: '600', marginBottom: space.sm },
-  note: { ...font.caption, color: color.textMuted },
+  label: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text },
+  note: { ...font.caption, fontSize: 12, color: color.textFaint, flexShrink: 1 },
   actions: { gap: space.xs, marginTop: space.sm },
+  startActions: { gap: space.sm, marginTop: space.sm },
 });

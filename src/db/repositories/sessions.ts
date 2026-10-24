@@ -27,10 +27,22 @@ export type SetRow = typeof schema.setLog.$inferSelect;
 export type SessionExerciseRow = typeof schema.sessionExercise.$inferSelect;
 export type { SessionStatus };
 
-/** The plan's day counts as done — these advance the routine cycle. */
+/**
+ * The plan's day counts as done — these advance the routine cycle. `rest` is
+ * deliberately absent: a day off is not the plan's day being used up, so tomorrow
+ * still offers the workout you did not do. `resolveNextDay` in ./program repeats
+ * this list (it cannot import this module) and must be kept in step with it.
+ */
 export const DAY_DONE: readonly SessionStatus[] = ['completed', 'partial', 'skipped'];
 /** Training actually happened (sets exist). */
 export const TRAINED: readonly SessionStatus[] = ['completed', 'partial', 'cancelled'];
+/** Marked days: no sets, nothing to summarise, nothing to reopen. */
+export const NO_TRAINING: readonly SessionStatus[] = ['skipped', 'rest'];
+
+/** A day recorded as not trained — rest or missed. Both carry no sets. */
+export function isNoTraining(status: SessionStatus): boolean {
+  return status === 'skipped' || status === 'rest';
+}
 
 /* ============================ lifecycle ================================= */
 
@@ -99,20 +111,48 @@ export function startSession(routineDayId: string | null, opts: { fit?: readonly
     }
     if (rows.length) db.insert(schema.sessionExercise).values(rows).run();
   });
+  // The flow starts at the check-in. Written here rather than defaulted in
+  // getSessionStage so a session already open from an older build stays on 'main'.
+  setSessionStage(row.id, 'checkin');
   return row;
 }
 
-/** Records a deliberately skipped plan day: no sets, advances the cycle. Undo = deleteSession. */
-export function skipDay(routineDayId: string): string {
+/**
+ * Marks today as not trained. `rest` is a day taken off on purpose and leaves the
+ * plan where it is; `skipped` is the planned workout missed and moves the plan on.
+ * Undo = deleteSession.
+ *
+ * `routineDayId` is null when there is no plan — a rest day is still a rest day
+ * without one, and someone logging ad hoc has as much right to mark the day.
+ *
+ * Changing your mind replaces the mark rather than stacking a second row on the
+ * same date: tapping Rest day and then Missed workout is a correction, not two
+ * events. An actual workout on the same day is left alone — training after
+ * marking the day off is allowed, and the sets are what matter.
+ */
+export function skipDay(routineDayId: string | null, status: 'skipped' | 'rest' = 'skipped'): string {
   const now = nowISO();
+  const date = todayISO();
   const id = newId();
-  db.insert(schema.session)
-    .values({ id, routineDayId, date: todayISO(), startedAt: now, endedAt: now, status: 'skipped' })
-    .run();
+  db.transaction(() => {
+    db.delete(schema.session)
+      .where(and(eq(schema.session.date, date), inArray(schema.session.status, [...NO_TRAINING])))
+      .run();
+    db.insert(schema.session).values({ id, routineDayId, date, startedAt: now, endedAt: now, status }).run();
+  });
   return id;
 }
 
-const rawKeys = (id: string) => [`session:${id}:adhoc`, `session:${id}:skipped`, `session:${id}:order`, `session:${id}:readinessDone`, `session:${id}:warmup`, `session:${id}:targets`];
+const rawKeys = (id: string) => [
+  `session:${id}:adhoc`,
+  `session:${id}:skipped`,
+  `session:${id}:order`,
+  `session:${id}:readinessDone`,
+  `session:${id}:warmup`,
+  `session:${id}:targets`,
+  `session:${id}:stage`,
+  `session:${id}:cooldown`,
+];
 
 export type WarmupState = 'pending' | 'done' | 'skipped';
 
@@ -125,6 +165,46 @@ export function getWarmupState(sessionId: string): WarmupState {
 export function setWarmupState(sessionId: string, state: WarmupState): void {
   if (state === 'pending') deleteRaw(`session:${sessionId}:warmup`);
   else setRaw(`session:${sessionId}:warmup`, state);
+}
+
+export type SessionStage = 'checkin' | 'warmup' | 'main' | 'cooldown';
+
+const STAGES: readonly string[] = ['checkin', 'warmup', 'main', 'cooldown'];
+
+/**
+ * Which part of the workout is on screen: check-in, warm-up, the lifts, cool-down.
+ *
+ * Persisted beside the session like the warm-up state, not held in React state,
+ * because the app will be killed in the background mid-workout and has to come
+ * back where it was (AGENTS §1.3). Force-quitting during the warm-up returns to
+ * the warm-up, not to the top of the exercise list.
+ *
+ * Absent means `main`, deliberately: a workout opened by an earlier version is
+ * already past its check-in, and an upgrade must never drop someone back into one.
+ * `startSession` writes the opening stage explicitly instead.
+ */
+export function getSessionStage(sessionId: string): SessionStage {
+  const v = getRaw(`session:${sessionId}:stage`);
+  return v != null && STAGES.includes(v) ? (v as SessionStage) : 'main';
+}
+
+export function setSessionStage(sessionId: string, stage: SessionStage): void {
+  setRaw(`session:${sessionId}:stage`, stage);
+}
+
+/**
+ * Whether the cool-down has been dealt with — done or skipped. Finish asks once.
+ *
+ * `!== undefined`, not `!== null`: `getRaw` returns `undefined` for a key that is
+ * not there, so a null check here is true for every session and the cool-down
+ * stage would never appear.
+ */
+export function cooldownSettled(sessionId: string): boolean {
+  return getRaw(`session:${sessionId}:cooldown`) !== undefined;
+}
+
+export function settleCooldown(sessionId: string): void {
+  setRaw(`session:${sessionId}:cooldown`, 'done');
 }
 
 /**
@@ -194,7 +274,7 @@ export function reopenSession(sessionId: string): boolean {
   const open = getActiveSession();
   if (open && open.id !== sessionId) return false;
   const s = getSession(sessionId);
-  if (!s || s.status === 'skipped') return false;
+  if (!s || isNoTraining(s.status)) return false;
   db.transaction(() => {
     db.update(schema.session).set({ endedAt: null, status: 'active' }).where(eq(schema.session.id, sessionId)).run();
     db.delete(schema.exerciseSessionStat).where(eq(schema.exerciseSessionStat.sessionId, sessionId)).run();
@@ -368,6 +448,22 @@ export function getSetsFor(sessionId: string, exerciseId: string): SetRow[] {
  * Follows exercise_link: sets from a swapped-out variation come along with their
  * weights scaled by the link ratio, so a swap never resets progression to zero.
  */
+/**
+ * This exercise's own finished sessions, newest first, with their working sets in
+ * order. Unlike getExerciseHistory it never folds in a linked exercise's sets at a
+ * ratio: a personal best has to be something you actually lifted.
+ */
+export function exerciseSessions(exerciseId: string): { sessionId: string; date: string; sets: SetRow[] }[] {
+  const rows = db
+    .select({ set: schema.setLog, date: schema.session.date })
+    .from(schema.setLog)
+    .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
+    .where(and(eq(schema.setLog.exerciseId, exerciseId), eq(schema.setLog.isWarmup, 0), isNotNull(schema.session.endedAt)))
+    .orderBy(desc(schema.session.date), asc(schema.setLog.loggedAt))
+    .all();
+  return [...groupBy(rows, (r) => r.set.sessionId)].map(([sessionId, group]) => ({ sessionId, date: group[0]?.date ?? '', sets: group.map((r) => r.set) }));
+}
+
 export function getExerciseHistory(exerciseId: string, limit = 8): SessionLog[] {
   const ratios = new Map<string, number>([[exerciseId, 1]]);
   for (const src of getLinkedSources(exerciseId)) ratios.set(src.fromExerciseId, src.ratio);

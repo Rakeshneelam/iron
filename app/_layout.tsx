@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useReducedMotion } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { PrimaryButton } from '@/components/PrimaryButton';
@@ -21,6 +22,7 @@ type Boot = { state: 'loading' } | { state: 'ready' } | { state: 'error'; messag
 /** No login: straight into Today once the database is open. A fresh install sees setup once. */
 export default function RootLayout() {
   const [boot, setBoot] = useState<Boot>({ state: 'loading' });
+  const reduced = useReducedMotion();
 
   // State only changes in the promise callbacks; the first render is already 'loading'.
   const open = useCallback(() => {
@@ -48,7 +50,16 @@ export default function RootLayout() {
         {boot.state === 'ready' ? (
           <>
             <AppServices />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg }, animation: 'fade' }}>
+            {/*
+              The platform's own push, rather than the fade this used to use.
+              A fade says nothing about where a screen came from, so going into a
+              session and coming back out looked identical and the back gesture
+              had nothing to track. `default` is the native transition — it runs on
+              the platform side, keeps the interactive back swipe, and matches
+              every other app on the device. Reduced motion gets the fade back,
+              which is what that setting is for.
+            */}
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: color.bg }, animation: reduced ? 'fade' : 'default' }}>
               <Stack.Screen name="setup" options={{ gestureEnabled: false }} />
             </Stack>
             <ToastHost />

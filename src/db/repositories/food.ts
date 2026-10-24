@@ -35,6 +35,8 @@ export interface DayEntry {
   macros: Macros;
   foodId: string | null;
   recipeId: string | null;
+  /** When it was logged — where it sits on the day (Today's day score). */
+  loggedAt: string;
 }
 
 export const ZERO: Macros = { kcal: 0, protein: 0, carb: 0, fat: 0, fiber: 0 };
@@ -197,7 +199,7 @@ function toEntries(rows: EntryRow[]): (DayEntry & { date: string })[] {
       const servings = r.food.servingG > 0 ? log.grams / r.food.servingG : 0;
       out.push({
         id: log.id, date: log.date, mealSlot: log.mealSlot, label: r.food.name, servingLabel: r.food.servingLabel,
-        grams: log.grams, servings, macros: foodMacros(r.food, log.grams), foodId: r.food.id, recipeId: null,
+        grams: log.grams, servings, macros: foodMacros(r.food, log.grams), foodId: r.food.id, recipeId: null, loggedAt: log.loggedAt,
       });
     } else if (r.recipe) {
       if (!recipeCache.has(r.recipe.id)) recipeCache.set(r.recipe.id, recipeInfo(r.recipe.id));
@@ -205,7 +207,7 @@ function toEntries(rows: EntryRow[]): (DayEntry & { date: string })[] {
       const servings = info && info.gramsPerServing > 0 ? log.grams / info.gramsPerServing : 0;
       out.push({
         id: log.id, date: log.date, mealSlot: log.mealSlot, label: r.recipe.name, servingLabel: '1 serving',
-        grams: log.grams, servings, macros: info ? scale(info.perServing, servings) : ZERO, foodId: null, recipeId: r.recipe.id,
+        grams: log.grams, servings, macros: info ? scale(info.perServing, servings) : ZERO, foodId: null, recipeId: r.recipe.id, loggedAt: log.loggedAt,
       });
     }
   }

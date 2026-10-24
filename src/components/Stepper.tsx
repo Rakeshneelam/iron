@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { selection } from '@/lib/haptics';
 import { color, font, hit, radius, space } from '@/theme/tokens';
+
+import { FitText } from './FitText';
+import { Icon } from './Icon';
+import { Press } from './Press';
+import { Rule, type RuleMark, type RuleProps } from './Rule';
 
 export interface StepperProps {
   value: number;
@@ -11,14 +16,29 @@ export interface StepperProps {
   min?: number;
   max?: number;
   /**
-   * `gym` stacks the value above its own pair of ± buttons. In a row, two gym
-   * steppers side by side left each value about 60dp between two 56dp buttons, and
-   * `adjustsFontSizeToFit` hid that by shrinking 102.5 until it fitted — the one
-   * number AGENTS §7 requires stay readable at arm's length (UX-04).
+   * One field, − value +, at three sizes. `hero` is the session's weight and reps:
+   * a full-width card with the label and a footer inside it. Give `gym` and `hero`
+   * a full row each — two side by side left the value about 60dp between its
+   * buttons, which is the one number AGENTS §7 requires stay readable (UX-04).
    */
-  size?: 'gym' | 'default';
+  size?: 'hero' | 'gym' | 'default';
   label?: string;
+  /** What a screen reader calls it when the visible label lives elsewhere (a row title). */
+  accessibilityLabel?: string;
   suffix?: string;
+  /** Under the value, inside a hero card: the target, or a "Use target" chip. */
+  footer?: ReactNode;
+  /**
+   * Hero only: the graduated tape under the number, with last time and the plan
+   * marked on it (components/Rule). Replaces the footer when given — the marks
+   * say what the footer said, on a scale instead of in small print.
+   */
+  rule?: Pick<RuleProps, 'marks' | 'band' | 'major'>;
+  /**
+   * What a screen reader hears after the value: "last time 97.5, target 100". The
+   * rule draws this; it is hidden from assistive tech, so it has to be said here.
+   */
+  context?: string;
   /** Replaces the built-in keyboard entry on long-press of the value. */
   onLongPress?: () => void;
   /** Opt out per instance; the user's Haptics setting already gates it globally. */
@@ -44,11 +64,16 @@ export function Stepper({
   max = 9999,
   size = 'default',
   label,
+  accessibilityLabel,
   suffix,
+  footer,
+  rule,
+  context,
   onLongPress,
   haptics = true,
 }: StepperProps) {
   const dp = decimalsOf(step);
+  const name = label ?? accessibilityLabel;
   const valueRef = useRef(value);
   // Re-synced after every render, as the old in-render assignment did, but outside render.
   useEffect(() => {
@@ -108,9 +133,10 @@ export function Stepper({
     setEditing(true);
   };
 
-  const gym = size === 'gym';
-  const box = hit[size];
-  const valueStyle = gym ? styles.valueGym : styles.value;
+  const hero = size === 'hero';
+  const markActions = (rule?.marks ?? []).filter((m) => m.onPress && Math.abs(m.value - value) > 1e-9);
+  const valueStyle = hero ? styles.valueHero : size === 'gym' ? styles.valueGym : styles.value;
+  const box = hero ? HERO_BUTTON : hit[size];
 
   const readout = editing ? (
     <TextInput
@@ -128,104 +154,132 @@ export function Stepper({
     />
   ) : (
     <Pressable
-      style={gym ? styles.valueBoxGym : styles.valueBox}
+      style={styles.valueBox}
       onLongPress={typeIt}
       accessibilityRole="adjustable"
-      accessibilityLabel={`${label ?? 'Value'}: ${value.toFixed(dp)}${suffix ? ` ${suffix}` : ''}`}
+      accessibilityLabel={`${name ?? 'Value'}: ${value.toFixed(dp)}${suffix ? ` ${suffix}` : ''}${context ? `. ${context}` : ''}`}
       accessibilityHint="Long-press to type a value"
-      accessibilityActions={[{ name: 'activate', label: 'Type a value' }, { name: 'increment' }, { name: 'decrement' }]}
+      accessibilityActions={[
+        { name: 'activate', label: 'Type a value' },
+        { name: 'increment' },
+        { name: 'decrement' },
+        // The rule's marks are taps on a tape a screen reader cannot see; these are the same doors.
+        ...markActions.map((m) => ({ name: m.kind, label: MARK_ACTION[m.kind] })),
+      ]}
       onAccessibilityAction={(e) => {
-        if (e.nativeEvent.actionName === 'increment') bump(1);
-        else if (e.nativeEvent.actionName === 'decrement') bump(-1);
-        else typeIt();
+        const name = e.nativeEvent.actionName;
+        if (name === 'increment') bump(1);
+        else if (name === 'decrement') bump(-1);
+        else if (name === 'activate') typeIt();
+        else markActions.find((m) => m.kind === name)?.onPress?.();
       }}
     >
       {/*
-        No adjustsFontSizeToFit. Given room, 102.5 fits; where it does not, the
-        layout is wrong and shrinking the number only hides that (UX-11).
+        Only the hero may shrink, and only far enough that "102.5 kg" fits a 360dp
+        phone. Anywhere else, if it does not fit the layout is wrong and shrinking
+        the number only hides that (UX-11).
+
+        FitText, not Text: `font.hero` carries lineHeight 64, and Android shrinks
+        fontSize while leaving lineHeight alone, so the height constraint could
+        never be satisfied and the search ran to the floor — this rendered at
+        roughly 10pt on device. See components/FitText.
       */}
-      <Text style={valueStyle} numberOfLines={1}>
+      <FitText style={valueStyle} numberOfLines={1} adjustsFontSizeToFit={hero}>
         {value.toFixed(dp)}
-        {suffix ? <Text style={styles.suffix}> {suffix}</Text> : null}
-      </Text>
+        {suffix ? <Text style={hero ? styles.suffixHero : styles.suffix}> {suffix}</Text> : null}
+      </FitText>
     </Pressable>
   );
 
-  const minus = (
-    <Pressable
+  const button = (dir: 1 | -1) => (
+    <Press
       accessibilityRole="button"
-      accessibilityLabel={`Decrease ${label ?? 'value'}`}
-      onPress={() => bump(-1)}
-      onLongPress={() => startRepeat(-1)}
+      accessibilityLabel={`${dir > 0 ? 'Increase' : 'Decrease'} ${name ?? 'value'}`}
+      onPress={() => bump(dir)}
+      onLongPress={() => startRepeat(dir)}
       onPressOut={stopRepeat}
       delayLongPress={300}
-      style={({ pressed }) => [styles.btn, gym ? styles.btnWide : { width: box }, { height: box }, pressed && styles.btnPressed]}
+      // Highlight, not scale: these are two halves of one card, and a scaling
+      // half pulls away from the border it shares with the number.
+      feedback="highlight"
+      touchStyle={styles.btnTouch}
+      style={[styles.btn, { width: box }]}
+      pressedStyle={styles.btnPressed}
     >
-      <Text style={styles.btnText}>−</Text>
-    </Pressable>
+      <Icon name={dir > 0 ? 'plus' : 'minus'} size={hero ? 28 : 20} color={hero ? color.text : color.textMuted} strokeWidth={hero ? 2.4 : 2} />
+    </Press>
   );
-  const plus = (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Increase ${label ?? 'value'}`}
-      onPress={() => bump(1)}
-      onLongPress={() => startRepeat(1)}
-      onPressOut={stopRepeat}
-      delayLongPress={300}
-      style={({ pressed }) => [styles.btn, gym ? styles.btnWide : { width: box }, { height: box }, pressed && styles.btnPressed]}
-    >
-      <Text style={styles.btnText}>+</Text>
-    </Pressable>
-  );
+
+  if (hero) {
+    return (
+      <View style={[styles.field, styles.fieldHero]}>
+        {button(-1)}
+        <View style={styles.heroMid}>
+          {label ? <Text style={styles.labelHero}>{label}</Text> : null}
+          {readout}
+          {rule ? (
+            <Rule value={value} step={step} min={min} max={max} {...rule} onChange={onChange} />
+          ) : footer ? (
+            <View style={styles.footer}>{footer}</View>
+          ) : null}
+        </View>
+        {button(1)}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
-      {gym ? (
-        <View style={styles.stack}>
-          {readout}
-          <View style={styles.buttons}>
-            {minus}
-            {plus}
-          </View>
-        </View>
-      ) : (
-        <View style={styles.row}>
-          {minus}
-          {readout}
-          {plus}
-        </View>
-      )}
+      <View style={[styles.field, { height: hit[size] }]}>
+        {button(-1)}
+        {readout}
+        {button(1)}
+      </View>
     </View>
   );
 }
 
+const MARK_ACTION: Record<RuleMark['kind'], string> = { target: 'Use the target', last: 'Use last time', trend: 'Use the trend' };
+
+/** Wider than a thumb, so a mid-set tap on − never lands on the number. */
+const HERO_BUTTON = 76;
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, minWidth: 0 },
   label: { ...font.caption, color: color.textMuted, marginBottom: space.xs, textAlign: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  stack: { gap: space.xs },
-  buttons: { flexDirection: 'row', gap: space.xs },
-  btn: {
-    borderRadius: radius.md,
+  field: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
     backgroundColor: color.surfaceHigh,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.border,
+    overflow: 'hidden',
   },
-  // Half the field each, rather than 56dp of fixed furniture either side of the number.
-  btnWide: { flex: 1 },
-  btnText: { ...font.title, color: color.text },
+  /**
+   * 114: the label (16), a 52pt condensed number in a 56dp line, and the rule (33).
+   * Condensed figures are why 52 fits where 44 used to: the same width, a taller
+   * number, read from a bench.
+   */
+  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 114 },
+  /** The target stretches the full height of the field; the fill inside it follows. */
+  btnTouch: { alignSelf: 'stretch' },
+  btn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   btnPressed: { backgroundColor: color.border },
-  valueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0 },
-  valueBoxGym: { alignItems: 'center', justifyContent: 'center', minHeight: hit.default, paddingHorizontal: space.xs },
-  value: { ...font.heading, ...font.numeric, color: color.text, textAlign: 'center' },
-  // Pinned, not derived. This was font.display.fontSize * 0.6, so shrinking the
-  // display token quietly shrank the weight and rep controls on the logging screen.
-  valueGym: { ...font.title, fontSize: 34, lineHeight: 40, ...font.numeric, color: color.text, textAlign: 'center' },
-  suffix: { ...font.caption, color: color.textMuted },
+  heroMid: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingTop: space.xs + 2, paddingBottom: 2 },
+  labelHero: { ...font.eyebrow, color: color.textFaint },
+  footer: { minHeight: 26, justifyContent: 'center' },
+  valueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0, alignSelf: 'stretch' },
+  value: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text, textAlign: 'center' },
+  valueGym: { ...font.measure, fontSize: 26, lineHeight: 30, color: color.text, textAlign: 'center' },
+  valueHero: { ...font.hero, color: color.text, textAlign: 'center' },
+  suffix: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textFaint },
+  suffixHero: { ...font.measure, fontSize: 22, fontWeight: '600', letterSpacing: 0, color: color.textFaint },
   input: {
     flex: 1,
     minWidth: 0,
+    alignSelf: 'stretch',
     borderBottomWidth: 2,
     borderBottomColor: color.accent,
     paddingVertical: 0,

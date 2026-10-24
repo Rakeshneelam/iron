@@ -64,7 +64,7 @@ export function DrillPlayer({ items, onFinish, onExit }: { items: readonly Routi
     <View style={styles.wrap}>
       <View style={styles.top}>
         <Text style={styles.progress}>
-          {i + 1} of {items.length} · {PHASE_LABEL[item.phase]}
+          {i + 1} of {items.length}, {PHASE_LABEL[item.phase]}
         </Text>
         <IconButton icon="close" accessibilityLabel="Leave the guided routine" onPress={onExit} />
       </View>
@@ -114,12 +114,12 @@ const styles = StyleSheet.create({
   progress: { ...font.caption, color: color.textMuted, letterSpacing: 0.5 },
   stage: { alignItems: 'center', backgroundColor: color.bg, borderRadius: radius.lg, paddingVertical: space.sm },
   name: { ...font.heading, color: color.text },
-  dose: { ...font.body, color: color.accent, fontWeight: '600' },
+  dose: { ...font.body, color: color.text, fontWeight: '600' },
   cue: { ...font.label, color: color.textMuted },
   timer: { alignItems: 'center', gap: space.sm, marginVertical: space.md },
   // fontSize must not exceed the inherited lineHeight or the digits clip: display
   // carries lineHeight 48, so a 48px clock needs its own.
-  clock: { ...font.display, ...font.numeric, fontSize: 48, lineHeight: 54, color: color.text },
+  clock: { ...font.display, fontSize: 56, lineHeight: 60, color: color.text },
   side: { ...font.label, color: color.textMuted },
   nav: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   flex: { flex: 1 },

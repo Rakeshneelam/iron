@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ChipRow } from '@/components/ChipRow';
+import { Icon } from '@/components/Icon';
+import { Press } from '@/components/Press';
+import { SectionHeader } from '@/components/SectionHeader';
+import { SegmentTabs } from '@/components/SegmentTabs';
 import { IconButton } from '@/components/IconButton';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Sheet } from '@/components/Sheet';
@@ -19,17 +23,19 @@ import {
   MEAL_SLOTS,
   quickAddFoods,
   searchFoods,
+  ZERO,
   type Food,
   type MealSlot,
   type Recipe,
 } from '@/db/repositories/food';
+import { parseMeal, UNSURE, type ParsedItem } from '@/engine/foodText';
 import { fmtDayLabel, todayISO } from '@/lib/date';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 type Tab = 'frequent' | 'search' | 'recipes' | 'newFood' | 'newRecipe';
+/** Search is not a tab of its own: the field sits above your usual foods and replaces them as you type. */
 const TABS: { label: string; value: Tab }[] = [
-  { label: 'Frequent', value: 'frequent' },
-  { label: 'Search', value: 'search' },
+  { label: 'Foods', value: 'frequent' },
   { label: 'Recipes', value: 'recipes' },
   { label: 'New food', value: 'newFood' },
   { label: 'New recipe', value: 'newRecipe' },
@@ -62,6 +68,8 @@ export interface AddFoodSheetProps {
   dateISO: string;
   /** Which tab to land on. Creating a recipe and logging a meal are different jobs. */
   start?: Tab;
+  /** "1,840 / 2,650 kcal" for the day being logged to. */
+  soFar?: string;
   onClose: () => void;
 }
 
@@ -72,21 +80,26 @@ export interface AddFoodSheetProps {
  * empty diary. What changes between them is the tab it starts on and whether a
  * meal is already known — never the flow itself.
  */
-export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClose }: AddFoodSheetProps) {
+export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar, onClose }: AddFoodSheetProps) {
   const [tab, setTab] = useState<Tab>(start);
   // Re-apply on each open: useState only runs once, so opening from the recipes
   // link after opening from "Add food" would otherwise land on the wrong tab.
   // Adjusted during render, on the open itself, rather than in an effect a frame later.
-  const [wasVisible, setWasVisible] = useState(visible);
-  if (visible !== wasVisible) {
-    setWasVisible(visible);
-    if (visible) setTab(start);
-  }
   const [q, setQ] = useState('');
   const [food, setFood] = useState<Food | null>(null);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [servings, setServings] = useState(1);
   const [meal, setMeal] = useState<MealSlot>(slot ?? 'breakfast');
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      setTab(start);
+      // The sheet stays mounted between opens, so the meal must follow each one:
+      // Add food under Dinner after an earlier Lunch was still logging to lunch.
+      setMeal(slot ?? 'breakfast');
+    }
+  }
   /**
    * The recipe draft lives here, above the tabs. It used to live inside the recipe
    * form, which unmounts the moment you switch to New food — and the form itself
@@ -104,10 +117,71 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClo
     onClose();
   };
 
+  const searching = q.trim() !== '';
   const list = useMemo(
-    () => (!visible ? [] : tab === 'search' ? searchFoods(q) : tab === 'frequent' ? quickAddFoods(15) : []),
-    [visible, tab, q],
+    () => (!visible || (tab !== 'frequent' && tab !== 'search') ? [] : searching ? searchFoods(q) : quickAddFoods(15)),
+    [visible, tab, q, searching],
   );
+
+  /**
+   * The same field understands a whole meal. "2 rotis and a katori of dal" is not
+   * a search term, so when the text describes amounts the sheet offers to log all
+   * of it at once instead of making you find three foods one at a time.
+   *
+   * Deliberately the search box rather than a sixth tab: there is nothing to learn
+   * and nothing to switch to, and a name typed on its own still just searches.
+   * Ordered most-used first, which is how the parser breaks ties (engine/foodText).
+   */
+  // Read once per open, not per keystroke. `tab` is in the deps on purpose: coming
+  // back from New food has to pick up the food that was just created.
+  const allFoods = useMemo(() => (visible ? searchFoods('', 400) : []), [visible, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const byId = useMemo(() => new Map(allFoods.map((f) => [f.id, f])), [allFoods]);
+  const parsed = useMemo(
+    () => (!visible || !searching || (tab !== 'frequent' && tab !== 'search') ? null : parseMeal(q, allFoods)),
+    [visible, tab, q, searching, allFoods],
+  );
+  const canLogText = parsed !== null && parsed.quantified && parsed.items.length > 0;
+  const parsedTotals = useMemo(() => {
+    let out = ZERO;
+    for (const it of parsed?.items ?? []) {
+      const f = byId.get(it.foodId);
+      if (!f) continue;
+      const m = foodMacros(f, it.grams);
+      out = { kcal: out.kcal + m.kcal, protein: out.protein + m.protein, carb: out.carb + m.carb, fat: out.fat + m.fat, fiber: out.fiber + m.fiber };
+    }
+    return out;
+  }, [parsed, byId]);
+
+  const kcalOf = (it: ParsedItem) => {
+    const f = byId.get(it.foodId);
+    return f ? Math.round(foodMacros(f, it.grams).kcal) : 0;
+  };
+
+  /** Each item is its own immediate write (AGENTS §1.3); Undo removes them as one. */
+  const logParsed = () => {
+    if (!parsed) return;
+    const ids = parsed.items
+      .map((it) => logFood({ dateISO, mealSlot: meal, foodId: it.foodId, grams: it.grams }))
+      .filter((x): x is string => x !== null);
+    if (ids.length) {
+      toast(`${ids.length} ${ids.length === 1 ? 'item' : 'items'} → ${meal}${dateISO === todayISO() ? '' : ` on ${fmtDayLabel(dateISO)}`}`, {
+        label: 'Undo',
+        onPress: () => deleteEntries(ids),
+      });
+    }
+    close();
+  };
+
+  /** One tap from the list when the meal is known; otherwise the amount step asks which meal. */
+  const quickAdd = (f: Food) => {
+    if (slot === null) {
+      setFood(f);
+      setServings(1);
+      return;
+    }
+    const id = logFood({ dateISO, mealSlot: meal, foodId: f.id, grams: f.servingG });
+    if (id) toast(`${unit(f.servingLabel)} ${f.name} → ${meal}`, { label: 'Undo', onPress: () => deleteEntries([id]) });
+  };
   const recipes = useMemo(() => (visible && tab === 'recipes' ? listRecipes() : []), [visible, tab, recipe]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* --------------------------- confirm and log --------------------------- */
@@ -132,7 +206,7 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClo
       <Sheet visible={visible} onClose={close} title={name}>
         <Stepper label={food ? unit(food.servingLabel) : 'servings'} value={servings} step={0.5} min={0.5} max={20} size="gym" onChange={setServings} />
         <Text style={styles.macro}>
-          {Math.round(per.kcal * servings)} kcal · {Math.round(per.protein * servings)} g protein · {Math.round(per.carb * servings)} g carbs ·{' '}
+          {Math.round(per.kcal * servings)} kcal, {Math.round(per.protein * servings)} g protein, {Math.round(per.carb * servings)} g carbs,{' '}
           {Math.round(per.fat * servings)} g fat
         </Text>
         {/* Opened without a meal: ask, rather than quietly picking breakfast. */}
@@ -158,35 +232,140 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClo
   }
 
   /* ------------------------------- picker -------------------------------- */
+  const mealName = meal[0]?.toUpperCase() + meal.slice(1);
   return (
-    <Sheet visible={visible} onClose={close} title={slot ? `Add to ${slot}` : 'Food & recipes'}>
-      <ChipRow options={TABS} value={tab} onChange={setTab} fill={false} />
-      <View style={styles.gap} />
-      {tab === 'search' ? (
-        <TextInput value={q} onChangeText={setQ} placeholder="Search foods" placeholderTextColor={color.textFaint} style={styles.input} autoFocus />
+    <Sheet
+      visible={visible}
+      onClose={close}
+      title={slot ? 'Add food' : 'Food & recipes'}
+      subtitle={[slot ? mealName : null, fmtDayLabel(dateISO), soFar ? `so far ${soFar}` : null].filter(Boolean).join(', ')}
+    >
+      {slot !== null ? (
+        <View style={styles.block}>
+          <ChipRow options={SLOT_CHIPS} value={meal} onChange={setMeal} columns={4} />
+        </View>
       ) : null}
-      {(tab === 'frequent' || tab === 'search') &&
-        list.map((f) => (
-          <Pressable
-            key={f.id}
-            style={styles.item}
-            accessibilityRole="button"
-            accessibilityLabel={`${f.name}, ${Math.round(f.kcal)} kcal`}
-            onPress={() => {
-              setFood(f);
-              setServings(1);
-            }}
-          >
-            <Text style={styles.name}>{f.name}</Text>
-            <Text style={styles.muted}>
-              <Text style={styles.strong}>{Math.round(f.kcal)} kcal</Text>
-              {'   '}
-              {Math.round(f.protein)} g protein
-              {'   '}
-              {f.servingLabel ?? `${f.servingG} g`}
-            </Text>
-          </Pressable>
-        ))}
+      <View style={styles.block}>
+        <SegmentTabs options={TABS} value={tab === 'search' ? 'frequent' : tab} onChange={setTab} />
+      </View>
+      {tab === 'frequent' || tab === 'search' ? (
+        <>
+          <View style={styles.search}>
+            <Icon name="search" size={20} color={color.textFaint} />
+            <TextInput
+              value={q}
+              onChangeText={setQ}
+              placeholder="Search, or type a meal"
+              placeholderTextColor={color.textFaint}
+              style={styles.searchInput}
+              accessibilityLabel="Search foods, or describe a meal such as two rotis and a katori of dal"
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searching ? <IconButton icon="close" accessibilityLabel="Clear search" onPress={() => setQ('')} /> : null}
+          </View>
+          {/*
+            Typed a whole meal rather than a name. Nothing is logged until the
+            button below is pressed, every line says where its number came from,
+            and any line can be opened and corrected (AGENTS §1.5).
+          */}
+          {canLogText && parsed ? (
+            <View style={styles.parsed}>
+              <Text style={styles.parsedHead}>Understood as</Text>
+              {parsed.items.map((it, i) => (
+                <Press
+                  key={`${it.foodId}-${i}`}
+                  feedback="highlight"
+                  pressedStyle={styles.pressed}
+                  onPress={() => {
+                    const f = byId.get(it.foodId);
+                    if (!f) return;
+                    setFood(f);
+                    setServings(Math.max(0.5, Math.round(it.servings * 2) / 2));
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${it.name}, ${it.reason}, from "${it.text}". Tap to change the amount or pick a different food.`}
+                  style={styles.parsedRow}
+                >
+                  <View style={styles.flex}>
+                    <Text style={styles.name} numberOfLines={1}>
+                      {it.name}
+                      {it.score < UNSURE ? <Text style={styles.unsure}> (check this)</Text> : null}
+                    </Text>
+                    <Text style={styles.portion} numberOfLines={2}>
+                      {it.reason}, from “{it.text}”
+                    </Text>
+                  </View>
+                  <Text style={styles.kcal}>{kcalOf(it)}</Text>
+                </Press>
+              ))}
+              {parsed.unmatched.length ? (
+                <Text style={styles.muted}>
+                  Not recognised: {parsed.unmatched.map((u) => `“${u}”`).join(', ')}. Search for it below, or add it as a custom food.
+                </Text>
+              ) : null}
+              <Text style={styles.parsedTotal}>
+                {Math.round(parsedTotals.kcal)} kcal, {Math.round(parsedTotals.protein)} g protein, {Math.round(parsedTotals.carb)} g carbs,{' '}
+                {Math.round(parsedTotals.fat)} g fat
+              </Text>
+              {slot === null ? (
+                <View style={styles.mealPick}>
+                  <Text style={styles.label}>Which meal?</Text>
+                  <ChipRow options={SLOT_CHIPS} value={meal} onChange={setMeal} fill={false} />
+                </View>
+              ) : null}
+              <PrimaryButton label={`Log ${parsed.items.length} ${parsed.items.length === 1 ? 'item' : 'items'} to ${meal}`} size="gym" onPress={logParsed} />
+            </View>
+          ) : null}
+
+          {/* A sentence the parser understood is not a failed search: "Nothing matches
+              “2 rotis and dal”" directly under a card that read it correctly is just
+              confusing, so the empty result list stands down. */}
+          {canLogText && list.length === 0 ? null : (
+            <>
+              <SectionHeader title={searching ? 'Results' : 'Your usual foods'} action={{ label: 'Custom food', onPress: () => setTab('newFood') }} />
+              {searching && list.length === 0 ? <Text style={styles.muted}>Nothing matches “{q.trim()}”. Add it as a custom food.</Text> : null}
+            </>
+          )}
+          <View style={styles.list}>
+            {list.map((f, i) => (
+              <Press
+                key={f.id}
+                feedback="highlight"
+                style={[styles.foodRow, i > 0 && styles.divider]}
+                pressedStyle={styles.pressed}
+                accessibilityRole="button"
+                accessibilityLabel={`${f.name}, ${Math.round(f.kcal)} kcal. Choose an amount.`}
+                onPress={() => {
+                  setFood(f);
+                  setServings(1);
+                }}
+              >
+                <View style={styles.flex}>
+                  <Text style={styles.name} numberOfLines={2}>
+                    {f.name}
+                  </Text>
+                  <Text style={styles.portion}>{f.servingLabel ?? `${f.servingG} g`}</Text>
+                </View>
+                <View style={styles.nums}>
+                  <Text style={styles.kcal}>{Math.round(f.kcal)}</Text>
+                  <Text style={styles.portion}>{Math.round(f.protein)} g P</Text>
+                </View>
+                <Press
+                  onPress={() => quickAdd(f)}
+                  accessibilityRole="button"
+                  accessibilityLabel={slot ? `Add ${f.name} to ${meal}` : `Add ${f.name}`}
+                  style={styles.plus}
+                  pressedStyle={styles.plusPressed}
+                >
+                  <Icon name="plus" size={20} color={color.text} />
+                </Press>
+              </Press>
+            ))}
+          </View>
+        </>
+      ) : null}
       {tab === 'recipes' ? (
         recipes.length === 0 ? (
           <>
@@ -195,9 +374,11 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClo
           </>
         ) : (
           recipes.map((r) => (
-            <Pressable
+            <Press
               key={r.id}
+              feedback="highlight"
               style={styles.item}
+              pressedStyle={styles.pressed}
               accessibilityRole="button"
               accessibilityLabel={`${r.name}, ${Math.round(getRecipeMacros(r.id).kcal)} kcal per serving`}
               onPress={() => {
@@ -207,7 +388,7 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', onClo
             >
               <Text style={styles.name}>{r.name}</Text>
               <Text style={styles.muted}>{Math.round(getRecipeMacros(r.id).kcal)} kcal per serving</Text>
-            </Pressable>
+            </Press>
           ))
         )
       ) : null}
@@ -326,7 +507,7 @@ function NewRecipe({
     <View>
       <Field label="Recipe name" value={draft.name} onChange={(v) => onDraft({ ...draft, name: v })} numeric={false} />
       <Stepper label="Makes servings" value={draft.servings} step={1} min={1} max={20} onChange={(v) => onDraft({ ...draft, servings: v })} />
-      <Text style={[styles.muted, styles.gap]}>{draft.items.length === 0 ? 'Ingredients — none yet' : `Ingredients · ${draft.items.length}`}</Text>
+      <Text style={[styles.muted, styles.gap]}>{draft.items.length === 0 ? 'Ingredients — none yet' : `Ingredients, ${draft.items.length}`}</Text>
       {draft.items.map((it, i) => (
         <View key={`${it.food.id}-${i}`} style={styles.pair}>
           <Text style={[styles.name, styles.flex]} numberOfLines={1}>
@@ -360,10 +541,10 @@ function NewRecipe({
       />
       {results.length === 0 ? <Text style={[styles.muted, styles.gap]}>Nothing matches “{q.trim()}”.</Text> : null}
       {results.map((f) => (
-        <Pressable key={f.id} style={styles.item} onPress={() => add(f)} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}>
+        <Press key={f.id} feedback="highlight" style={styles.item} pressedStyle={styles.pressed} onPress={() => add(f)} accessibilityRole="button" accessibilityLabel={`Add ${f.name}`}>
           <Text style={styles.name}>{f.name}</Text>
           <Text style={styles.muted}>{f.servingLabel ?? `${f.servingG} g`}</Text>
-        </Pressable>
+        </Press>
       ))}
       <PrimaryButton label="Create a new ingredient" tone="neutral" style={styles.gap} onPress={onCreateIngredient} />
 
@@ -390,12 +571,51 @@ const styles = StyleSheet.create({
     minHeight: hit.default,
   },
   item: { paddingVertical: space.md, borderBottomWidth: 1, borderBottomColor: color.border, minHeight: hit.default },
-  name: { ...font.body, color: color.text },
+  block: { marginBottom: space.md },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md - 2,
+    minHeight: hit.gym,
+    paddingLeft: space.lg,
+    paddingRight: space.xs,
+    backgroundColor: color.surfaceHigh,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: color.border,
+  },
+  searchInput: { ...font.body, color: color.text, flex: 1, minHeight: hit.gym },
+  /** An open list on hairlines, not a box in a sheet: the sheet is already the container. */
+  list: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.border },
+  foodRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 60, paddingVertical: space.xs, paddingHorizontal: space.xs, borderRadius: radius.sm },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  pressed: { backgroundColor: color.surfaceHigh },
+  portion: { ...font.caption, fontSize: 12, color: color.textFaint },
+  nums: { alignItems: 'flex-end' },
+  kcal: { ...font.measure, fontSize: 19, lineHeight: 23, color: color.text },
+  plus: { width: hit.default, height: hit.default, borderRadius: radius.button, borderWidth: 1, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
+  plusPressed: { backgroundColor: color.border },
+  name: { ...font.label, fontWeight: '600', color: color.text },
   strong: { color: color.text, fontWeight: '600' },
   label: { ...font.label, color: color.text, fontWeight: '600', marginBottom: space.sm },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   macro: { ...font.label, ...font.numeric, color: color.textMuted, marginVertical: space.lg },
   mealPick: { marginBottom: space.md },
+  parsed: {
+    gap: space.sm,
+    marginTop: space.md,
+    padding: space.lg,
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    // A proposal you have not logged yet: outlined, as everything planned is (docs/13).
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: color.textMuted,
+  },
+  parsedHead: { ...font.eyebrow, color: color.textFaint },
+  parsedRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default, paddingVertical: space.xs },
+  parsedTotal: { ...font.label, ...font.numeric, color: color.text, marginVertical: space.xs },
+  unsure: { ...font.caption, fontWeight: '600', color: color.warning },
   gap: { marginTop: space.md },
   field: { flex: 1, marginTop: space.sm },
   pair: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-end' },
