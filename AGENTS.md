@@ -44,7 +44,7 @@ screens off them, not tabs.
 
 | # | Surface | Purpose |
 |---|---|---|
-| 1 | **Today** | What today is — plan, day, usual time, estimate — in one card, with Start workout under a thumb. No exercise list here (the workout shows it) and no check-in row (Start does) |
+| 1 | **Today** | What today is — the day's workout as a headline over a title block (lifts, sets, estimate, usual time) — then the day score: train, food, water and body on one clock. Start workout under a thumb. No exercise list here (the workout shows it) and no check-in row (Start does) |
 | 2 | **Food** | Calories/macros with one-tap repeats of his real meals, plus a compact Water row for the day on screen |
 | 3 | **Body** | Three sections in one tab: **Weight** (smoothed trend, not raw dots), **Recovery** (check-in, sleep, correctable history), **Measurements**. Each has exactly one primary action |
 | 4 | **Plans** | Any number of plans (templates or custom), one active; days → exercises. Owns the training schedule |
@@ -105,6 +105,8 @@ docs/          Specs. Read the one matching your ticket before writing code.
 src/engine/    Pure TypeScript. No I/O, no React, no imports from the app. Tested.
 src/db/        Drizzle schema + seed data (exercise catalogue, his routine, foods)
 src/theme/     Design tokens. Never hardcode a colour or a spacing value in a screen.
+               The language they encode — solid logged, hollow planned, line derived,
+               heat live — is docs/13-THE-RECORD.md. Read it before drawing anything.
 tests/         node:test suites for the engine. Must stay green.
 ```
 
