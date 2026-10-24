@@ -1,57 +1,83 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Line } from 'react-native-svg';
 
+import { selection } from '@/lib/haptics';
 import { color, font, radius, space } from '@/theme/tokens';
 
 export interface MiniBarsProps {
-  data: { label: string; value: number }[];
-  /** Optional goal line (same units as value), drawn dashed: a goal is planned, not done. */
+  /** `a11y` names a bar for a screen reader when its label is blank or too terse. */
+  data: { label: string; value: number; a11y?: string }[];
+  /** Optional goal line (same units as value), drawn dashed. */
   target?: number;
   height?: number;
-  /** Index to emphasise, e.g. today — the column still filling in. */
+  /** The bar to light up — today, this week — in the tracker's colour. */
   highlight?: number;
-  /** Which record this is: water draws in its own ink, everything else in chalk. */
+  /** The tracker's colour: volt for training, sky for water, lav for body. */
   ink?: string;
+  /** A value bubble over the highlighted bar: "21.3k", "1.6 L". */
+  bubble?: string;
+  /** Makes every bar a button that picks its index — a week, a day. */
+  onSelect?: (index: number) => void;
 }
 
 /**
- * Small daily bars. No axes — the labels and the goal line carry the meaning.
- *
- * Every bar is a logged total, so every bar is solid, in the record's own ink.
- * Reaching the goal is not coloured: the dashed line already says which days
- * crossed it, and a column of green ticks would turn a habit into a score.
+ * Rounded pill bars, the rest in dark grey and one lit in its tracker's colour, with
+ * the figure that matters in a bubble above it. No axes — the labels, the bubble and
+ * the goal line carry the meaning.
  */
-export function MiniBars({ data, target, height = 96, highlight, ink = color.text }: MiniBarsProps) {
+export function MiniBars({ data, target, height = 120, highlight, ink = color.accent, bubble, onSelect }: MiniBarsProps) {
   const [width, setWidth] = useState(0);
+  const top = bubble ? 30 : 4;
   const max = Math.max(target ?? 0, ...data.map((d) => d.value), 1);
-  const goalY = target ? height - (target / max) * height : null;
+  const plotH = height - top;
+  const goalY = target ? top + plotH - (target / max) * plotH : null;
+  const colW = width > 0 && data.length ? width / data.length : 0;
+  const hi = highlight !== undefined ? data[highlight] : undefined;
+  const hiH = hi ? Math.max(hi.value > 0 ? 10 : 0, (hi.value / max) * plotH) : 0;
   return (
     <View>
-      <View style={[styles.plot, { height }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-        {data.map((d, i) => (
-          <View key={`${d.label}-${i}`} style={styles.col}>
-            <View
-              style={[
-                styles.bar,
-                {
-                  height: Math.max(d.value > 0 ? 3 : 0, (d.value / max) * height),
-                  backgroundColor: ink,
-                  opacity: i === highlight ? 1 : 0.62,
-                },
-              ]}
-            />
-          </View>
-        ))}
+      <View style={{ height }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        <View style={[styles.plot, { top }]}>
+          {data.map((d, i) => {
+            const bar = <View style={[styles.bar, { height: Math.max(d.value > 0 ? 10 : 6, (d.value / max) * plotH), backgroundColor: i === highlight ? ink : color.border }]} />;
+            return onSelect ? (
+              <Pressable
+                key={`${d.label}-${i}`}
+                style={styles.col}
+                onPress={() => {
+                  selection();
+                  onSelect(i);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={d.a11y ?? d.label}
+                accessibilityState={{ selected: i === highlight }}
+              >
+                {bar}
+              </Pressable>
+            ) : (
+              <View key={`${d.label}-${i}`} style={styles.col}>
+                {bar}
+              </View>
+            );
+          })}
+        </View>
         {goalY !== null && width > 0 ? (
           <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Line x1={0} y1={goalY} x2={width} y2={goalY} stroke={color.textMuted} strokeWidth={1} strokeDasharray="4 3" />
+            <Line x1={0} y1={goalY} x2={width} y2={goalY} stroke={color.textFaint} strokeWidth={1} strokeDasharray="4 4" />
           </Svg>
+        ) : null}
+        {bubble && hi && highlight !== undefined && colW > 0 ? (
+          <View style={[styles.bubble, { backgroundColor: ink, left: Math.max(0, Math.min(width - 72, highlight * colW + colW / 2 - 36)), top: Math.max(0, top + plotH - hiH - 30) }]}>
+            <Text style={styles.bubbleText} numberOfLines={1}>
+              {bubble}
+            </Text>
+          </View>
         ) : null}
       </View>
       <View style={styles.labels}>
         {data.map((d, i) => (
-          <Text key={`${d.label}-${i}`} style={[styles.label, i === highlight && styles.labelOn]} numberOfLines={1}>
+          <Text key={`${d.label}-${i}`} style={[styles.label, i === highlight && { color: ink }]} numberOfLines={1}>
             {d.label}
           </Text>
         ))}
@@ -61,10 +87,11 @@ export function MiniBars({ data, target, height = 96, highlight, ink = color.tex
 }
 
 const styles = StyleSheet.create({
-  plot: { flexDirection: 'row', alignItems: 'flex-end', gap: space.xs },
-  col: { flex: 1, justifyContent: 'flex-end', height: '100%' },
-  bar: { borderRadius: radius.sm / 2, width: '100%' },
-  labels: { flexDirection: 'row', gap: space.xs, marginTop: space.xs },
-  label: { ...font.caption, color: color.textFaint, flex: 1, textAlign: 'center' },
-  labelOn: { color: color.text },
+  plot: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'flex-end', gap: space.sm - 2 },
+  col: { flex: 1, justifyContent: 'flex-end', height: '100%', alignItems: 'center' },
+  bar: { width: '100%', maxWidth: 30, borderRadius: radius.pill },
+  labels: { flexDirection: 'row', gap: space.sm - 2, marginTop: space.sm },
+  label: { ...font.caption, fontSize: 11, fontWeight: '700', color: color.textFaint, flex: 1, textAlign: 'center' },
+  bubble: { position: 'absolute', width: 72, height: 24, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  bubbleText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.onTile, fontVariant: ['tabular-nums'] },
 });

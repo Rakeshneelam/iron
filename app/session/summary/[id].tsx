@@ -2,14 +2,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Pill, Press, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
+import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, MiniBars, Pill, Press, PrimaryButton, Screen, SectionHeader, TextField, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { countFinishedWorkouts, recentWorkouts, sessionRecords } from '@/db/repositories/progress';
 import { deleteSession, getSessionSummary, isNoTraining, reopenSession, setSessionFeedback, type SetRow } from '@/db/repositories/sessions';
 import { workoutMilestone } from '@/engine/records';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
-import { SessionScore } from '@/features/session/SessionScore';
 import { fmtSet } from '@/features/session/prescription';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
 import { BatteryCard } from '@/features/settings/BatteryCard';
@@ -91,6 +90,7 @@ export default function SummaryScreen() {
   const totalReps = repsOnly.reduce((t, e) => t + e.rows.filter((r) => r.isWarmup === 0).reduce((a, r) => a + r.reps, 0), 0);
   const totalSeconds = timed.reduce((t, e) => t + e.rows.filter((r) => r.isWarmup === 0).reduce((a, r) => a + r.reps, 0), 0);
 
+  const lifted = summary.totalTonnage >= 10000 ? `${(summary.totalTonnage / 1000).toFixed(1)}k` : String(Math.round(summary.totalTonnage));
   const title = justFinished ? (isNoTraining(s.status) ? STATUS_LABEL[s.status] : 'Workout saved') : (summary.session.routineDayId ? undefined : 'Workout');
 
   const perExercise = (
@@ -121,11 +121,7 @@ export default function SummaryScreen() {
                   </Text>
                 </View>
                 {/* An estimated 1RM means nothing for a timed hold, so it is not shown. */}
-                {measure === 'reps' ? (
-                  <Text style={[styles.delta, { color: delta !== null && delta > 0.05 ? color.positive : color.textMuted }]}>
-                    {delta === null ? 'first' : `${signed(delta)} kg`}
-                  </Text>
-                ) : null}
+                {measure === 'reps' ? <Pill label={delta === null ? 'first' : `${signed(delta)} kg`} tone={delta !== null && delta > 0.05 ? 'positive' : 'muted'} /> : null}
                 <Icon name={open ? 'chevronUp' : 'chevronDown'} size={18} color={color.textFaint} />
               </Press>
               {open
@@ -168,28 +164,38 @@ export default function SummaryScreen() {
       // twice.
       dock={justFinished ? <PrimaryButton label="Done" size="gym" onPress={() => router.replace('/')} /> : undefined}
     >
-      <View style={styles.pills}>
-        <Pill label={STATUS_LABEL[s.status]} tone={STATUS_TONE[s.status]} />
-        {milestone ? <Pill label={milestone} tone="muted" /> : null}
-      </View>
       {isNoTraining(s.status) ? (
-        <Text style={styles.note}>
-          {s.status === 'rest'
-            ? 'A day off, on purpose. Your plan is exactly where it was — this costs you nothing.'
-            : 'This planned workout did not happen. Your plan moved on to the next day.'}
-        </Text>
+        <>
+          <View style={styles.pills}>
+            <Pill label={STATUS_LABEL[s.status]} tone={STATUS_TONE[s.status]} />
+          </View>
+          <Text style={styles.note}>
+            {s.status === 'rest'
+              ? 'A day off, on purpose. Your plan is exactly where it was — this costs you nothing.'
+              : 'This planned workout did not happen. Your plan moved on to the next day.'}
+          </Text>
+        </>
       ) : (
         <>
-          <View style={styles.tiles}>
-            <TitleBlock
-              cells={[
-                { label: 'Sets', value: String(summary.hardSets) },
-                { label: 'Lifted', value: summary.totalTonnage >= 10000 ? `${(summary.totalTonnage / 1000).toFixed(1)}k` : String(Math.round(summary.totalTonnage)), unit: 'kg' },
-                { label: 'Time', value: String(summary.durationMin), unit: 'min' },
-                { label: 'New bests', value: String(records.length), tone: records.length ? ('positive' as const) : undefined },
-              ]}
-            />
-          </View>
+          {/* The workout in one card: what kind of finish it was, what was moved, and the facts as chips. */}
+          <Card tone="volt" style={styles.hero}>
+            <View style={styles.heroTags}>
+              <View style={styles.kicker}>
+                <View style={styles.kickerDot} />
+                <Text style={styles.kickerText}>{STATUS_LABEL[s.status]}</Text>
+              </View>
+              {milestone ? <Text style={styles.heroNote}>{milestone}</Text> : null}
+            </View>
+            <Text style={styles.heroValue} numberOfLines={1}>
+              {summary.totalTonnage > 0 ? lifted : String(summary.hardSets)}
+              <Text style={styles.heroUnit}>{summary.totalTonnage > 0 ? ' kg lifted' : summary.hardSets === 1 ? ' set' : ' sets'}</Text>
+            </Text>
+            <View style={styles.heroChips}>
+              <HeroChip text={`${summary.hardSets} ${summary.hardSets === 1 ? 'set' : 'sets'}`} />
+              <HeroChip text={`${summary.durationMin} min`} />
+              {records.length ? <HeroChip text={`${records.length} new ${records.length === 1 ? 'best' : 'bests'}`} /> : null}
+            </View>
+          </Card>
           {/* Seconds held are not reps: timed work gets its own sentence, never a sum with reps (UX-09). */}
           {totalSeconds > 0 ? (
             <Text style={styles.note}>
@@ -203,24 +209,28 @@ export default function SummaryScreen() {
             </Text>
           ) : null}
 
-          {/*
-            The hour as it went: every set at the minute it was logged, a lane per
-            exercise (features/session/SessionScore). The list below has the numbers;
-            this has the shape.
-          */}
-          <SectionHeader title="How it went" />
-          <SessionScore
-            lanes={summary.perExercise.map((e) => ({ exerciseId: e.exerciseId, name: e.name, rows: e.rows, isPR: e.isPR }))}
-            startedAt={s.startedAt}
-            endedAt={s.endedAt}
-          />
+          {/* Where the work went: a bar per exercise, in the order done. Tap one to open its sets below. */}
+          {summary.perExercise.length > 1 && summary.totalTonnage > 0 ? (
+            <Card style={styles.bars}>
+              <Text style={styles.barsTitle}>Volume by exercise</Text>
+              <MiniBars
+                data={summary.perExercise.map((e) => {
+                  const kg = e.rows.filter((r) => r.isWarmup === 0).reduce((t, r) => t + r.weight * r.reps, 0);
+                  return { label: '', value: kg, a11y: `${e.name}: ${Math.round(kg)} kg. Shows its sets.` };
+                })}
+                highlight={Math.max(0, summary.perExercise.findIndex((e) => e.exerciseId === expanded))}
+                height={110}
+                onSelect={(i) => setExpanded(summary.perExercise[i]?.exerciseId ?? null)}
+              />
+            </Card>
+          ) : null}
 
           {/*
-            A best is a fact with a number attached, set as a datum would be: a green
-            rule and the lifts that crossed it. No trophy, no confetti (AGENTS §6).
+            A best is a fact with a number attached: a volt outline and the lifts
+            that went past it. No trophy, no confetti (AGENTS §6).
           */}
           {records.length ? (
-            <View style={styles.records}>
+            <Card tone="accent" style={styles.records}>
               <Text style={styles.recordsTitle}>
                 {records.length === 1 ? 'One lift went past its best' : `${records.length} lifts went past their best`}
               </Text>
@@ -230,7 +240,7 @@ export default function SummaryScreen() {
                   {`  ${r.events.map((e) => e.label).join(', ')}`}
                 </Text>
               ))}
-            </View>
+            </Card>
           ) : null}
 
           {perExercise}
@@ -269,43 +279,55 @@ export default function SummaryScreen() {
   );
 }
 
+/** A fact about the workout, as a quiet chip on the volt card. */
+function HeroChip({ text }: { text: string }) {
+  return (
+    <View style={styles.heroChip}>
+      <Text style={styles.heroChipText}>{text}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   pressedRow: { backgroundColor: color.surfaceHigh },
   flex1: { flex: 1 },
   pills: { flexDirection: 'row', gap: space.sm },
-  tiles: { marginTop: space.lg },
-  note: { ...font.label, color: color.textMuted, marginTop: space.md },
+  hero: { marginTop: space.sm, marginBottom: 0, borderRadius: radius.xl, padding: space.xl - 2, overflow: 'hidden' },
+  heroTags: { flexDirection: 'row', alignItems: 'center', gap: space.sm + 2 },
+  kicker: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.onTile },
+  kickerDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: color.accent },
+  kickerText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.accent },
+  heroNote: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.onTileMuted, flexShrink: 1 },
+  heroValue: { ...font.display, fontSize: 56, lineHeight: 60, color: color.onTile, marginTop: space.md, paddingRight: space.xs },
+  heroUnit: { ...font.measure, fontSize: 20, color: color.onTile, letterSpacing: 0 },
+  heroChips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
+  heroChip: { height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.onTileWash, justifyContent: 'center' },
+  heroChipText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.onTile, fontVariant: ['tabular-nums'] },
+  bars: { marginTop: space.lg, marginBottom: 0 },
+  barsTitle: { ...font.eyebrow, color: color.textMuted, marginBottom: space.md },
+  note: { ...font.body, color: color.textMuted, marginTop: space.md },
   input: {
     ...font.body,
     color: color.text,
-    backgroundColor: color.surfaceHigh,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
-    minHeight: hit.gym,
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    minHeight: hit.gym + 8,
     marginTop: space.md,
   },
-  records: { gap: space.xs, marginTop: space.lg, borderLeftWidth: 2, borderLeftColor: color.positive, paddingLeft: space.md },
-  recordsTitle: { ...font.label, fontWeight: '700', color: color.positive },
+  records: { gap: space.xs, marginTop: space.lg, marginBottom: 0 },
+  recordsTitle: { ...font.label, fontWeight: '800', color: color.accent },
   recordLine: { ...font.caption, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'], color: color.textMuted },
-  recordName: { color: color.text, fontWeight: '600' },
+  recordName: { color: color.text, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, minHeight: hit.gym },
-  setRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    minHeight: hit.default,
-    paddingLeft: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.border,
-  },
-  setIdx: { ...font.caption, color: color.textMuted, minWidth: 56 },
-  setVal: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
-  pain: { ...font.caption, color: color.danger },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  name: { ...font.body, color: color.text, fontWeight: '600' },
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.default, paddingLeft: space.md, borderTopWidth: 1, borderTopColor: color.border },
+  setIdx: { ...font.caption, fontWeight: '600', color: color.textMuted, minWidth: 56 },
+  setVal: { ...font.body, ...font.numeric, color: color.text, fontWeight: '700' },
+  pain: { ...font.caption, fontWeight: '700', color: color.danger },
+  divider: { borderTopWidth: 1, borderTopColor: color.border },
+  name: { ...font.label, color: color.text },
   muted: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: 2 },
-  delta: { ...font.label, ...font.numeric },
   legend: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   aside: { marginTop: gap.section },
   secondary: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },

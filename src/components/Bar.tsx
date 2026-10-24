@@ -24,10 +24,10 @@ const FILL: Record<BarTone, string> = {
 };
 
 /**
- * A logged amount against a planned range, in the app's marks (docs/13): what you
- * did is a solid bar, the range you are aiming for is an outline around the part
- * of the scale it covers. Nothing here fills a pill to "complete" it — over the
- * range simply runs past the outline, and the words beside it say so.
+ * A logged amount against a planned range: a rounded track, the range you are
+ * aiming for a lighter stretch of it, and what you did a filled bar from the left.
+ * Nothing here "completes" — over the range simply runs past it, and the words
+ * beside it say so.
  */
 export function Bar({ value, max, tone = 'accent', markers = [] }: BarProps) {
   const safeMax = max > 0 ? max : 1;
@@ -37,7 +37,6 @@ export function Bar({ value, max, tone = 'accent', markers = [] }: BarProps) {
   const hi = sorted[sorted.length - 1];
   return (
     <View style={styles.track}>
-      <View style={styles.floor} />
       {lo !== undefined && hi !== undefined && hi > lo ? (
         <View style={[styles.band, { left: at(lo), width: `${((Math.min(hi, safeMax) - lo) / safeMax) * 100}%` }]} />
       ) : null}
@@ -50,9 +49,9 @@ export function Bar({ value, max, tone = 'accent', markers = [] }: BarProps) {
 }
 
 const styles = StyleSheet.create({
-  track: { height: 16, justifyContent: 'center' },
-  floor: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
-  band: { position: 'absolute', top: 0, bottom: 0, borderWidth: 1, borderColor: color.textFaint, borderRadius: radius.sm },
-  tick: { position: 'absolute', top: 3, bottom: 3, width: 1, backgroundColor: color.textFaint },
-  fill: { height: 6, borderRadius: 1.5 },
+  track: { height: 10, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, overflow: 'hidden' },
+  /** The range you are aiming for: a lighter stretch of the track. */
+  band: { position: 'absolute', top: 0, bottom: 0, backgroundColor: color.rule },
+  tick: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: color.surfaceHigh },
+  fill: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: radius.pill },
 });

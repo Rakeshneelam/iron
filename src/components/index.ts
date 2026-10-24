@@ -1,5 +1,5 @@
 export { Bar, type BarProps, type BarTone } from './Bar';
-export { Card, type CardProps, type CardTone } from './Card';
+export { Card, isTile, type CardProps, type CardTone } from './Card';
 export { ChipRow, type ChipOption, type ChipRowProps } from './ChipRow';
 export { DateStepper, useSelectedDate, type DateStepperProps } from './DateStepper';
 export { confirm } from './confirm';
@@ -26,3 +26,6 @@ export { ToggleChips } from './ToggleChips';
 export { TrendChart, type TrendChartProps } from './TrendChart';
 export { Rule, type RuleMark, type RuleProps } from './Rule';
 export { TitleBlock, useNow, type TitleCell } from './TitleBlock';
+export { DayStrip, type StripDay } from './DayStrip';
+export { Sparkline } from './Sparkline';
+export { EntryRow } from './EntryRow';

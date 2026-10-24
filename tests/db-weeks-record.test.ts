@@ -47,6 +47,8 @@ describe('weeksRecord', () => {
     assert.equal(a?.weekStart, lastWeek);
     assert.deepEqual([a?.trained, a?.sets, a?.missed, a?.rest], [2, 5, 1, 1]);
     assert.deepEqual([b?.trained, b?.sets, b?.missed, b?.rest], [1, 4, 0, 0]);
+    // 100 kg × 5 reps per set: 5 sets last week, 4 this week.
+    assert.deepEqual([a?.tonnage, b?.tonnage], [2500, 2000]);
   });
 
   test('a week with nothing logged is empty, never zero kcal or a missed target', () => {

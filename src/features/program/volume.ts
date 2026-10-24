@@ -3,7 +3,7 @@ import { VOLUME_LANDMARKS, volumeStatus } from '@/engine/progression';
 
 /**
  * Too much volume is worth a look, never an alarm: violet, like every other
- * "worth a look". Red is pain and nothing else (docs/13).
+ * "worth a look". Red is pain and nothing else (docs/13-VOLT).
  */
 export const STATUS_TONE: Record<ReturnType<typeof volumeStatus>, BarTone> = {
   under: 'muted',

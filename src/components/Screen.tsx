@@ -1,10 +1,10 @@
 import { router, useFocusEffect } from 'expo-router';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
-import Animated, { Extrapolation, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { color, font, layout, space } from '@/theme/tokens';
+import { color, font, layout, material, space } from '@/theme/tokens';
 
 import { IconButton } from './IconButton';
 import { setToastObstruction } from './Toast';
@@ -94,7 +94,6 @@ export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = tru
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.set(e.contentOffset.y);
   });
-  const edgeFade = useAnimatedStyle(() => ({ opacity: interpolate(scrollY.get(), [0, 12], [0, 1], Extrapolation.CLAMP) }));
   const hasHeader = title !== undefined || right !== undefined || back !== undefined;
   const bottomInset = tab ? 0 : insets.bottom;
 
@@ -118,7 +117,7 @@ export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = tru
       {hasHeader ? (
         <View style={[styles.header, back ? styles.headerBack : null]}>
           {back ? <IconButton icon="chevronLeft" accessibilityLabel={backLabel} onPress={goBack} /> : null}
-          <View style={styles.headerText}>
+          <View style={[styles.headerText, back ? styles.headerTextBack : null]}>
             {title !== undefined ? (
               <Text style={back ? styles.titleSm : styles.title} numberOfLines={1} accessibilityRole="header">
                 {title}
@@ -130,8 +129,7 @@ export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = tru
               </Text>
             ) : null}
           </View>
-          {right !== undefined ? <View style={styles.headerRight}>{right}</View> : null}
-          {scroll ? <Animated.View style={[styles.hairlineBottom, edgeFade]} pointerEvents="none" /> : null}
+          {right !== undefined ? <View style={styles.headerRight}>{right}</View> : back ? <View style={styles.balance} /> : null}
         </View>
       ) : null}
 
@@ -155,13 +153,8 @@ export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = tru
 
       {dock ? (
         <View style={[styles.dock, { paddingBottom: space.md + bottomInset }]} onLayout={(e) => setDockHeight(e.nativeEvent.layout.height)}>
-          {/* A screen that cannot scroll has nothing to pass under the dock, so its
-              rule is simply always there. */}
-          {scroll ? (
-            <Animated.View style={[styles.hairlineTop, edgeFade]} pointerEvents="none" />
-          ) : (
-            <View style={[styles.hairlineTop, styles.hairlineOn]} pointerEvents="none" />
-          )}
+          {/* Content scrolls up under the dock and fades into the stage, not behind a rule. */}
+          <View style={styles.fade} pointerEvents="none" />
           {dock}
         </View>
       ) : null}
@@ -175,26 +168,25 @@ const styles = StyleSheet.create({
   padded: { paddingHorizontal: layout.screenPadding },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: space.md,
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.lg,
+    paddingTop: space.md,
     paddingBottom: space.md,
   },
-  headerBack: { alignItems: 'center', gap: space.xs, paddingLeft: space.sm, paddingTop: space.md, paddingBottom: space.sm },
+  headerBack: { paddingTop: space.sm, paddingBottom: space.sm },
   headerText: { flex: 1 },
-  headerRight: { flexShrink: 0 },
+  headerTextBack: { alignItems: 'center' },
+  headerRight: { flexShrink: 0, flexDirection: 'row', gap: space.sm },
+  /** Keeps a pushed screen's title centred when nothing sits on its right. */
+  balance: { width: 46 },
   title: { ...font.title, color: color.text },
-  titleSm: { ...font.titleSm, color: color.text },
-  subtitle: { ...font.label, color: color.textMuted, marginTop: space.xs },
-  subtitleSm: { ...font.caption, color: color.textMuted, marginTop: 2 },
-  /** Absolute, so fading one in never moves the content it sits against. */
-  hairlineBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
-  hairlineTop: { position: 'absolute', left: 0, right: 0, top: 0, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
-  hairlineOn: { opacity: 1 },
-  strip: { borderBottomWidth: 1, borderBottomColor: color.border, paddingHorizontal: layout.screenPadding, paddingVertical: space.sm },
-  afterStrip: { paddingTop: space.md },
+  titleSm: { ...font.titleSm, color: color.text, textAlign: 'center' },
+  subtitle: { ...font.label, fontSize: 14, color: color.textMuted, marginTop: 2 },
+  subtitleSm: { ...font.caption, fontSize: 12, color: color.textMuted, marginTop: 1, textAlign: 'center' },
+  strip: { paddingHorizontal: layout.screenPadding, paddingBottom: space.sm },
+  afterStrip: { paddingTop: space.sm },
   dock: {
     position: 'absolute',
     left: 0,
@@ -202,7 +194,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     gap: space.sm,
     paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    backgroundColor: color.bg,
+    paddingTop: space.lg,
+  },
+  fade: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    experimental_backgroundImage: material.dockFade,
   },
 });

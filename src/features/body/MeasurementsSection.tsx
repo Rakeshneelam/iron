@@ -55,11 +55,12 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
   return (
     <Screen
       {...frame}
-      subtitle={lastDate ? `Measured ${fmtDayLabel(lastDate)}` : frame.subtitle}
       tab
-      dock={<PrimaryButton label="Log measurements" size="gym" icon={<Icon name="ruler" size={18} color={color.onAccent} />} onPress={() => setMeasuring(true)} />}
+      dock={<PrimaryButton label="Log measurements" size="gym" icon={<Icon name="ruler" size={20} color={color.onAccent} />} onPress={() => setMeasuring(true)} />}
     >
-      <Text style={styles.lead}>Tap − or + to log today’s number. It saves as you go.</Text>
+      <Text style={styles.lead}>
+        Tap − or + to log today’s number. It saves as you go.{lastDate ? ` Last measured ${fmtDayLabel(lastDate).toLowerCase()}.` : ''}
+      </Text>
       <ListCard>
         {rows.map((s, i) => {
           const history = bySite.get(s.key) ?? [];
@@ -101,10 +102,10 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
       <Text style={styles.footnote}>Tap a name for its history. Other sites are in Log measurements.</Text>
 
       {whtr !== null ? (
-        <Card style={styles.gapTop}>
+        <Card tone="lav" style={styles.gapTop}>
           <View style={styles.rowBetween}>
             <Text style={styles.body}>Waist-to-height</Text>
-            <Text style={[styles.value, { color: whtr < 0.5 ? color.positive : color.text }]}>{whtr.toFixed(2)}</Text>
+            <Text style={styles.value}>{whtr.toFixed(2)}</Text>
           </View>
           <Text style={styles.hint}>Below 0.50 is the healthy range for most adults.</Text>
         </Card>
@@ -120,7 +121,7 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
 const styles = StyleSheet.create({
   lead: { ...font.caption, color: color.textMuted, marginBottom: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 64 },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  divider: { borderTopWidth: 1, borderTopColor: color.border },
   nameTouch: { flex: 1, minWidth: 0 },
   name: { minHeight: hit.default, justifyContent: 'center', paddingHorizontal: space.xs, borderRadius: radius.sm },
   held: { backgroundColor: color.surfaceHigh },
@@ -130,7 +131,7 @@ const styles = StyleSheet.create({
   footnote: { ...font.caption, fontSize: 12, color: color.textFaint },
   gapTop: { marginTop: space.lg },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
-  hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  body: { ...font.body, color: color.text },
-  value: { ...font.measure, fontSize: 28, lineHeight: 32, color: color.text, flexShrink: 1 },
+  hint: { ...font.caption, color: color.onTileMuted, marginTop: space.sm },
+  body: { ...font.label, color: color.onTile },
+  value: { ...font.measure, fontWeight: '900', fontSize: 34, lineHeight: 38, color: color.onTile, flexShrink: 1, paddingRight: 2 },
 });

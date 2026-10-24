@@ -15,12 +15,6 @@ const SECTIONS = [
 ];
 export type BodySection = (typeof SECTIONS)[number]['value'];
 
-const SUBTITLE: Record<BodySection, string> = {
-  weight: 'Your trend, not this morning’s number',
-  recovery: 'Readiness from your check-in',
-  measurements: 'Every 2–4 weeks',
-};
-
 const isSection = (v: unknown): v is BodySection => SECTIONS.some((s) => s.value === v);
 
 /**
@@ -51,7 +45,7 @@ export default function BodyScreen() {
     if (params.section !== undefined) router.setParams({ section: undefined });
   };
 
-  const frame = { title: 'Body', subtitle: SUBTITLE[section], strip: <SegmentTabs options={SECTIONS} value={section} onChange={select} /> };
+  const frame = { title: 'Body', strip: <SegmentTabs options={SECTIONS} value={section} onChange={select} /> };
   // A link, not a second profile editor. Profile & goals owns these (UX-03).
   const tail = (
     <ListCard>

@@ -23,7 +23,7 @@ export function TimeAdjuster({ value, onChange, min = 0, max = 1439 }: { value: 
 
 const styles = StyleSheet.create({
   // The same bordered − value + field as Stepper, so a time reads as one more number.
-  adjust: { flexDirection: 'row', alignItems: 'center', height: hit.default, backgroundColor: color.surfaceHigh, borderRadius: radius.md, borderWidth: 1, borderColor: color.border, overflow: 'hidden' },
+  adjust: { flexDirection: 'row', alignItems: 'center', height: hit.default, backgroundColor: color.surfaceHigh, borderRadius: radius.pill, overflow: 'hidden' },
   btn: { width: hit.default, height: hit.default, alignItems: 'center', justifyContent: 'center' },
   pressed: { backgroundColor: color.border },
   value: { ...font.label, fontSize: 17, fontWeight: '700', ...font.numeric, color: color.text, minWidth: 64, textAlign: 'center' },

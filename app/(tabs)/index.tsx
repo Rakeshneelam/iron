@@ -1,11 +1,11 @@
 import { Redirect, router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { ChipRow, Icon, IconButton, ListCard, ListRow, Pill, Press, PrimaryButton, Screen, SectionHeader, Sheet, TitleBlock, toast, useNow, type IconName } from '@/components';
+import { Card, ChipRow, DayStrip, Icon, IconButton, isTile, ListCard, ListRow, Pill, Press, PrimaryButton, Screen, SectionHeader, Sheet, Sparkline, toast, useNow, type CardTone, type IconName } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
-import { getWeighIn, listWeighIns } from '@/db/repositories/body';
+import { listWeighIns } from '@/db/repositories/body';
 import { getDay as getFoodDay } from '@/db/repositories/food';
 import { getActiveRoutine, getDay, getDays, getSlots, resolveNextDay } from '@/db/repositories/program';
 import { recentMuscles, recentWorkouts } from '@/db/repositories/progress';
@@ -23,7 +23,7 @@ import {
   type SessionStatus,
 } from '@/db/repositories/sessions';
 import { useSettings } from '@/db/repositories/settings';
-import { deleteEntry as deleteWaterEntry, getDayEntries, getDayTotal, logWater } from '@/db/repositories/water';
+import { deleteEntry as deleteWaterEntry, getDayTotal, logWater } from '@/db/repositories/water';
 import { weightTrend } from '@/engine/metabolic';
 import { estimateSeconds, fitSession, type FitSlot } from '@/engine/planner';
 import { recoverySession } from '@/engine/recovery';
@@ -35,10 +35,9 @@ import { Elapsed } from '@/features/session/Elapsed';
 import { suggestFor, suggestionContext } from '@/features/session/prescription';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
 import { fmtClockOfDay } from '@/features/settings/time';
-import { DayScore } from '@/features/today/DayScore';
 import { RoutineSheet } from '@/features/warmup/RoutineSheet';
-import { addDays, daysBetweenISO, fmtDayLabel, minutesSinceMidnight, parseISODate, todayISO, weekStartISO } from '@/lib/date';
-import { ml } from '@/lib/format';
+import { addDays, daysBetweenISO, fmtDayLabel, parseISODate, todayISO, weekStartISO } from '@/lib/date';
+import { kgNum, ml, signed } from '@/lib/format';
 import { success } from '@/lib/haptics';
 import { hydrationTarget } from '@/services/hydration';
 import { rescheduleAll } from '@/services/notifications';
@@ -56,33 +55,24 @@ const WEEK_WORDS: Record<SessionStatus, string> = {
   rest: 'rest day',
   active: 'in progress',
 };
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 /** Past this, the screen says how long it has been — as a fact, never as a reproach. */
 const LONG_GAP_DAYS = 10;
 
-const minutesOf = (iso: string) => minutesSinceMidnight(new Date(iso));
-
 /**
- * Today: where you are in your day, and the one thing to do next.
+ * Today: what today is, and the one thing to do next.
  *
- * Not a dashboard. It used to be a card of four numbers, a row of tiles, a water
- * row and a week strip — four widgets with four ideas of time. Now it is three
- * things, in the order a glance asks for them:
+ *   1. Who and when — your initial, the date, a line that follows the day's state.
+ *   2. The week as a strip of days, a dot under each one trained. A missed day is a
+ *      day without a dot, nothing more: there is no chain here to break.
+ *   3. The day's work as a volt card — its name large, its facts as chips. This
+ *      answers "what is today" in the first five seconds.
+ *   4. The other three trackers as tiles in their own colours — water sky, food
+ *      peach, body lavender — each one tap from its screen, water and food one tap
+ *      from logging.
  *
- *   1. The day's work, set as a headline: the workout's own name, large, with its
- *      facts in a title block under it. This is the anchor (brief §12) — the first
- *      five seconds answer "what is today".
- *   2. The day score: everything you have recorded today on one clock, with "now"
- *      drawn through it (features/today/DayScore). Food, water and training are one
- *      record here, not three trackers stapled together (§11).
- *   3. The week, in the same marks as everything else: solid for a day trained,
- *      hollow for one planned — so a missed day is just a hollow mark, as it always
- *      promised to be. Nothing here can be broken.
- *
- * The one action is in the dock, under a thumb, and its words follow the state:
- * Start, Resume, Log a workout, Start another. The exercise list is still not here
- * (the workout shows it first) and neither is a check-in (the workout's first stage
- * asks).
+ * The one action — Start, Resume, Log a workout — sits in the dock under a thumb.
+ * The exercise list is still not here (the workout shows it first) and neither is
+ * a check-in (the workout's first stage asks).
  */
 export default function Today() {
   const settings = useSettings();
@@ -95,8 +85,7 @@ export default function Today() {
       const recent = listSessions(10);
       // A workout cancelled today is not a workout done today.
       const finishedToday = recent.find((s) => s.date === today && TRAINED.includes(s.status));
-      const weighIns = listWeighIns();
-      const trend = weightTrend(weighIns);
+      const trend = weightTrend(listWeighIns());
       return {
         active,
         activeSets: active ? getSessionSets(active.id).filter((s) => s.isWarmup === 0).length : 0,
@@ -114,12 +103,10 @@ export default function Today() {
         lastTrained: recent.find((s) => TRAINED.includes(s.status))?.date ?? null,
         week: listSessions(20, WEEK_STATUSES),
         recent: recentWorkouts(3),
-        water: getDayEntries(today),
         waterTotal: getDayTotal(today),
-        meals: getFoodDay(today).entries,
+        kcal: getFoodDay(today).totals.kcal,
         kcalTarget: computeTargets(today).kcal,
-        weighIn: getWeighIn(today)?.kg ?? null,
-        trend: trend[trend.length - 1]?.trend ?? null,
+        trend: trend.slice(-21),
       };
     },
     ['session', 'set_log', 'session_exercise', 'exercise', 'routine', 'routine_day', 'check_in', 'setting', 'water_log', 'meal_log', 'food', 'recipe', 'recipe_item', 'weigh_in'],
@@ -148,10 +135,8 @@ export default function Today() {
 
   if (!settings.setupDone) return <Redirect href="/setup" />;
 
-  const weekday = now.toLocaleDateString(undefined, { weekday: 'long' });
-  const dateLine = now.toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
-  const gear = <IconButton icon="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />;
   const restDay = !settings.trainingDays.includes(now.getDay());
+  const done = state.finishedToday;
 
   /** A workout with no plan behind it: pick exercises as you go (AGENTS §2, Today). */
   const startEmpty = () => router.push(`/session/${startSession(null).id}`);
@@ -171,7 +156,7 @@ export default function Today() {
     });
   };
 
-  /** A glass, from the day score: the thing done eight times a day, in one tap. */
+  /** A glass, from the water tile: the thing done eight times a day, in one tap. */
   const glass = () => {
     const row = logWater(250);
     success();
@@ -198,43 +183,89 @@ export default function Today() {
   const setCount = (fit?.slots ?? slots).reduce((t, x) => t + x.sets, 0);
   const minutes = fit ? fit.minutes : fullMinutes;
 
-  /* ---------------------------- the day score ---------------------------- */
-  const done = state.finishedToday;
-  const doneBlocks = state.week
-    .filter((s) => s.date === today && TRAINED.includes(s.status) && s.endedAt)
-    .map((s) => ({ start: minutesOf(s.startedAt), end: minutesOf(s.endedAt ?? s.startedAt) }));
-  const planned =
-    state.routine && day && !restDay && !done && !state.active && !markedToday && preview.length ? { at: settings.reminders.workout.minutes, minutes } : null;
-  const score = (
-    <View style={styles.scoreBlock}>
-      <SectionHeader title="Today" hint={undefined} />
-      <DayScore
-        now={now}
-        wake={settings.wakeMinutes}
-        sleep={settings.sleepMinutes}
-        train={{
-          done: doneBlocks,
-          live: state.active ? (state.active.date === today ? minutesOf(state.active.startedAt) : settings.wakeMinutes) : null,
-          planned,
-          idle: markedToday ? (markedToday.status === 'rest' ? 'Rest day, on purpose' : 'Marked as missed') : restDay ? 'Not a training day' : !state.routine ? 'No plan — log one any time' : '',
-        }}
-        food={{ meals: state.meals.map((m) => ({ at: minutesOf(m.loggedAt), kcal: m.macros.kcal })), kcal: state.meals.reduce((t, m) => t + m.macros.kcal, 0), target: state.kcalTarget }}
-        water={{ steps: state.water.map((w) => ({ at: minutesOf(w.loggedAt), ml: w.ml })), total: state.waterTotal, target: waterTarget }}
-        body={{ kg: state.weighIn, trend: state.trend }}
-        onTrain={() => (state.active ? router.push(`/session/${state.active.id}`) : done ? router.push(`/session/summary/${done.id}`) : setMoreOpen(true))}
-        onFood={() => router.push('/food')}
-        onWater={() => router.push('/water')}
-        onBody={() => router.push('/body?section=weight')}
-        onGlass={glass}
-      />
-    </View>
-  );
+  /* ------------------------------ the week ------------------------------- */
+  const weekStart = weekStartISO(today);
+  const byDate = new Map(state.week.map((s) => [s.date, s.status]));
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(weekStart, i);
+    const status = byDate.get(date);
+    return {
+      date,
+      status,
+      trained: status !== undefined && TRAINED.includes(status),
+      planned: settings.trainingDays.includes(parseISODate(date).getDay()),
+    };
+  });
+  const trainedThisWeek = weekDays.filter((d) => d.trained).length;
+  const plannedThisWeek = weekDays.filter((d) => d.planned).length;
 
-  const week = (
-    <View style={styles.weekBlock}>
-      <SectionHeader title="This week" />
-      <WeekRhythm today={today} sessions={state.week} trainingDays={settings.trainingDays} />
-      <Text style={styles.footnote}>A missed day stays an open mark. Nothing counts against you.</Text>
+  /* ---------------------------- the trackers ----------------------------- */
+  const [waterValue, waterUnit] = ml(state.waterTotal).split(' ');
+  const trendNow = state.trend[state.trend.length - 1];
+  const trendWeekAgo = [...state.trend].reverse().find((t) => t.date <= addDays(today, -7));
+  const trendDelta = trendNow && trendWeekAgo ? trendNow.trend - trendWeekAgo.trend : null;
+
+  const tiles = (
+    <View style={styles.bento}>
+      <View style={styles.bentoRow}>
+        <Tile
+          tone="sky"
+          icon="water"
+          label="Water"
+          value={waterValue ?? '0'}
+          unit={waterUnit}
+          sub={`of ${ml(waterTarget)} today`}
+          fill={waterTarget > 0 ? state.waterTotal / waterTarget : 0}
+          onPress={() => router.push('/water')}
+          add={{ label: 'Log a glass, 250 ml', onPress: glass }}
+          accessibilityLabel={`Water: ${ml(state.waterTotal)} of ${ml(waterTarget)} today. Opens water.`}
+        />
+        <Tile
+          tone="peach"
+          icon="food"
+          label="Food"
+          value={String(Math.round(state.kcal))}
+          sub={`of ${Math.round(state.kcalTarget)} kcal`}
+          fill={state.kcalTarget > 0 ? state.kcal / state.kcalTarget : 0}
+          onPress={() => router.push('/food')}
+          add={{ label: 'Add food', onPress: () => router.push(`/food?add=${Date.now()}`) }}
+          accessibilityLabel={`Food: ${Math.round(state.kcal)} of ${Math.round(state.kcalTarget)} kcal today. Opens food.`}
+        />
+      </View>
+      <View style={styles.bentoRow}>
+        <Tile
+          tone="lav"
+          icon="body"
+          label="Weight"
+          value={trendNow ? kgNum(Math.round(trendNow.trend * 10) / 10) : '—'}
+          unit={trendNow ? 'kg' : undefined}
+          // The trend, never the morning's raw number: the scale swings on water alone.
+          sub={trendNow ? (trendDelta !== null ? `trend, ${signed(trendDelta)} this week` : 'trend weight') : 'Weigh in after waking'}
+          onPress={() => router.push('/body?section=weight')}
+          accessibilityLabel={trendNow ? `Trend weight ${kgNum(Math.round(trendNow.trend * 10) / 10)} kg. Opens body.` : 'No weigh-ins yet. Opens body.'}
+        >
+          {state.trend.length > 1 ? (
+            <View style={styles.spark}>
+              <Sparkline values={state.trend.map((t) => t.trend)} width={128} height={28} color={color.onTile} strokeWidth={2.5} />
+            </View>
+          ) : null}
+        </Tile>
+        <Tile
+          tone="default"
+          label="This week"
+          value={String(trainedThisWeek)}
+          unit={plannedThisWeek ? `of ${plannedThisWeek}` : undefined}
+          sub={trainedThisWeek === 1 ? 'workout' : 'workouts'}
+          onPress={() => router.push('/history')}
+          accessibilityLabel={`This week: ${trainedThisWeek} ${trainedThisWeek === 1 ? 'workout' : 'workouts'}${plannedThisWeek ? ` of ${plannedThisWeek} planned` : ''}. Opens history.`}
+        >
+          <View style={styles.weekDots}>
+            {weekDays.map((d) => (
+              <View key={d.date} style={[styles.weekDot, d.trained ? styles.weekDotDone : d.date === today ? styles.weekDotToday : d.planned ? styles.weekDotPlanned : null]} />
+            ))}
+          </View>
+        </Tile>
+      </View>
     </View>
   );
 
@@ -245,6 +276,8 @@ export default function Today() {
    * decisions you make occasionally, and a decision you make occasionally should
    * cost one extra tap rather than costing the main action its place on screen.
    */
+  const weekday = now.toLocaleDateString(undefined, { weekday: 'long' });
+  const dateLine = now.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   const moreSheet = (
     <Sheet visible={moreOpen} onClose={() => setMoreOpen(false)} title="Today" subtitle={markedToday ? `Marked as ${markedToday.status === 'rest' ? 'a rest day' : 'missed'}` : `${weekday} ${dateLine}`}>
       <ListCard>
@@ -347,7 +380,6 @@ export default function Today() {
     />
   );
 
-  const frame = { title: weekday, subtitle: dateLine, right: gear, tab: true } as const;
   /** Said once, as a fact: a long gap changes nothing you have to do. */
   const sinceLast = state.lastTrained ? daysBetweenISO(state.lastTrained, today) : null;
   const gapNote =
@@ -355,30 +387,64 @@ export default function Today() {
       ? `Last workout ${sinceLast} days ago. Your plan picks up where you left it; the first sets back are prescribed from your record.`
       : null;
 
+  const name = settings.name.trim();
+  const greeting = state.active
+    ? 'Workout in progress'
+    : done
+      ? 'Done for today'
+      : markedToday
+        ? markedToday.status === 'rest'
+          ? 'Resting today'
+          : 'Taking today off'
+        : name
+          ? `Ready, ${name}?`
+          : 'Ready to train?';
+  const top = (
+    <>
+      <View style={styles.top}>
+        <View style={styles.avatar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {name ? <Text style={styles.avatarText}>{name[0]?.toUpperCase()}</Text> : <Icon name="body" size={22} color={color.onTile} />}
+        </View>
+        <View style={styles.topText}>
+          <Text style={styles.date} numberOfLines={1}>
+            {weekday}, {dateLine}
+          </Text>
+          <Text style={styles.greeting} numberOfLines={1} accessibilityRole="header">
+            {greeting}
+          </Text>
+        </View>
+        <IconButton icon="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
+      </View>
+      <DayStrip days={weekDays.map((d) => ({ date: d.date, marked: d.trained, note: d.status ? WEEK_WORDS[d.status] : d.planned ? 'planned' : undefined }))} selected={today} />
+    </>
+  );
+
   /* ---------------------------- in progress ----------------------------- */
   if (state.active) {
     const a = state.active;
     const p = state.activeProgress;
+    const resume = () => router.push(`/session/${a.id}`);
     return (
-      <Screen
-        {...frame}
-        dock={<PrimaryButton label="Resume workout" size="gym" icon={<Icon name="play" size={18} color={color.onAccent} />} onPress={() => router.push(`/session/${a.id}`)} />}
-      >
-        <Headline kicker="In progress" kickerTone="heat" title={state.activeDay?.label ?? 'Workout'} />
-        <TitleBlock
-          cells={[
-            { label: 'Sets', value: String(state.activeSets) },
-            ...(p && p.planned > 0 ? [{ label: 'Exercises', value: `${p.done + p.skipped}/${p.planned}` }] : []),
-            { label: 'Elapsed', value: <Elapsed since={a.startedAt} />, tone: 'heat' as const },
+      <Screen tab dock={<PrimaryButton label="Resume workout" size="gym" icon={<Icon name="play" size={20} color={color.onAccent} />} onPress={resume} />}>
+        {top}
+        <Hero
+          kicker="In progress"
+          live
+          title={state.activeDay?.label ?? 'Workout'}
+          chips={[
+            { key: 'sets', text: `${state.activeSets} ${state.activeSets === 1 ? 'set' : 'sets'}` },
+            ...(p && p.planned > 0 ? [{ key: 'ex', text: `${p.done + p.skipped} of ${p.planned} exercises` }] : []),
+            { key: 'time', text: <Elapsed since={a.startedAt} /> },
           ]}
+          onPress={resume}
+          accessibilityLabel="Resume the workout in progress"
         />
         <View style={styles.decisions}>
           <Decision icon="list" label="More" onPress={() => setMoreOpen(true)} />
           {/* Always asks first (features/session/cancel); cancelling never counts as done. */}
           <Decision icon="close" label="Cancel workout" tone="danger" onPress={() => cancelWorkout(a.id, state.activeSaved)} />
         </View>
-        {score}
-        {week}
+        {tiles}
         {moreSheet}
         {recoverySheet}
       </Screen>
@@ -389,8 +455,9 @@ export default function Today() {
   if (!state.routine || !day) {
     const routine = state.routine;
     return (
-      <Screen {...frame} dock={<PrimaryButton label="Log a workout" size="gym" icon={<Icon name="plus" size={18} color={color.onAccent} />} onPress={startEmpty} />}>
-        <Headline kicker={routine ? routine.name : 'No active plan'} title={routine ? `${routine.name} has no days yet` : 'Train without a plan'} />
+      <Screen tab dock={<PrimaryButton label="Log a workout" size="gym" icon={<Icon name="plus" size={20} color={color.onAccent} />} onPress={startEmpty} />}>
+        {top}
+        <Hero kicker={routine ? routine.name : 'No active plan'} title={routine ? `${routine.name} has no days yet` : 'Train without a plan'} chips={[]} />
         {/* A plan is optional, and the screen has to say so: the button below logs
             a workout right now, choosing exercises as you go. */}
         <Text style={styles.lede}>
@@ -401,8 +468,7 @@ export default function Today() {
           <Decision icon="moon" label="Rest day" onPress={() => markDay('rest')} />
           <Decision icon="list" label="More" onPress={() => setMoreOpen(true)} />
         </View>
-        {score}
-        {week}
+        {tiles}
         {moreSheet}
         {recoverySheet}
       </Screen>
@@ -413,9 +479,10 @@ export default function Today() {
   if (done && state.doneSummary) {
     const s = state.doneSummary;
     const at = new Date(done.endedAt ?? done.startedAt);
+    const lifted = s.totalTonnage >= 10000 ? `${(s.totalTonnage / 1000).toFixed(1)}k kg` : `${Math.round(s.totalTonnage)} kg`;
     return (
       <Screen
-        {...frame}
+        tab
         dock={
           <PrimaryButton
             label="Start another workout"
@@ -427,22 +494,21 @@ export default function Today() {
           />
         }
       >
+        {top}
         {/*
-          The day's work, reported rather than re-offered. Today used to keep
-          showing the planned workout with "Done for today" in small print above
-          it, so the screen still looked like a to-do list for something finished.
+          The day's work, reported rather than re-offered: the card says what was
+          done, and opens the record of it.
         */}
-        <Headline
+        <Hero
           kicker={`${done.status === 'completed' ? 'Done' : 'Logged, partly'} at ${fmtClockOfDay(at.getHours() * 60 + at.getMinutes())}`}
           title={state.doneDay?.label ?? 'Workout'}
-        />
-        <TitleBlock
-          cells={[
-            { label: s.hardSets === 1 ? 'Set' : 'Sets', value: String(s.hardSets) },
-            ...(s.totalReps > 0 ? [{ label: 'Reps', value: String(s.totalReps) }] : []),
-            ...(s.totalTonnage > 0 ? [{ label: 'Lifted', value: s.totalTonnage >= 10000 ? `${(s.totalTonnage / 1000).toFixed(1)}k` : String(Math.round(s.totalTonnage)), unit: 'kg' }] : []),
-            { label: 'Time', value: String(s.durationMin), unit: 'min' },
+          chips={[
+            { key: 'sets', text: `${s.hardSets} ${s.hardSets === 1 ? 'set' : 'sets'}` },
+            ...(s.totalTonnage > 0 ? [{ key: 'kg', text: lifted }] : []),
+            { key: 'min', text: `${s.durationMin} min` },
           ]}
+          onPress={() => router.push(`/session/summary/${done.id}`)}
+          accessibilityLabel="See the workout you did today"
         />
         <Text style={styles.lede}>
           {s.progress.planned > 0
@@ -450,12 +516,11 @@ export default function Today() {
             : `${s.perExercise.length} ${s.perExercise.length === 1 ? 'exercise' : 'exercises'} logged. Next up: ${day.label}.`}
         </Text>
         <View style={styles.decisions}>
-          <Decision icon="chevronRight" label="See the workout" onPress={() => router.push(`/session/summary/${done.id}`)} />
+          <Decision icon="chevronRight" label="The workout" onPress={() => router.push(`/session/summary/${done.id}`)} />
           <Decision icon="progress" label="Progress" onPress={() => router.push('/review')} />
           <Decision icon="list" label="More" onPress={() => setMoreOpen(true)} />
         </View>
-        {score}
-        {week}
+        {tiles}
         {moreSheet}
         {recoverySheet}
       </Screen>
@@ -465,37 +530,31 @@ export default function Today() {
   /* ----------------------------- next day -------------------------------- */
   /** One tap in. The check-in is the workout's first stage, not a gate in front of it. */
   const start = () => router.push(`/session/${startSession(day.id, fit ? { fit: fit.slots } : {}).id}`);
+  const startLabel = `Start ${day.label}${fit ? `, shortened to ${budget} minutes` : ''}. Begins with the check-in.`;
+  const kicker = markedToday ? (markedToday.status === 'rest' ? 'Rest day, on purpose' : 'Marked as missed') : restDay ? 'Not a training day' : day.id === state.next?.id ? 'Up next' : 'Chosen';
 
   return (
     <Screen
-      {...frame}
-      dock={
-        <PrimaryButton
-          label={restDay ? 'Train anyway' : 'Start workout'}
-          size="gym"
-          icon={<Icon name="play" size={18} color={color.onAccent} />}
-          onPress={start}
-          accessibilityLabel={`Start ${day.label}${fit ? `, shortened to ${budget} minutes` : ''}. Begins with the check-in.`}
-        />
-      }
+      tab
+      dock={<PrimaryButton label={restDay || markedToday ? 'Train anyway' : 'Start workout'} size="gym" icon={<Icon name="play" size={20} color={color.onAccent} />} onPress={start} accessibilityLabel={startLabel} />}
     >
-      <Headline
-        kicker={state.routine.name}
-        tag={day.id === state.next?.id ? 'Up next' : 'Chosen'}
+      {top}
+      <Hero
+        kicker={kicker}
+        note={state.routine.name}
         title={day.label}
-      />
-      <TitleBlock
-        cells={[
-          { label: preview.length === 1 ? 'Lift' : 'Lifts', value: String(preview.length) },
-          { label: 'Sets', value: String(setCount) },
-          { label: 'About', value: String(minutes), unit: 'min' },
-          { label: 'Usually', value: fmtClockOfDay(settings.reminders.workout.minutes) },
+        chips={[
+          { key: 'lifts', text: `${preview.length} ${preview.length === 1 ? 'lift' : 'lifts'}` },
+          { key: 'sets', text: `${setCount} sets` },
+          { key: 'min', text: `~${minutes} min` },
+          { key: 'at', text: `usually ${fmtClockOfDay(settings.reminders.workout.minutes)}` },
         ]}
+        onPress={start}
+        accessibilityLabel={startLabel}
       />
-      {restDay ? <Text style={styles.lede}>Not a training day. Train anyway if you want to.</Text> : null}
       {gapNote ? <Text style={styles.lede}>{gapNote}</Text> : null}
 
-      {/* The two decisions that rewrite the workout above, beside it. */}
+      {/* The two decisions that rewrite the card above, right under it. */}
       {state.days.length > 1 ? (
         <Choice label="Day">
           <ChipRow options={state.days.map((d) => ({ label: d.label, value: d.id }))} value={day.id} onChange={(v) => setPickedDayId(v)} columns={Math.min(4, state.days.length)} />
@@ -513,15 +572,14 @@ export default function Today() {
         </Text>
       ) : null}
 
-      {/* The decisions that replace the workout, one row, always above the fold. */}
+      {/* The decisions that replace the workout, one row. */}
       <View style={styles.decisions}>
         <Decision icon="moon" label="Rest day" onPress={() => markDay('rest')} />
         <Decision icon="skip" label="Missed it" onPress={() => markDay('skipped')} />
         <Decision icon="list" label="More" onPress={() => setMoreOpen(true)} />
       </View>
 
-      {score}
-      {week}
+      {tiles}
       {moreSheet}
       {recoverySheet}
     </Screen>
@@ -529,44 +587,126 @@ export default function Today() {
 }
 
 /**
- * The day's work as a headline: what it is, large, with one short line above it
- * that says whose plan it is or what state it is in. Type does the work a card's
- * border used to — the name is the largest thing on the screen because it is the
- * answer to "what is today".
+ * The day's work as a volt card: a small dark tag for its state, the name as large
+ * as the screen allows, and its facts as chips. Tapping it does what the dock does.
  */
-function Headline({ kicker, kickerTone, tag, title }: { kicker: string; kickerTone?: 'heat' | 'positive'; tag?: string; title: string }) {
+function Hero({
+  kicker,
+  live = false,
+  note,
+  title,
+  chips,
+  onPress,
+  accessibilityLabel,
+}: {
+  kicker: string;
+  live?: boolean;
+  note?: string;
+  title: string;
+  chips: readonly { key: string; text: ReactNode }[];
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}) {
   return (
-    <View style={styles.headline}>
+    <Card tone="volt" onPress={onPress} accessibilityLabel={accessibilityLabel} style={styles.hero}>
+      <View style={styles.heroRing} pointerEvents="none" />
       <View style={styles.kickerRow}>
-        <Text style={[styles.kicker, kickerTone === 'heat' && styles.heat, kickerTone === 'positive' && styles.positive]} numberOfLines={1}>
-          {kicker}
-        </Text>
-        {tag ? <Text style={styles.tag}>{tag}</Text> : null}
+        <View style={styles.kicker}>
+          <View style={[styles.kickerDot, live && styles.kickerDotLive]} />
+          <Text style={styles.kickerText} numberOfLines={1}>
+            {kicker}
+          </Text>
+        </View>
+        {note ? (
+          <Text style={styles.heroNote} numberOfLines={1}>
+            {note}
+          </Text>
+        ) : null}
       </View>
-      <Text style={styles.title} numberOfLines={2} accessibilityRole="header">
+      <Text style={styles.heroTitle} numberOfLines={2}>
         {title}
       </Text>
-    </View>
+      {chips.length ? (
+        <View style={styles.heroChips}>
+          {chips.map((c) => (
+            <View key={c.key} style={styles.heroChip}>
+              <Text style={styles.heroChipText}>{c.text}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </Card>
   );
 }
 
 /**
- * A decision that changes today, as a quiet labelled control in one row under the
- * headline. They were full-width buttons four screens down, then tiles; now they
- * are text with an icon — present, one tap, and visibly not the main action.
+ * One tracker as a tile in its own colour: a label, the figure, what it is out of,
+ * and a bar. The round + logs straight from here — a glass of water, a food.
  */
+function Tile({
+  tone,
+  icon,
+  label,
+  value,
+  unit,
+  sub,
+  fill,
+  onPress,
+  add,
+  accessibilityLabel,
+  children,
+}: {
+  tone: CardTone;
+  icon?: IconName;
+  label: string;
+  value: string;
+  unit?: string;
+  sub: string;
+  fill?: number;
+  onPress: () => void;
+  add?: { label: string; onPress: () => void };
+  accessibilityLabel: string;
+  children?: ReactNode;
+}) {
+  const tile = isTile(tone);
+  const ink = tile ? color.onTile : color.text;
+  const quiet = tile ? color.onTileMuted : color.textMuted;
+  return (
+    <Card tone={tone} onPress={onPress} accessibilityLabel={accessibilityLabel} style={styles.tile}>
+      <View style={styles.tileHead}>
+        {icon ? <Icon name={icon} size={16} color={ink} strokeWidth={2.2} /> : null}
+        <Text style={[styles.tileLabel, { color: tile ? ink : quiet }]} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+      {add ? (
+        <Press onPress={add.onPress} accessibilityRole="button" accessibilityLabel={add.label} hitSlop={8} style={styles.tileAdd} touchStyle={styles.tileAddTouch}>
+          <Icon name="plus" size={18} color={color.text} strokeWidth={2.6} />
+        </Press>
+      ) : null}
+      <Text style={[styles.tileValue, { color: ink }]} numberOfLines={1}>
+        {value}
+        {unit ? <Text style={[styles.tileUnit, { color: tile ? ink : quiet }]}> {unit}</Text> : null}
+      </Text>
+      <Text style={[styles.tileSub, { color: quiet }]} numberOfLines={1}>
+        {sub}
+      </Text>
+      {fill !== undefined ? (
+        <View style={[styles.track, { backgroundColor: tile ? color.onTileWash : color.border }]}>
+          <View style={[styles.trackFill, { width: `${Math.round(Math.min(1, Math.max(0, fill)) * 100)}%`, backgroundColor: tile ? color.onTile : color.accent }]} />
+        </View>
+      ) : null}
+      {children}
+    </Card>
+  );
+}
+
+/** A decision that changes today: a dark pill with an icon, visibly not the main action. */
 function Decision({ icon, label, tone = 'neutral', onPress }: { icon: IconName; label: string; tone?: 'neutral' | 'danger'; onPress: () => void }) {
   const danger = tone === 'danger';
   return (
-    <Press
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      touchStyle={styles.flex1}
-      style={[styles.decision, danger && styles.decisionDanger]}
-      pressedStyle={styles.decisionHeld}
-    >
-      <Icon name={icon} size={18} color={danger ? color.danger : color.textMuted} />
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} touchStyle={styles.flex1} style={[styles.decision, danger && styles.decisionDanger]} pressedStyle={styles.decisionHeld}>
+      <Icon name={icon} size={17} color={danger ? color.danger : color.textMuted} />
       <Text style={[styles.decisionLabel, danger && styles.decisionLabelDanger]} numberOfLines={1}>
         {label}
       </Text>
@@ -575,7 +715,7 @@ function Decision({ icon, label, tone = 'neutral', onPress }: { icon: IconName; 
 }
 
 /** A labelled row of chips: "Day", "Length". */
-function Choice({ label, children }: { label: string; children: React.ReactNode }) {
+function Choice({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View style={styles.choice}>
       <Text style={styles.choiceLabel}>{label}</Text>
@@ -584,97 +724,62 @@ function Choice({ label, children }: { label: string; children: React.ReactNode 
   );
 }
 
-/**
- * The week in the app's marks. A trained day is solid; a planned one is an open
- * mark, and stays open if it passes untrained — a missed day is just that, never a
- * broken chain (AGENTS §6). A rest day is a short rule: a decision, recorded.
- */
-function WeekRhythm({ today, sessions, trainingDays }: { today: string; sessions: { date: string; status: SessionStatus }[]; trainingDays: number[] }) {
-  const start = weekStartISO(today);
-  const byDate = new Map(sessions.map((s) => [s.date, s.status]));
-  return (
-    <View style={styles.week}>
-      {Array.from({ length: 7 }, (_, i) => {
-        const date = addDays(start, i);
-        const status = byDate.get(date);
-        const planned = trainingDays.includes(parseISODate(date).getDay());
-        const isToday = date === today;
-        const trained = status === 'completed' || status === 'partial';
-        const rest = status === 'rest';
-        return (
-          <View
-            key={date}
-            style={styles.weekDay}
-            accessible
-            accessibilityLabel={`${DAY_NAMES[i]}${isToday ? ', today' : ''}: ${status ? WEEK_WORDS[status] : planned ? 'planned' : 'nothing planned'}`}
-          >
-            <Text style={[styles.weekLabel, isToday && styles.weekLabelOn]}>{'MTWTFSS'[i]}</Text>
-            <View style={styles.weekMarkBox}>
-              {trained ? (
-                <View style={[styles.weekMark, styles.weekSolid, status === 'partial' && styles.weekPartial]} />
-              ) : rest ? (
-                <View style={styles.weekRest} />
-              ) : planned || status ? (
-                <View style={[styles.weekMark, styles.weekOpen, date < today && styles.weekPast]} />
-              ) : null}
-            </View>
-            <View style={[styles.weekToday, isToday && styles.weekTodayOn]} />
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
-  headline: { gap: space.xs, marginTop: space.xs, marginBottom: space.md },
-  kickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  kicker: { ...font.label, fontSize: 14, fontWeight: '600', color: color.textMuted, flexShrink: 1 },
-  tag: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
-  heat: { color: color.accent },
-  positive: { color: color.positive },
-  title: { fontFamily: font.title.fontFamily, fontSize: 40, lineHeight: 44, fontWeight: '800', letterSpacing: -1.4, color: color.text },
-  lede: { ...font.label, fontWeight: '400', color: color.textMuted, marginTop: space.md },
+
+  top: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.md, marginBottom: space.lg + 2 },
+  avatar: { width: 46, height: 46, borderRadius: radius.pill, backgroundColor: color.lav, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { ...font.heading, fontSize: 18, color: color.onTile },
+  topText: { flex: 1, minWidth: 0 },
+  date: { ...font.caption, color: color.textMuted },
+  greeting: { ...font.heading, fontSize: 20, lineHeight: 26, color: color.text },
+
+  hero: { marginTop: space.lg + 2, marginBottom: 0, padding: space.xl - 2, minHeight: 196, borderRadius: radius.xl, overflow: 'hidden' },
+  heroRing: { position: 'absolute', right: -48, top: -48, width: 210, height: 210, borderRadius: radius.pill, borderWidth: 30, borderColor: color.onTileWash },
+  kickerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm + 2 },
+  kicker: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.onTile, flexShrink: 1 },
+  kickerDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: color.accent },
+  kickerDotLive: { backgroundColor: color.pink },
+  kickerText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.accent, flexShrink: 1 },
+  heroNote: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.onTileMuted, flexShrink: 1 },
+  // Italic display type overhangs its box; the right padding keeps the last glyph whole.
+  heroTitle: { ...font.title, fontSize: 54, lineHeight: 56, letterSpacing: -1, color: color.onTile, marginTop: space.md + 2, marginBottom: space.md, paddingRight: space.xs },
+  heroChips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  heroChip: { height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.onTileWash, justifyContent: 'center' },
+  heroChipText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.onTile, fontVariant: ['tabular-nums'] },
+
+  lede: { ...font.body, color: color.textMuted, marginTop: space.md },
   fit: { ...font.caption, color: color.textMuted, marginTop: space.xs },
 
   choice: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default, marginTop: space.md },
-  choiceLabel: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textMuted, width: 48 },
+  choiceLabel: { ...font.eyebrow, fontSize: 12, color: color.textMuted, width: 48 },
 
-  decisions: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
-  decision: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.xs + 2,
-    minHeight: hit.default,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.button,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
-  decisionDanger: { borderColor: color.danger },
+  decisions: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  decision: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: hit.default, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.surface },
+  decisionDanger: { backgroundColor: color.dangerWash },
   decisionHeld: { backgroundColor: color.surfaceHigh },
-  decisionLabel: { ...font.caption, fontSize: 13, fontWeight: '600', color: color.text, flexShrink: 1 },
+  decisionLabel: { ...font.caption, fontSize: 13, fontWeight: '700', color: color.text, flexShrink: 1 },
   decisionLabelDanger: { color: color.danger },
 
-  scoreBlock: { marginTop: gap.section - space.md },
-  weekBlock: { marginTop: space.lg },
-  week: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.xs },
-  weekDay: { alignItems: 'center', gap: space.sm, width: 36 },
-  weekLabel: { ...font.caption, fontSize: 12, fontWeight: '500', color: color.textFaint },
-  weekLabelOn: { color: color.text, fontWeight: '700' },
-  weekMarkBox: { width: 16, height: 16, alignItems: 'center', justifyContent: 'center' },
-  weekMark: { width: 14, height: 14, borderRadius: 2 },
-  weekSolid: { backgroundColor: color.text },
-  /** Trained, partly: still solid — it happened — with its lower half left open. */
-  weekPartial: { borderWidth: 1.5, borderColor: color.text, backgroundColor: color.textMuted },
-  weekOpen: { borderWidth: 1.5, borderColor: color.textMuted },
-  weekPast: { borderColor: color.textFaint },
-  weekRest: { width: 12, height: 2, borderRadius: 1, backgroundColor: color.textMuted },
-  weekToday: { width: 16, height: 2, borderRadius: 1, backgroundColor: 'transparent' },
-  weekTodayOn: { backgroundColor: color.accent },
-  footnote: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.md },
+  bento: { gap: gap.between, marginTop: space.lg },
+  bentoRow: { flexDirection: 'row', gap: gap.between },
+  tile: { flex: 1, minWidth: 0, minHeight: 158, marginBottom: 0, padding: space.lg },
+  tileHead: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 40, minHeight: 22 },
+  tileLabel: { ...font.eyebrow },
+  tileAddTouch: { position: 'absolute', right: space.md, top: space.md },
+  tileAdd: { width: 36, height: 36, borderRadius: radius.pill, backgroundColor: color.onTile, alignItems: 'center', justifyContent: 'center' },
+  tileValue: { ...font.measure, fontWeight: '900', fontSize: 38, lineHeight: 42, letterSpacing: -0.5, marginTop: space.lg, paddingRight: space.xs },
+  tileUnit: { ...font.measure, fontSize: 18, letterSpacing: 0 },
+  tileSub: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '700', marginTop: 2 },
+  track: { height: 8, borderRadius: radius.pill, marginTop: space.md, overflow: 'hidden' },
+  trackFill: { height: '100%', borderRadius: radius.pill },
+  spark: { marginTop: space.sm },
+  weekDots: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.md },
+  weekDot: { width: 16, height: 16, borderRadius: radius.pill, borderWidth: 2, borderColor: color.border },
+  weekDotDone: { backgroundColor: color.accent, borderColor: color.accent },
+  weekDotToday: { borderColor: color.accent },
+  weekDotPlanned: { borderColor: color.textFaint },
 
+  footnote: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.md },
   sheetTail: { height: space.lg },
 });

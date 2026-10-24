@@ -79,12 +79,33 @@ describe('meaning inks read as text', () => {
     ['positive (a best)', color.positive],
     ['warning (worth a look)', color.warning],
     ['danger (pain)', color.danger],
+    ['peach (food)', color.peach],
+    ['lav (body)', color.lav],
+    ['pink (fat)', color.pink],
   ] as [string, string][]) {
     test(`${name} is readable on every surface`, () => {
       for (const [groundName, ground] of GROUNDS) {
         const ratio = contrast(ink, ground);
         assert.ok(ratio >= TARGET, `${name} on ${groundName} is ${ratio.toFixed(2)} : 1, below ${TARGET}`);
       }
+    });
+  }
+});
+
+/**
+ * The tracker tiles — volt, sky, peach, lavender — carry their figures in
+ * near-black ink, and their labels in its quieter second voice. Both must read.
+ */
+describe('ink on the coloured tiles', () => {
+  for (const [name, tile] of [
+    ['volt', color.accent],
+    ['sky', color.cold],
+    ['peach', color.peach],
+    ['lav', color.lav],
+  ] as [string, string][]) {
+    test(`onTile and onTileMuted read on ${name}`, () => {
+      assert.ok(contrast(color.onTile, tile) >= TARGET, `onTile on ${name} is ${contrast(color.onTile, tile).toFixed(2)} : 1`);
+      assert.ok(contrast(color.onTileMuted, tile) >= TARGET, `onTileMuted on ${name} is ${contrast(color.onTileMuted, tile).toFixed(2)} : 1`);
     });
   }
 });

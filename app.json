@@ -21,7 +21,7 @@
       "versionCode": 9,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#15181B"
+        "backgroundColor": "#0C0C0E"
       }
     },
     "ios": {
@@ -39,14 +39,14 @@
       [
         "expo-notifications",
         {
-          "color": "#FFA321"
+          "color": "#D6FF3D"
         }
       ],
       "expo-secure-store",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#15181B",
+          "backgroundColor": "#0C0C0E",
           "image": "./assets/splash-icon.png",
           "imageWidth": 160
         }
@@ -58,47 +58,26 @@
           "android": {
             "fonts": [
               {
-                "fontFamily": "IBM Plex Sans",
+                "fontFamily": "Plus Jakarta Sans",
                 "fontDefinitions": [
                   {
-                    "path": "./assets/fonts/IBMPlexSans_400Regular.ttf",
+                    "path": "./assets/fonts/PlusJakartaSans_400Regular.ttf",
                     "weight": 400
                   },
                   {
-                    "path": "./assets/fonts/IBMPlexSans_500Medium.ttf",
+                    "path": "./assets/fonts/PlusJakartaSans_500Medium.ttf",
                     "weight": 500
                   },
                   {
-                    "path": "./assets/fonts/IBMPlexSans_600SemiBold.ttf",
+                    "path": "./assets/fonts/PlusJakartaSans_600SemiBold.ttf",
                     "weight": 600
                   },
                   {
-                    "path": "./assets/fonts/IBMPlexSans_700Bold.ttf",
-                    "weight": 700
-                  }
-                ]
-              },
-              {
-                "fontFamily": "Archivo",
-                "fontDefinitions": [
-                  {
-                    "path": "./assets/fonts/Archivo_400Regular.ttf",
-                    "weight": 400
-                  },
-                  {
-                    "path": "./assets/fonts/Archivo_500Medium.ttf",
-                    "weight": 500
-                  },
-                  {
-                    "path": "./assets/fonts/Archivo_600SemiBold.ttf",
-                    "weight": 600
-                  },
-                  {
-                    "path": "./assets/fonts/Archivo_700Bold.ttf",
+                    "path": "./assets/fonts/PlusJakartaSans_700Bold.ttf",
                     "weight": 700
                   },
                   {
-                    "path": "./assets/fonts/Archivo_800ExtraBold.ttf",
+                    "path": "./assets/fonts/PlusJakartaSans_800ExtraBold.ttf",
                     "weight": 800
                   }
                 ]
@@ -107,16 +86,19 @@
                 "fontFamily": "Archivo Condensed",
                 "fontDefinitions": [
                   {
-                    "path": "./assets/fonts/ArchivoCondensed_600SemiBold.ttf",
-                    "weight": 600
+                    "path": "./assets/fonts/ArchivoCondensed_700BoldItalic.ttf",
+                    "weight": 700,
+                    "style": "italic"
                   },
                   {
-                    "path": "./assets/fonts/ArchivoCondensed_700Bold.ttf",
-                    "weight": 700
+                    "path": "./assets/fonts/ArchivoCondensed_800ExtraBoldItalic.ttf",
+                    "weight": 800,
+                    "style": "italic"
                   },
                   {
-                    "path": "./assets/fonts/ArchivoCondensed_800ExtraBold.ttf",
-                    "weight": 800
+                    "path": "./assets/fonts/ArchivoCondensed_900BlackItalic.ttf",
+                    "weight": 900,
+                    "style": "italic"
                   }
                 ]
               }
@@ -124,18 +106,14 @@
           },
           "ios": {
             "fonts": [
-              "./assets/fonts/IBMPlexSans_400Regular.ttf",
-              "./assets/fonts/IBMPlexSans_500Medium.ttf",
-              "./assets/fonts/IBMPlexSans_600SemiBold.ttf",
-              "./assets/fonts/IBMPlexSans_700Bold.ttf",
-              "./assets/fonts/Archivo_400Regular.ttf",
-              "./assets/fonts/Archivo_500Medium.ttf",
-              "./assets/fonts/Archivo_600SemiBold.ttf",
-              "./assets/fonts/Archivo_700Bold.ttf",
-              "./assets/fonts/Archivo_800ExtraBold.ttf",
-              "./assets/fonts/ArchivoCondensed_600SemiBold.ttf",
-              "./assets/fonts/ArchivoCondensed_700Bold.ttf",
-              "./assets/fonts/ArchivoCondensed_800ExtraBold.ttf"
+              "./assets/fonts/PlusJakartaSans_400Regular.ttf",
+              "./assets/fonts/PlusJakartaSans_500Medium.ttf",
+              "./assets/fonts/PlusJakartaSans_600SemiBold.ttf",
+              "./assets/fonts/PlusJakartaSans_700Bold.ttf",
+              "./assets/fonts/PlusJakartaSans_800ExtraBold.ttf",
+              "./assets/fonts/ArchivoCondensed_700BoldItalic.ttf",
+              "./assets/fonts/ArchivoCondensed_800ExtraBoldItalic.ttf",
+              "./assets/fonts/ArchivoCondensed_900BlackItalic.ttf"
             ]
           }
         }
@@ -144,7 +122,7 @@
     "experiments": {
       "typedRoutes": true
     },
-    "backgroundColor": "#15181B",
+    "backgroundColor": "#0C0C0E",
     "extra": {
       "router": {},
       "eas": {

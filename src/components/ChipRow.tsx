@@ -43,14 +43,8 @@ interface ChipsProps<T extends string | number> {
 }
 
 /**
- * The one chip. Single-select rows and multi-select sets look identical: an
- * unchosen option is an outline in muted text, a chosen one is solid chalk with
- * graphite text.
- *
- * Chalk, not heat. An answer you gave is a fact, and facts are written in chalk
- * across the whole app (docs/13); heat is for the one live thing, and a row of
- * RIR chips with one glowing would have competed with Log set for it. Solid also
- * reads at arm's length in a way a 1px coloured edge never did.
+ * The one chip: a dark pill, and white with near-black ink once chosen. Single- and
+ * multi-select look the same; volt stays for the one action on the screen.
  */
 export function Chips<T extends string | number>({ options, isOn, onPress, role, size = 'default', fill = true, columns, haptics = true }: ChipsProps<T>) {
   const grid = columns !== undefined;
@@ -102,25 +96,23 @@ export function Chips<T extends string | number>({ options, isOn, onPress, role,
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: space.sm },
   wrap: { flexWrap: 'wrap' },
-  // Half a gap either side of every cell, pulled back at the edges: exact thirds.
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -space.xs, rowGap: space.sm },
   cell: { paddingHorizontal: space.xs },
   chip: {
     flexDirection: 'row',
     gap: space.xs,
-    paddingHorizontal: space.sm,
+    paddingHorizontal: space.md,
     paddingVertical: space.xs,
-    borderRadius: radius.md,
-    backgroundColor: 'transparent',
+    borderRadius: radius.pill,
+    backgroundColor: color.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: color.border,
   },
   fill: { flex: 1 },
-  on: { backgroundColor: color.text, borderColor: color.text },
+  /** Chosen: a white pill with near-black ink — the answer you gave, unmistakable. */
+  on: { backgroundColor: color.text },
   pressed: { backgroundColor: color.surfaceHigh },
-  text: { ...font.label, fontWeight: '600', color: color.textMuted, textAlign: 'center' },
-  textGym: { ...font.measure, fontSize: 20, lineHeight: 24, color: color.textMuted },
-  textOn: { color: color.bg },
+  text: { ...font.label, fontSize: 14, color: color.textMuted, textAlign: 'center' },
+  textGym: { ...font.measure, fontSize: 22, lineHeight: 26, color: color.textMuted },
+  textOn: { color: color.onAccent },
 });

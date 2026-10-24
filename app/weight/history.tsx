@@ -10,7 +10,7 @@ import { countWeighIns, pageWeighIns } from '@/db/repositories/body';
 import { WeighInSheet, type WeighEntry } from '@/features/body/sheets';
 import { fmtDayLabel } from '@/lib/date';
 import { kg, signed } from '@/lib/format';
-import { color, font, hit, layout, space } from '@/theme/tokens';
+import { color, font, hit, layout, radius, space } from '@/theme/tokens';
 
 const PAGE = 100;
 
@@ -101,12 +101,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: space.md,
-    minHeight: hit.default,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.border,
+    minHeight: hit.gym,
+    paddingHorizontal: space.lg,
+    marginBottom: space.sm,
+    borderRadius: radius.md + 4,
+    backgroundColor: color.surface,
   },
   end: { flexDirection: 'row', alignItems: 'baseline', gap: space.md },
-  date: { ...font.body, color: color.text },
+  date: { ...font.label, color: color.text },
   delta: { ...font.caption, ...font.numeric, color: color.textMuted },
-  value: { ...font.body, ...font.numeric, color: color.text, fontWeight: '600' },
+  value: { ...font.label, ...font.numeric, color: color.text },
 });

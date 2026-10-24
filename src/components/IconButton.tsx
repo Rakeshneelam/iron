@@ -20,15 +20,16 @@ export interface IconButtonProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/** Round buttons, always: a dark disc, a raised disc, a volt disc, or a red one. */
 const BG: Record<IconButtonTone, string> = {
-  plain: 'transparent',
+  plain: color.surface,
   neutral: color.surfaceHigh,
   accent: color.accent,
   danger: color.dangerFill,
 };
 
 export function IconButton({ icon, onPress, accessibilityLabel, label, tone = 'plain', size = 'default', disabled, style }: IconButtonProps) {
-  const box = hit[size];
+  const box = size === 'gym' ? hit.gym : 46;
   const fg = tone === 'accent' ? color.onAccent : tone === 'danger' ? color.onDanger : color.text;
   return (
     <Press
@@ -40,12 +41,9 @@ export function IconButton({ icon, onPress, accessibilityLabel, label, tone = 'p
       hitSlop={space.xs}
       touchStyle={style}
       style={[styles.wrap, disabled && styles.disabled]}
-      // A `plain` icon button has no fill to darken, and 3% of a 22pt glyph is not
-      // a visible acknowledgement on its own, so the box lights up behind it.
-      pressedStyle={styles.held}
     >
       <View style={[styles.box, { width: box, height: box, backgroundColor: BG[tone] }]}>
-        <Icon name={icon} size={size === 'gym' ? 26 : 22} color={fg} />
+        <Icon name={icon} size={size === 'gym' ? 24 : 20} color={fg} strokeWidth={2.2} />
       </View>
       {label ? (
         <Text style={styles.label} numberOfLines={1}>
@@ -58,8 +56,7 @@ export function IconButton({ icon, onPress, accessibilityLabel, label, tone = 'p
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: space.xs },
-  box: { borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  label: { ...font.caption, color: color.textMuted },
-  held: { backgroundColor: color.surfaceHigh, borderRadius: radius.md },
+  box: { borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  label: { ...font.caption, fontWeight: '600', color: color.textMuted },
   disabled: { opacity: 0.35 },
 });

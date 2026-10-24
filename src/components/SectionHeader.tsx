@@ -30,7 +30,7 @@ export function SectionHeader({ title, hint, action, right }: SectionHeaderProps
         <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
           {title}
         </Text>
-        <View style={styles.leader} />
+        <View style={styles.flex} />
         {action ? (
           <Press
             onPress={action.onPress}
@@ -50,10 +50,10 @@ export function SectionHeader({ title, hint, action, right }: SectionHeaderProps
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginTop: space.lg, marginBottom: space.sm },
+  wrap: { marginTop: space.xl, marginBottom: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default - space.lg },
-  title: { ...font.eyebrow, fontSize: 13, color: color.textMuted, flexShrink: 1 },
-  leader: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
-  action: { ...font.caption, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
+  title: { ...font.heading, color: color.text, flexShrink: 1 },
+  flex: { flex: 1 },
+  action: { ...font.label, fontSize: 13, color: color.textMuted },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.xs },
 });

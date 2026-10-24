@@ -17,9 +17,8 @@ const LEVEL = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'A
 const GOAL = { hypertrophy: 'Muscle', strength: 'Strength', general: 'Fitness' } as const;
 
 /**
- * A day's planned sets, drawn as the session rail will draw them once they happen
- * — open marks, grouped by exercise. A plan is the hollow version of a workout,
- * and the rail fills these in, one set at a time (docs/13).
+ * A day's planned sets as small pills, grouped by exercise — the shape of the
+ * workout before it happens.
  */
 function PlannedSets({ sets }: { sets: readonly number[] }) {
   return (
@@ -85,11 +84,10 @@ export default function PlansScreen() {
   return (
     <Screen
       title="Plans"
-      subtitle="One active, as many as you like"
       tab
       right={
-        <Press onPress={() => setCreating(true)} accessibilityRole="button" accessibilityLabel="New plan" style={styles.newBtn} pressedStyle={styles.pressed}>
-          <Icon name="plus" size={16} />
+        <Press onPress={() => setCreating(true)} accessibilityRole="button" accessibilityLabel="New plan" style={styles.newBtn} pressedStyle={styles.newHeld}>
+          <Icon name="plus" size={18} color={color.onAccent} strokeWidth={2.6} />
           <Text style={styles.newText}>New</Text>
         </Press>
       }
@@ -101,7 +99,7 @@ export default function PlansScreen() {
       */}
       <ListCard>
         <ListRow
-          left={<Icon name="calendar" size={20} color={color.textMuted} />}
+          left={<Icon name="calendar" size={20} color={color.accent} />}
           title="Training schedule"
           sub={scheduleLabel({ rotation: activeRotation, scheduledDays: settings.trainingDays.length })}
           onPress={() => router.push('/plan/schedule')}
@@ -117,27 +115,28 @@ export default function PlansScreen() {
       ) : null}
 
       {active ? (
-        <View style={styles.active}>
+        <Card tone="volt" style={styles.active}>
           <Press
             onPress={() => router.push(`/plan/${active.routine.id}`)}
             accessibilityRole="button"
             accessibilityLabel={`${active.routine.name}, your active plan. Edit it.`}
-            feedback="highlight"
             style={styles.activeHead}
-            pressedStyle={styles.pressed}
           >
+            <View style={styles.kicker}>
+              <View style={styles.kickerDot} />
+              <Text style={styles.kickerText}>Active plan</Text>
+            </View>
             <Text style={styles.activeName} numberOfLines={2}>
               {active.routine.name}
             </Text>
-            <Pill label="Active" tone="muted" />
+            {/* "4 days a week" for a four-workout rotation was not what the number meant. */}
+            <Text style={styles.activeMeta}>
+              {rotationLabel(active.days.length)}, {active.exercises} {active.exercises === 1 ? 'exercise' : 'exercises'} in all
+            </Text>
           </Press>
-          {/* "4 days a week" for a four-workout rotation was not what the number meant. */}
-          <Text style={styles.muted}>
-            {rotationLabel(active.days.length)}, {active.exercises} {active.exercises === 1 ? 'exercise' : 'exercises'} in all
-          </Text>
           {active.days.length ? (
             <View style={styles.days}>
-              {active.days.map((d, i) => {
+              {active.days.map((d) => {
                 const next = d.id === active.next;
                 return (
                   <Press
@@ -145,15 +144,18 @@ export default function PlansScreen() {
                     onPress={() => router.push(`/program/${d.id}`)}
                     accessibilityRole="button"
                     accessibilityLabel={`${d.label}, ${d.count} exercises, ${d.sets.reduce((a, b) => a + b, 0)} sets${next ? ', next up' : ''}. Edit this day.`}
-                    feedback="highlight"
-                    style={[styles.planDay, i > 0 && styles.divider]}
-                    pressedStyle={styles.pressed}
+                    style={styles.planDay}
+                    pressedStyle={styles.planDayHeld}
                   >
                     <View style={styles.planDayHead}>
                       <Text style={styles.planDayLabel} numberOfLines={1}>
                         {d.label}
                       </Text>
-                      {next ? <Text style={styles.next}>next</Text> : null}
+                      {next ? (
+                        <View style={styles.next}>
+                          <Text style={styles.nextText}>next</Text>
+                        </View>
+                      ) : null}
                       <Text style={styles.dayDetail}>
                         {d.count} {d.count === 1 ? 'exercise' : 'exercises'}
                       </Text>
@@ -164,7 +166,7 @@ export default function PlansScreen() {
               })}
             </View>
           ) : null}
-        </View>
+        </Card>
       ) : null}
 
       {others.length ? (
@@ -180,9 +182,9 @@ export default function PlansScreen() {
                   onPress={() => activate(r)}
                   accessibilityRole="button"
                   accessibilityLabel={`Use ${r.name} as your plan`}
-                  hitSlop={{ top: space.md, bottom: space.md }}
+                  hitSlop={{ top: space.sm, bottom: space.sm }}
                   style={styles.use}
-                  pressedStyle={styles.pressed}
+                  pressedStyle={styles.useHeld}
                 >
                   <Text style={styles.useText}>Use</Text>
                 </Press>
@@ -195,7 +197,7 @@ export default function PlansScreen() {
 
       <ListCard>
         <ListRow
-          left={<Icon name="book" size={20} color={color.textMuted} />}
+          left={<Icon name="book" size={20} color={color.accent} />}
           title="Exercise library"
           sub={`${CATALOG.length.toLocaleString()} exercises, with how to do each one`}
           onPress={() => router.push('/library')}
@@ -248,7 +250,7 @@ export default function PlansScreen() {
             <View style={styles.flex1}>
               <View style={styles.titleRow}>
                 <Text style={styles.body}>{m.template.name}</Text>
-                {i === 0 ? <Text style={styles.badge}>Best match</Text> : null}
+                {i === 0 ? <Pill label="Best match" tone="accent" /> : null}
               </View>
               <Text style={styles.muted}>
                 {m.template.daysPerWeek} days a week, about {m.template.minutes} minutes
@@ -306,58 +308,45 @@ export default function PlansScreen() {
 const styles = StyleSheet.create({
   mutedFaint: { color: color.textFaint },
   flex1: { flex: 1 },
-  row: { flexDirection: 'row' },
-  newBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs + 2,
-    height: 40,
-    marginTop: space.xs,
-    paddingHorizontal: space.md + 2,
-    borderRadius: radius.pill,
-    backgroundColor: color.surfaceHigh,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
-  newText: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text },
-  active: { borderRadius: radius.lg, borderWidth: 1, borderColor: color.text, padding: space.lg, marginTop: space.md, marginBottom: space.md, gap: space.xs },
-  activeHead: { flexDirection: 'row', alignItems: 'center', gap: space.md - 2 },
-  activeName: { ...font.heading, fontWeight: '700', color: color.text, flex: 1 },
-  days: { marginTop: space.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  planDay: { gap: space.sm, minHeight: hit.default, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.sm },
-  planDayHead: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  planDayLabel: { ...font.label, fontSize: 15, fontWeight: '600', color: color.text, flexShrink: 1 },
-  next: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.text, textDecorationLine: 'underline' },
-  dayDetail: { ...font.caption, color: color.textFaint, marginLeft: 'auto' },
+  row: { flexDirection: 'row', gap: space.sm },
+  newBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs + 2, height: 46, paddingHorizontal: space.lg, borderRadius: radius.pill, backgroundColor: color.accent },
+  newHeld: { backgroundColor: color.accentPressed },
+  newText: { ...font.label, fontWeight: '800', color: color.onAccent },
+
+  active: { marginTop: space.md, borderRadius: radius.xl, padding: space.lg + 2, overflow: 'hidden' },
+  activeHead: { gap: space.sm },
+  kicker: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.onTile },
+  kickerDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: color.accent },
+  kickerText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.accent },
+  activeName: { ...font.title, fontSize: 38, lineHeight: 40, letterSpacing: -0.8, color: color.onTile, paddingRight: space.xs },
+  activeMeta: { ...font.caption, fontWeight: '700', color: color.onTileMuted },
+  days: { marginTop: space.md, gap: space.sm },
+  planDay: { gap: space.sm, minHeight: hit.default, paddingVertical: space.md, paddingHorizontal: space.md, borderRadius: radius.md + 2, backgroundColor: color.onTileWash },
+  planDayHeld: { opacity: 0.8 },
+  planDayHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  planDayLabel: { ...font.label, fontWeight: '800', color: color.onTile, flexShrink: 1 },
+  next: { height: 22, paddingHorizontal: space.sm, borderRadius: radius.pill, backgroundColor: color.onTile, justifyContent: 'center' },
+  nextText: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '800', color: color.accent },
+  dayDetail: { ...font.caption, fontWeight: '700', color: color.onTileMuted, marginLeft: 'auto' },
   planned: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
-  plannedGroup: { flexDirection: 'row', flexShrink: 1, flexBasis: 0, gap: 2 },
-  plannedMark: { flex: 1, maxWidth: 8, height: 10, borderRadius: 1.5, borderWidth: 1, borderColor: color.textFaint },
-  use: { height: 32, paddingHorizontal: space.md, borderRadius: radius.pill, borderWidth: 1, borderColor: color.border, justifyContent: 'center' },
-  useText: { ...font.caption, fontWeight: '600', color: color.text },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
+  plannedGroup: { flexDirection: 'row', flexShrink: 1, flexBasis: 0, gap: 3 },
+  plannedMark: { flex: 1, maxWidth: 10, height: 10, borderRadius: radius.pill, backgroundColor: color.onTile, opacity: 0.55 },
+
+  use: { height: 34, paddingHorizontal: space.md + 2, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, justifyContent: 'center' },
+  useHeld: { backgroundColor: color.border },
+  useText: { ...font.caption, fontWeight: '800', color: color.text },
   name: { ...font.heading, color: color.text, flexShrink: 1 },
   body: { ...font.body, color: color.text },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   gapTop: { marginTop: space.md },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingVertical: space.md,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.border,
-  },
-  pressed: { backgroundColor: color.surfaceHigh },
+  option: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg, marginTop: space.sm, borderRadius: radius.lg, backgroundColor: color.surfaceHigh },
+  pressed: { backgroundColor: color.border },
   dim: { opacity: 0.5 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
-  badge: { ...font.caption, color: color.text, fontWeight: '700', textDecorationLine: 'underline' },
   stack: { gap: space.md, paddingBottom: space.lg },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  day: { gap: 2 },
-  dayLabel: { ...font.label, color: color.text, fontWeight: '700' },
+  day: { gap: 2, padding: space.md, borderRadius: radius.md + 2, backgroundColor: color.surfaceHigh },
+  dayLabel: { ...font.label, color: color.text, fontWeight: '800' },
   slot: { ...font.caption, color: color.textMuted },
   swapped: { color: color.textMuted },
 });

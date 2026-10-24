@@ -95,7 +95,8 @@ export default function Setup() {
           <Text style={styles.wordmark}>IRON</Text>
         </View>
         <Text style={styles.hello} accessibilityRole="header">
-          Log the set.{'\n'}Skip the noise.
+          Log the set.{'\n'}
+          <Text style={styles.helloVolt}>Skip the noise.</Text>
         </Text>
         <Text style={styles.pitch}>A private training log that lives on your phone. Open it, lift, log.</Text>
         <View style={styles.flex1} />
@@ -286,7 +287,7 @@ function Pledge({ icon, title, sub }: { icon: IconName; title: string; sub: stri
   return (
     <View style={styles.promise} accessible accessibilityLabel={`${title}. ${sub}`}>
       <View style={styles.promiseIcon}>
-        <Icon name={icon} size={20} color={color.text} />
+        <Icon name={icon} size={20} color={color.onAccent} strokeWidth={2.2} />
       </View>
       <View style={styles.flex1}>
         <Text style={styles.promiseTitle}>{title}</Text>
@@ -302,7 +303,11 @@ function Choice({ title, subtitle, selected, badge, onPress }: { title: string; 
       <View style={styles.flex1}>
         <View style={styles.titleRow}>
           <Text style={styles.choiceTitle}>{title}</Text>
-          {badge ? <Text style={styles.badge}>{badge}</Text> : null}
+          {badge ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badge}</Text>
+            </View>
+          ) : null}
         </View>
         <Text style={styles.choiceSub}>{subtitle}</Text>
       </View>
@@ -314,37 +319,38 @@ function Choice({ title, subtitle, selected, badge, onPress }: { title: string; 
 const styles = StyleSheet.create({
   welcome: { flex: 1, backgroundColor: color.bg, paddingHorizontal: space.xl, overflow: 'hidden' },
   /** A measurement, so the measuring face — as texture, at a size nothing else in the app reaches. */
-  ghost: { position: 'absolute', top: '34%', left: space.lg, ...font.hero, fontSize: 240, lineHeight: 250, letterSpacing: -6, color: color.surface },
+  ghost: { position: 'absolute', top: '30%', left: space.lg, ...font.hero, fontSize: 240, lineHeight: 250, letterSpacing: -6, color: color.surface },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginBottom: space.xl },
   brandLogo: { width: 44, height: 44, borderRadius: radius.md },
   wordmark: { ...font.heading, fontWeight: '800', letterSpacing: 2, color: color.text },
-  /** A sentence, so the naming face: condensed figures are for numbers. */
-  hello: { fontFamily: font.title.fontFamily, fontSize: 44, lineHeight: 48, fontWeight: '800', letterSpacing: -1.4, color: color.text },
+  hello: { ...font.title, fontSize: 52, lineHeight: 54, letterSpacing: -1, color: color.text, paddingRight: space.xs },
+  helloVolt: { color: color.accent },
   pitch: { ...font.body, color: color.textMuted, marginTop: space.md },
   promise: { flexDirection: 'row', alignItems: 'center', gap: space.md + 2, minHeight: 60 },
-  promiseIcon: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: color.surfaceHigh, borderWidth: 1, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
-  promiseTitle: { ...font.label, fontWeight: '600', color: color.text },
+  promiseIcon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center' },
+  promiseTitle: { ...font.label, color: color.text },
   promiseSub: { ...font.caption, color: color.textMuted },
   welcomeActions: { gap: space.md - 2, marginTop: space.xl },
   logo: { width: 36, height: 36, borderRadius: radius.md, marginTop: space.xs },
   stack: { gap: space.md + 2 },
   flex1: { flex: 1 },
   lead: { ...font.caption, color: color.textMuted },
-  input: { minHeight: hit.gym, borderWidth: 1, borderColor: color.border },
+  input: { minHeight: hit.gym },
   pair: { flexDirection: 'row', gap: space.md - 2 },
   weight: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
   gate: { ...font.caption, fontSize: 12, color: color.textFaint, textAlign: 'center' },
   gateOn: { color: color.warning },
   hint: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.xs },
   restore: { marginTop: space.xxl },
-  choice: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 68, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, backgroundColor: color.surface, marginBottom: space.sm },
-  choiceOn: { borderColor: color.text },
+  choice: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 72, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.lg, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: color.surface, marginBottom: space.sm },
+  choiceOn: { borderColor: color.accent },
   pressed: { backgroundColor: color.surfaceHigh },
-  titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' },
-  choiceTitle: { ...font.label, color: color.text, fontWeight: '600' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
+  choiceTitle: { ...font.label, color: color.text },
   choiceSub: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: 2 },
-  badge: { ...font.caption, fontSize: 12, color: color.text, fontWeight: '700', textDecorationLine: 'underline' },
-  radio: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 2, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
-  radioOn: { borderColor: color.text },
-  radioDot: { width: 12, height: 12, borderRadius: radius.pill, backgroundColor: color.text },
+  badge: { height: 22, paddingHorizontal: space.sm, borderRadius: radius.pill, backgroundColor: color.accentWash, justifyContent: 'center' },
+  badgeText: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '800', color: color.accent },
+  radio: { width: 26, height: 26, borderRadius: radius.pill, borderWidth: 2, borderColor: color.rule, alignItems: 'center', justifyContent: 'center' },
+  radioOn: { borderColor: color.accent, backgroundColor: color.accent },
+  radioDot: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color.onAccent },
 });

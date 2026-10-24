@@ -141,7 +141,7 @@ export function Countdown({ timer, total, caption, note, size = 208, nudges = tr
     <View style={styles.wrap}>
       {/* Running is live, so it glows; stopped, it is just a dial (see material.heat). */}
       <View style={[styles.dial, t.running && styles.dialLive]}>
-        <Ring progress={progress} size={size} thickness={10} tone={tone} graduations={60}>
+        <Ring progress={progress} size={size} thickness={14} tone={tone}>
           {caption ? <Text style={styles.caption}>{caption}</Text> : null}
           <FitText style={styles.clock} numberOfLines={1} minimumFontScale={0.6}>
             {fmtClock(t.remaining)}
@@ -179,10 +179,12 @@ export function Countdown({ timer, total, caption, note, size = 208, nudges = tr
   );
 }
 
-/** A square ± control. Shared with the rest-timer bar so both clocks nudge alike. */
+/** A round ± pill. Shared with the rest-timer row so both clocks nudge alike. */
 export function TimerNudge({ label, a11y, quiet, onPress }: { label: string; a11y: string; quiet?: boolean; onPress: () => void }) {
   return (
     <Press
+      // 44 to the eye, 56 to the thumb: it sits inside the rest pill.
+      hitSlop={6}
       onPress={() => {
         selection();
         onPress();
@@ -207,16 +209,16 @@ export function TimerNudge({ label, a11y, quiet, onPress }: { label: string; a11
  * top on Android.
  */
 export const clockStyle = StyleSheet.create({
-  bar: { ...font.measure, fontSize: 38, lineHeight: 42, fontWeight: '800', letterSpacing: -0.6, color: color.text },
+  bar: { ...font.measure, fontWeight: '900', fontSize: 26, lineHeight: 30, letterSpacing: -0.4, color: color.text, paddingRight: 2 },
 });
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: space.lg },
   dial: { borderRadius: radius.pill },
   dialLive: { boxShadow: material.heat },
-  caption: { ...font.eyebrow, color: color.textFaint },
-  clock: { ...font.measure, fontSize: 64, lineHeight: 68, fontWeight: '800', letterSpacing: -1, color: color.text },
-  note: { ...font.caption, fontSize: 12, color: color.textMuted },
+  caption: { ...font.eyebrow, color: color.textMuted },
+  clock: { ...font.measure, fontSize: 64, lineHeight: 68, fontWeight: '900', letterSpacing: -1, color: color.text, paddingRight: 2 },
+  note: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.textMuted },
   controls: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   play: {
     flexDirection: 'row',
@@ -226,27 +228,17 @@ const styles = StyleSheet.create({
     minWidth: 132,
     minHeight: hit.gym,
     paddingHorizontal: space.lg,
-    borderRadius: radius.button,
+    borderRadius: radius.pill,
     backgroundColor: color.accentFill,
   },
   playHot: { boxShadow: material.heat },
-  playOn: { backgroundColor: color.surfaceHigh, borderWidth: 1, borderColor: color.border },
+  playOn: { backgroundColor: color.surfaceHigh },
   playHeld: { backgroundColor: color.accentFillPressed },
-  playText: { ...font.heading, fontSize: 18, color: color.onAccent },
+  playText: { ...font.heading, fontSize: 17, color: color.onAccent },
   playTextOn: { color: color.text },
-  nudge: {
-    minWidth: hit.gym,
-    height: hit.gym,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.md,
-    backgroundColor: color.surfaceHigh,
-    borderWidth: 1,
-    borderColor: color.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  nudge: { minWidth: 52, height: 44, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
   nudgeQuiet: { backgroundColor: 'transparent' },
   nudgeHeld: { backgroundColor: color.border },
-  nudgeText: { ...font.measure, fontSize: 18, lineHeight: 22, color: color.text },
-  nudgeTextQuiet: { fontWeight: '600', color: color.textMuted },
+  nudgeText: { ...font.label, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'], color: color.text },
+  nudgeTextQuiet: { color: color.textMuted },
 });

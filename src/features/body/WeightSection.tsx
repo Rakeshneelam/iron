@@ -3,15 +3,15 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { ChipRow, EmptyState, Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, SectionHeader, TrendChart, useReducedMotion, type ScreenProps } from '@/components';
+import { Card, ChipRow, EmptyState, EntryRow, Icon, ListCard, ListRow, Press, PrimaryButton, Screen, SectionHeader, TrendChart, useReducedMotion, type ScreenProps } from '@/components';
 import { useLive } from '@/db/live';
 import { countWeighIns, listMeasurements, listWeighIns } from '@/db/repositories/body';
 import { PHASES, useSettings } from '@/db/repositories/settings';
-import { phaseCheck, weeklyRateKg, weightTrend, type Phase } from '@/engine/metabolic';
+import { phaseCheck, weeklyRateKg, weightTrend } from '@/engine/metabolic';
 import { GOALS } from '@/features/settings/goals';
 import { addDays, daysBetweenISO, fmtDayLabel, todayISO } from '@/lib/date';
 import { kg, kgNum, signed } from '@/lib/format';
-import { color, font, radius, space } from '@/theme/tokens';
+import { color, font, hit, radius, space } from '@/theme/tokens';
 
 import { WeighInSheet, type WeighEntry } from './sheets';
 
@@ -79,7 +79,7 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
         <PrimaryButton
           label={todays ? "Edit today's weight" : 'Log weight'}
           size="gym"
-          icon={<Icon name="plus" size={18} color={color.onAccent} />}
+          icon={<Icon name="plus" size={20} color={color.onAccent} />}
           onPress={() => setWeigh({ date: today })}
         />
       }
@@ -87,63 +87,83 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
       {weighIns.length === 0 ? (
         <EmptyState message="No weigh-ins yet." hint="Same time each morning, before food. The trend is the signal; one morning is noise." />
       ) : (
-        <View style={styles.trendBlock}>
+        <>
           {/*
-            The trend leads, in the measuring face, because it is the number that
-            means something. Labelled as a trend — it is smoothed, not a reading —
-            and this morning's reading sits underneath, quieter (AGENTS §6).
+            The trend leads, on a lavender card, because it is the number that means
+            something. Labelled as a trend — it is smoothed, not a reading — and this
+            morning's reading sits underneath, quieter (AGENTS §6).
           */}
-          <Text style={styles.eyebrow}>Trend, smoothed</Text>
-          <View style={styles.heroRow}>
-            <Text style={styles.hero}>{lastTrend === null ? '—' : kgNum(Math.round(lastTrend * 10) / 10)}</Text>
-            <Text style={styles.unit}>kg</Text>
-          </View>
-          {change !== null ? (
-            <Text style={styles.changeLine}>
-              <Text style={[styles.change, { color: changeColor(settings.phase, change) }]}>
-                {signed(change)} kg
-              </Text>
-              {` over ${weeks} ${weeks === 1 ? 'week' : 'weeks'}${trend.length >= 7 ? `, about ${signed(rate, 2)} kg a week` : ''}`}
+          <Card tone="lav" style={styles.trendCard}>
+            <Text style={styles.eyebrow}>Trend weight</Text>
+            <Text style={styles.hero} numberOfLines={1}>
+              {lastTrend === null ? '—' : kgNum(Math.round(lastTrend * 10) / 10)}
+              <Text style={styles.unit}> kg</Text>
+            </Text>
+            {change !== null ? (
+              <View style={styles.changeChip}>
+                <Icon name={change < 0 ? 'arrowDown' : 'arrowUp'} size={13} color={color.lav} strokeWidth={2.6} />
+                <Text style={styles.changeText}>
+                  {`${signed(change)} kg in ${weeks} ${weeks === 1 ? 'week' : 'weeks'}${trend.length >= 7 ? `, ${signed(rate, 2)} a week` : ''}`}
+                </Text>
+              </View>
+            ) : null}
+            {trend.length >= 2 ? (
+              <View style={styles.chart}>
+                {/* A new range redraws the line; a 150ms fade says it is the same record at a new scale. */}
+                <Animated.View key={range} entering={reduced ? undefined : FadeIn.duration(150)}>
+                  <TrendChart
+                    trend={trendPts}
+                    raw={rawPts}
+                    height={130}
+                    readout={false}
+                    ink={color.onTile}
+                    format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`}
+                    formatX={(x) => fmtDayLabel(addDays(first, x))}
+                  />
+                </Animated.View>
+              </View>
+            ) : (
+              <Text style={styles.cardHint}>A trend needs a few mornings. Each weigh-in adds a point; the line appears with the second.</Text>
+            )}
+          </Card>
+          {trend.length >= 2 ? (
+            <View style={styles.ranges}>
+              <ChipRow options={RANGES} value={range} onChange={setRange} />
+            </View>
+          ) : null}
+          {check ? <Text style={[styles.check, check.onTrack ? styles.onTrack : styles.offTrack]}>{check.message}</Text> : null}
+          {trend.length >= 2 ? (
+            // The chart is not the only way to read this (UX-11).
+            <Text style={styles.hint}>
+              {`Latest reading ${kg(shown[shown.length - 1]?.raw ?? 0)} on ${fmtDayLabel(shown[shown.length - 1]?.date ?? today)}`}
+              {shown.length > 1 ? `, first in this range ${kg(shown[0]?.raw ?? 0)} on ${fmtDayLabel(first)}. Dots are readings; the line is the trend.` : '.'}
             </Text>
           ) : null}
-          {check ? <Text style={[styles.muted, check.onTrack ? styles.onTrack : styles.offTrack]}>{check.message}</Text> : null}
-          {trend.length >= 2 ? (
-            <View style={styles.chart}>
-              {/* A new range redraws the line; a 150ms fade says it is the same record at a new scale. */}
-              <Animated.View key={range} entering={reduced ? undefined : FadeIn.duration(150)}>
-                <TrendChart
-                  trend={trendPts}
-                  raw={rawPts}
-                  height={160}
-                  format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`}
-                  formatX={(x) => fmtDayLabel(addDays(first, x))}
-                />
-              </Animated.View>
-              <ChipRow options={RANGES} value={range} onChange={setRange} />
-              {/* The chart is not the only way to read this (UX-11). */}
-              <Text style={styles.hint}>
-                {`Latest reading ${kg(shown[shown.length - 1]?.raw ?? 0)} on ${fmtDayLabel(shown[shown.length - 1]?.date ?? today)}`}
-                {shown.length > 1 ? `, first in this range ${kg(shown[0]?.raw ?? 0)} on ${fmtDayLabel(first)}. Dots are readings; the line is the trend.` : '.'}
-              </Text>
-            </View>
-          ) : (
-            <Text style={styles.hint}>A trend needs a few mornings. Each weigh-in adds a point; the line appears with the second.</Text>
-          )}
-        </View>
+        </>
       )}
 
       {/* This morning's number, deliberately quieter than the trend above it. */}
       <View style={styles.morning}>
-        <Text style={styles.morningLabel}>This morning</Text>
-        <Text style={styles.morningValue}>{todays ? kg(todays.kg) : 'not logged'}</Text>
-        <IconButton icon="edit" accessibilityLabel={todays ? "Edit this morning's weight" : "Log this morning's weight"} onPress={() => setWeigh({ date: today })} />
+        <View style={styles.flex1}>
+          <Text style={styles.morningLabel}>This morning</Text>
+          <Text style={styles.morningValue}>{todays ? kg(todays.kg) : 'Not logged'}</Text>
+        </View>
+        <Press
+          onPress={() => setWeigh({ date: today })}
+          accessibilityRole="button"
+          accessibilityLabel={todays ? "Edit this morning's weight" : "Log this morning's weight"}
+          hitSlop={6}
+          style={styles.morningBtn}
+        >
+          <Icon name={todays ? 'edit' : 'plus'} size={18} color={color.onTile} strokeWidth={2.4} />
+        </Press>
       </View>
 
       <ListCard style={styles.gapTop}>
-        <ListRow left={<Icon name="ruler" size={20} color={color.textMuted} />} title="Measurements" sub={measureSub} onPress={onMeasurements} />
+        <ListRow left={<Icon name="ruler" size={20} color={color.lav} />} title="Measurements" sub={measureSub} onPress={onMeasurements} />
         <ListRow
           divider
-          left={<Icon name="target" size={20} color={color.textMuted} />}
+          left={<Icon name="target" size={20} color={color.lav} />}
           title="Body-weight goal"
           sub={`${goal}. Sets your calorie and water targets.`}
           onPress={() => router.push('/settings/profile')}
@@ -153,27 +173,16 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
       {recent.length > 0 ? (
         <>
           <SectionHeader
-            title="Recent weigh-ins"
+            title="Recent"
             action={
               // "Show all" used to expand to sixty rows and stop. All of them means
               // all of them, on a list that can carry it.
               total > RECENT ? { label: `All ${total}`, onPress: () => router.push('/weight/history'), accessibilityLabel: `View all ${total} weigh-ins` } : undefined
             }
           />
-          <ListCard>
-            {recent.map((w, i) => (
-              <ListRow
-                key={w.date}
-                divider={i > 0}
-                title={fmtDayLabel(w.date)}
-                tone="muted"
-                chevron={false}
-                right={<Text style={styles.value}>{kg(w.kg)}</Text>}
-                onPress={() => setWeigh({ date: w.date })}
-                accessibilityLabel={`${fmtDayLabel(w.date)}: ${kg(w.kg)}. Tap to edit or delete.`}
-              />
-            ))}
-          </ListCard>
+          {recent.map((w) => (
+            <EntryRow key={w.date} label={fmtDayLabel(w.date)} value={kg(w.kg)} onPress={() => setWeigh({ date: w.date })} accessibilityLabel={`${fmtDayLabel(w.date)}: ${kg(w.kg)}. Tap to edit or delete.`} />
+          ))}
         </>
       ) : null}
 
@@ -183,39 +192,24 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
   );
 }
 
-/** Moving the way the goal asks is positive; anything else is plain text, never an alarm. */
-function changeColor(phase: Phase, change: number): string {
-  const wanted = phase === 'cut' ? change < 0 : phase === 'bulk' ? change > 0 : Math.abs(change) < 0.5;
-  return wanted ? color.positive : color.textMuted;
-}
-
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
-  trendBlock: { gap: space.xs, marginTop: space.sm },
-  eyebrow: { ...font.eyebrow, color: color.textMuted },
-  heroRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
-  hero: { ...font.display, fontSize: 72, lineHeight: 74, color: color.text },
-  unit: { ...font.measure, fontSize: 26, fontWeight: '600', color: color.textMuted },
-  changeLine: { ...font.label, fontWeight: '400', fontVariant: ['tabular-nums'], color: color.textMuted },
-  change: { fontWeight: '700' },
-  muted: { ...font.caption, color: color.textMuted },
+  trendCard: { marginTop: space.sm, marginBottom: 0, borderRadius: radius.xl, padding: space.xl - 4 },
+  eyebrow: { ...font.eyebrow, color: color.onTileMuted },
+  hero: { ...font.display, fontSize: 72, lineHeight: 76, color: color.onTile, paddingRight: space.xs },
+  unit: { ...font.measure, fontSize: 26, color: color.onTile, letterSpacing: 0 },
+  changeChip: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.onTile, marginTop: space.xs },
+  changeText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.lav, fontVariant: ['tabular-nums'] },
+  chart: { marginTop: space.md, marginHorizontal: -space.sm },
+  cardHint: { ...font.caption, color: color.onTileMuted, marginTop: space.md },
+  ranges: { marginTop: space.md },
+  check: { ...font.caption, marginTop: space.md },
   onTrack: { color: color.positive },
   offTrack: { color: color.warning },
-  hint: { ...font.caption, color: color.textMuted },
-  chart: { marginTop: space.md, gap: space.md },
-  morning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    minHeight: 56,
-    marginTop: space.lg,
-    paddingLeft: space.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
-  morningLabel: { ...font.label, fontWeight: '400', color: color.textMuted, flex: 1 },
-  morningValue: { ...font.measure, fontSize: 20, lineHeight: 24, color: color.text },
+  hint: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm },
+  morning: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym + 12, marginTop: space.lg, paddingLeft: space.lg, paddingRight: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
+  morningLabel: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.textFaint },
+  morningValue: { ...font.label, fontSize: 17, lineHeight: 22, fontWeight: '800', color: color.text, fontVariant: ['tabular-nums'] },
+  morningBtn: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: color.lav, alignItems: 'center', justifyContent: 'center' },
   gapTop: { marginTop: space.md },
-  value: { ...font.label, fontWeight: '600', ...font.numeric, color: color.text },
 });

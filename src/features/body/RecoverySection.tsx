@@ -10,7 +10,7 @@ import { lastTrainedByMuscle } from '@/db/repositories/progress';
 import { readinessModifier } from '@/engine/progression';
 import { CheckInSheet, sleepLabel } from '@/features/checkin/CheckInSheet';
 import { addDays, daysBetweenISO, fmtDayLabel, lastNDays, parseISODate, todayISO } from '@/lib/date';
-import { color, font, hit, space } from '@/theme/tokens';
+import { color, font, hit, radius, space } from '@/theme/tokens';
 
 import type { BodySectionProps } from './WeightSection';
 
@@ -79,7 +79,7 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
         <PrimaryButton
           label={answered ? "Edit today's check-in" : 'Check in'}
           size="gym"
-          icon={<Icon name="pulse" size={18} color={color.onAccent} />}
+          icon={<Icon name="pulse" size={20} color={color.onAccent} />}
           onPress={() => setEditing(today)}
         />
       }
@@ -99,7 +99,8 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
             <Text style={styles.muted}>Optional. Without one, today’s targets come from what you lifted alone.</Text>
           </>
         )}
-        <Press onPress={() => setEditing(today)} accessibilityRole="button" hitSlop={space.md} style={styles.linkWrap}>
+        <Press onPress={() => setEditing(today)} accessibilityRole="button" hitSlop={space.sm} style={styles.linkWrap}>
+          <Icon name={answered ? 'edit' : 'pulse'} size={14} color={color.lav} />
           <Text style={styles.link}>{answered ? 'Edit check-in' : 'Check in now'}</Text>
         </Press>
       </Card>
@@ -130,9 +131,6 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
               </Text>
               <View style={styles.span}>
                 <View style={styles.spanLine} />
-                {Array.from({ length: SPAN_DAYS }, (_, d) => (
-                  <View key={d} style={[styles.spanTick, { left: `${(d / (SPAN_DAYS - 1)) * 100}%` }]} />
-                ))}
                 {at !== null ? <View style={[styles.spanMark, { left: `${at}%` }]} /> : null}
               </View>
               <Text style={styles.ago}>{days === null ? '—' : days === 0 ? 'today' : `${days} d ago`}</Text>
@@ -146,7 +144,7 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
       <Card>
         {slept.length ? (
           <>
-            <MiniBars data={nights} target={SLEEP_GOAL_H} highlight={nights.length - 1} />
+            <MiniBars data={nights} target={SLEEP_GOAL_H} highlight={nights.length - 1} ink={color.lav} bubble={`${nights[nights.length - 1]?.value ?? 0} h`} />
             <Text style={styles.hint}>
               Average {mean(slept).toFixed(1)} h across {slept.length} {slept.length === 1 ? 'night' : 'nights'}.
             </Text>
@@ -193,17 +191,16 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
   readyTitle: { ...font.titleSm, color: color.text, flexShrink: 1 },
   muted: { ...font.caption, color: color.textMuted },
-  linkWrap: { alignSelf: 'flex-start' },
-  link: { ...font.caption, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
+  linkWrap: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: space.md, marginTop: space.xs, borderRadius: radius.pill, backgroundColor: color.lavSoft },
+  link: { ...font.caption, fontWeight: '800', color: color.lav },
   dim: { opacity: 0.6 },
   legend: { ...font.caption, fontSize: 12, color: color.textFaint },
   muscle: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 44 },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  divider: { borderTopWidth: 1, borderTopColor: color.border },
   muscleName: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text, width: 88 },
   span: { flex: 1, height: 14, justifyContent: 'center' },
-  spanLine: { height: 1, backgroundColor: color.border },
-  spanTick: { position: 'absolute', top: 5, width: 1, height: 4, marginLeft: -0.5, backgroundColor: color.rule },
-  spanMark: { position: 'absolute', top: 2, width: 6, height: 10, marginLeft: -3, borderRadius: 1.5, backgroundColor: color.text },
+  spanLine: { height: 4, borderRadius: radius.pill, backgroundColor: color.surfaceHigh },
+  spanMark: { position: 'absolute', top: 1, width: 12, height: 12, marginLeft: -6, borderRadius: radius.pill, backgroundColor: color.lav },
   ago: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint, width: 52, textAlign: 'right' },
   footnote: { ...font.caption, fontSize: 12, color: color.textFaint },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },

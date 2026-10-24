@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   stack: { gap: space.md + 2 },
   flex1: { flex: 1 },
   pair: { flexDirection: 'row', gap: space.md - 2 },
-  input: { minHeight: hit.gym, borderWidth: 1, borderColor: color.border },
+  input: { minHeight: hit.gym },
   label: { ...font.caption, fontWeight: '600', color: color.textMuted, marginBottom: space.sm - 2 },
   hint: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm - 2 },
 });

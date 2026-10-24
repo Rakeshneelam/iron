@@ -73,7 +73,7 @@ export function ExercisePicker({ onPick, excludeIds = [], initialMuscle, suggest
         <Text style={styles.meta}>{sub}</Text>
       </View>
       <View style={styles.plus}>
-        <Icon name="plus" size={20} color={color.text} />
+        <Icon name="plus" size={20} color={color.onAccent} strokeWidth={2.6} />
       </View>
     </Press>
   );
@@ -150,18 +150,16 @@ const styles = StyleSheet.create({
     paddingLeft: space.lg,
     paddingRight: space.xs,
     backgroundColor: color.surfaceHigh,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
+    borderRadius: radius.pill,
   },
   input: { ...font.body, color: color.text, flex: 1, minHeight: hit.gym },
   gap: { marginVertical: space.md },
-  list: { backgroundColor: color.bg, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.lg },
+  list: { backgroundColor: color.surfaceHigh, borderRadius: radius.lg, paddingHorizontal: space.lg },
   item: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 60, paddingVertical: space.xs },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  plus: { width: hit.default, height: hit.default, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
+  divider: { borderTopWidth: 1, borderTopColor: color.border },
+  plus: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center' },
   pressed: { opacity: 0.7 },
-  name: { ...font.label, fontWeight: '600', color: color.text },
+  name: { ...font.label, color: color.text },
   meta: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: 2 },
   create: { gap: space.md, marginTop: space.lg },
   label: { ...font.label, color: color.text },

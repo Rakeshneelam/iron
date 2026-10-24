@@ -1,9 +1,8 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Rect } from 'react-native-svg';
 
-import { Card, Icon, IconButton, ListCard, ListRow, Pill, Press, PrimaryButton, Screen, SectionHeader, TitleBlock, toast } from '@/components';
+import { Card, Icon, IconButton, ListCard, ListRow, MiniBars, Pill, Press, PrimaryButton, Screen, SectionHeader, Sparkline, toast } from '@/components';
 import { useLive } from '@/db/live';
 import { getSlot, updateSlot } from '@/db/repositories/program';
 import {
@@ -23,10 +22,9 @@ import { shouldDeload } from '@/engine/progression';
 import type { Recommendation } from '@/engine/recommend';
 import { siteDef } from '@/features/body/sites';
 import { computeTargets } from '@/features/food/targets';
-import { LongRecord } from '@/features/progress/LongRecord';
 import { VolumeList } from '@/features/program/VolumeList';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
-import { addDays, daysBetweenISO, fmtDayLabel, todayISO, weekStartISO } from '@/lib/date';
+import { addDays, daysBetweenISO, fmtDayLabel, parseISODate, todayISO, weekStartISO } from '@/lib/date';
 import { kgNum, ml, signed } from '@/lib/format';
 import { hydrationTarget } from '@/services/hydration';
 import { color, font, hit, radius, space } from '@/theme/tokens';
@@ -41,14 +39,12 @@ const WEEKS = 12;
 const volume = (kgTotal: number) => (kgTotal >= 1000 ? `${(kgTotal / 1000).toFixed(1)}k` : String(Math.round(kgTotal)));
 
 /**
- * Is it working? Months of the record at the top, then one week of it read closely,
- * with the engine's suggestions for you to approve — never applied on their own.
+ * Is it working? A quarter of training at the top — twelve weeks of volume as
+ * rounded bars, the picked week lit — then that week read closely, with the
+ * engine's suggestions for you to approve, never applied on their own.
  *
- * The page used to open on three stat tiles for one week, so "how has it gone"
- * could only ever be answered seven days at a time. Now the long record leads
- * (features/progress/LongRecord): a quarter of training, body, food and water on one
- * calendar, every week a column you can tap. The week you pick is what everything
- * under it describes, so moving through time and reading a week are one gesture.
+ * Tap a bar, or step with the arrows, and everything under it describes that week:
+ * moving through time and reading a week are one gesture.
  */
 export default function ProgressScreen() {
   const settings = useSettings();
@@ -143,8 +139,16 @@ export default function ProgressScreen() {
     router.push(slot ? `/program/${slot.routineDayId}` : '/program');
   };
 
+  const weeks = record.weeks;
+  const picked = weeks.findIndex((w) => w.weekStart === weekStart);
+  const short = (iso: string) => parseISODate(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  const liftsUp = week.lifts.filter((l) => liftUp(l)).length;
+  const hours = Math.floor(week.minutes / 60);
+  const time = hours ? `${hours} h ${Math.round(week.minutes % 60)} min` : `${Math.round(week.minutes)} min`;
+
   const facts = [
     `${week.sets} sets`,
+    week.minutes ? time : '',
     `${week.exercises} different ${week.exercises === 1 ? 'exercise' : 'exercises'}`,
     week.skipped ? `${week.skipped} missed` : '',
     // Rest days are stated, never scored: a week with three of them is not a worse week.
@@ -155,7 +159,6 @@ export default function ProgressScreen() {
   return (
     <Screen
       title="Progress"
-      subtitle={isThisWeek ? 'This week' : `Week of ${fmtDayLabel(weekStart)}`}
       tab
       right={
         <View style={styles.nav}>
@@ -164,21 +167,51 @@ export default function ProgressScreen() {
         </View>
       }
     >
-      <LongRecord weeks={record.weeks} selected={weekStart} kcalTarget={record.kcal} waterTarget={record.water} onSelect={pick} />
-      <Text style={styles.footnote}>
-        Solid is logged, open is planned and missed, lines are trends. Food and water are measured against today’s targets — Iron never stored the old ones.
-      </Text>
+      {/* Twelve weeks of volume; the picked week is the volt bar, and any bar picks its week. */}
+      <Card style={styles.volumeCard}>
+        <View style={styles.volumeHead}>
+          <View style={styles.flex1}>
+            <Text style={styles.eyebrow}>{isThisWeek ? 'Volume lifted, this week' : `Volume, week of ${short(weekStart)}`}</Text>
+            <Text style={styles.volume} numberOfLines={1}>
+              {volume(week.tonnage)}
+              <Text style={styles.volumeUnit}> kg</Text>
+            </Text>
+          </View>
+          {volumeDelta !== null && Math.abs(volumeDelta) >= 1 ? (
+            <Pill label={`${volumeDelta > 0 ? '+' : '−'}${volume(Math.abs(volumeDelta))} on the week before`} tone={volumeDelta > 0 ? 'positive' : 'muted'} />
+          ) : null}
+        </View>
+        <MiniBars
+          data={weeks.map((w) => ({ label: '', value: w.tonnage, a11y: `Week of ${short(w.weekStart)}: ${volume(w.tonnage)} kg, ${w.trained} ${w.trained === 1 ? 'workout' : 'workouts'}` }))}
+          highlight={picked >= 0 ? picked : undefined}
+          height={140}
+          onSelect={(i) => {
+            const w = weeks[i];
+            if (w) pick(w.weekStart);
+          }}
+        />
+        <View style={styles.axis}>
+          <Text style={styles.axisText}>{weeks[0] ? short(weeks[0].weekStart) : ''}</Text>
+          <Text style={[styles.axisText, windowEnd === thisWeek && isThisWeek && styles.axisNow]}>{windowEnd === thisWeek ? 'Now' : short(windowEnd)}</Text>
+        </View>
+      </Card>
 
-      {/* The picked week, read closely. */}
-      <SectionHeader title={isThisWeek ? 'This week' : `Week of ${fmtDayLabel(weekStart)}`} />
-      <TitleBlock
-        cells={[
-          { label: 'Workouts', value: week.plannedDays ? `${done}/${week.plannedDays}` : String(done) },
-          { label: 'Sets', value: String(week.sets) },
-          { label: 'Lifted', value: volume(week.tonnage), unit: 'kg' },
-          { label: 'Time', value: String(week.minutes), unit: 'min' },
-        ]}
-      />
+      <View style={styles.tiles}>
+        <View style={styles.tile} accessible accessibilityLabel={`Workouts: ${done}${week.plannedDays ? ` of ${week.plannedDays} planned` : ''}`}>
+          <Text style={styles.tileLabel}>Workouts</Text>
+          <Text style={styles.tileValue}>
+            {done}
+            {week.plannedDays ? <Text style={styles.tileUnit}> of {week.plannedDays}</Text> : null}
+          </Text>
+        </View>
+        <View style={styles.tile} accessible accessibilityLabel={`Lifts up on last time: ${liftsUp}`}>
+          <Text style={styles.tileLabel}>Lifts up</Text>
+          <Text style={[styles.tileValue, liftsUp > 0 && styles.up]}>
+            {liftsUp}
+            {week.lifts.length ? <Text style={styles.tileUnit}> of {week.lifts.length}</Text> : null}
+          </Text>
+        </View>
+      </View>
       <View style={styles.facts}>
         {empty ? (
           <Text style={styles.fact}>{isThisWeek ? 'Nothing logged yet. Start a workout and this fills in.' : 'Nothing logged this week.'}</Text>
@@ -189,12 +222,6 @@ export default function ProgressScreen() {
             </Text>
           ))
         )}
-        {volumeDelta !== null && Math.abs(volumeDelta) >= 1 ? (
-          <Text style={[styles.fact, volumeDelta > 0 && styles.up]}>
-            {volumeDelta > 0 ? '+' : '−'}
-            {volume(Math.abs(volumeDelta))} kg on the week before
-          </Text>
-        ) : null}
       </View>
 
       {/*
@@ -202,13 +229,14 @@ export default function ProgressScreen() {
         margin of the record, which is what they are: commentary, not more numbers.
       */}
       {insights.length ? (
-        <View style={styles.notes}>
-          {insights.map((t) => (
-            <Text key={t} style={styles.noteText}>
-              {t}
-            </Text>
+        <Card style={styles.gapTop}>
+          {insights.map((t, i) => (
+            <View key={t} style={[styles.note, i > 0 && styles.noteGap]}>
+              <Icon name="spark" size={16} color={color.accent} />
+              <Text style={styles.noteText}>{t}</Text>
+            </View>
           ))}
-        </View>
+        </Card>
       ) : null}
 
       {/*
@@ -267,7 +295,7 @@ export default function ProgressScreen() {
             action={recs.length > SHOWN_RECS ? { label: allRecs ? 'Show fewer' : `All ${recs.length}`, onPress: () => setAllRecs(!allRecs) } : undefined}
           />
           {(allRecs ? recs : recs.slice(0, SHOWN_RECS)).map((r) => (
-            <View key={r.id} style={styles.rec}>
+            <Card key={r.id}>
               <View style={styles.recHead}>
                 <Icon name={r.kind === 'keep_going' ? 'check' : 'spark'} size={18} color={r.kind === 'keep_going' ? color.positive : color.text} />
                 <Text style={styles.recTitle}>{r.title}</Text>
@@ -279,7 +307,7 @@ export default function ProgressScreen() {
                 {r.kind === 'fewer_days' ? <PrimaryButton label="See plans" tone="neutral" style={styles.flex1} onPress={() => router.push('/program')} /> : null}
                 <PrimaryButton label={r.kind === 'keep_going' ? 'Got it' : 'Dismiss'} tone="neutral" onPress={() => dismiss(r)} />
               </View>
-            </View>
+            </Card>
           ))}
         </>
       ) : null}
@@ -291,19 +319,17 @@ export default function ProgressScreen() {
             hint="Each lift’s top sets, newest on the right. Tap one for its whole record."
             action={week.lifts.length > SHOWN_LIFTS ? { label: allLifts ? 'Show fewer' : `View all ${week.lifts.length}`, onPress: () => setAllLifts(!allLifts) } : undefined}
           />
-          <View>
-            {(allLifts ? week.lifts : week.lifts.slice(0, SHOWN_LIFTS)).map((l, i) => (
-              <LiftRow key={l.exerciseId} lift={l} tops={tops.get(l.exerciseId) ?? []} weekStart={weekStart} divider={i > 0} />
-            ))}
-          </View>
+          {(allLifts ? week.lifts : week.lifts.slice(0, SHOWN_LIFTS)).map((l) => (
+            <LiftRow key={l.exerciseId} lift={l} tops={tops.get(l.exerciseId) ?? []} />
+          ))}
         </>
       ) : null}
 
       {/* Detail, collapsed. Open it when you want it; it is not the headline. */}
       <SectionHeader title="Body & water" action={{ label: showBody ? 'Hide' : 'Show', onPress: () => setShowBody(!showBody), accessibilityLabel: `${showBody ? 'Hide' : 'Show'} body and water` }} />
       {showBody ? (
-        <View>
-          <Row label="Bodyweight trend" value={bw === null ? '—' : `${signed(bw, 1)} kg`} />
+        <View style={styles.kvCard}>
+          <Row divider={false} label="Bodyweight trend" value={bw === null ? '—' : `${signed(bw, 1)} kg`} />
           {week.measurements.map((m) => {
             const def = siteDef(m.site);
             return <Row key={m.site} label={def.label} value={`${kgNum(m.value)} ${def.unit}${m.prev !== null ? `  (${signed(m.value - m.prev)})` : ''}`} />;
@@ -341,54 +367,46 @@ export default function ProgressScreen() {
   );
 }
 
+/** Up on the last time this lift was trained: more weight, or the same weight for more. */
+function liftUp(l: LiftChange): boolean {
+  const w = l.prevTopWeight === null ? null : l.topWeight - l.prevTopWeight;
+  const d = l.prevBestE1rm === null ? null : l.bestE1rm - l.prevBestE1rm;
+  return (w !== null && w > 0) || (w === 0 && d !== null && d > 0.05);
+}
+
 /**
- * One lift, read at a glance: its name, its recent top sets drawn as the record
- * draws them, and the change this week as a dimension — kilograms, not percent.
+ * One lift, read at a glance: its name and this week's top set, its recent top sets
+ * as a small line, and the change as a chip — kilograms, not percent.
  */
-function LiftRow({ lift, tops, weekStart, divider }: { lift: LiftChange; tops: { date: string; topWeight: number }[]; weekStart: string; divider: boolean }) {
+function LiftRow({ lift, tops }: { lift: LiftChange; tops: { date: string; topWeight: number }[] }) {
   const d = lift.prevBestE1rm === null ? null : lift.bestE1rm - lift.prevBestE1rm;
   const w = lift.prevTopWeight === null ? null : lift.topWeight - lift.prevTopWeight;
   const delta = w === null ? 'first time' : w !== 0 ? `${signed(w)} kg` : d !== null && d > 0.05 ? 'more reps' : 'same';
-  const up = (w !== null && w > 0) || (w === 0 && d !== null && d > 0.05);
-  const end = addDays(weekStart, 6);
-  const lo = Math.min(...tops.map((t) => t.topWeight), lift.topWeight);
-  const hi = Math.max(...tops.map((t) => t.topWeight), lift.topWeight);
-  const W = 76;
-  const H = 26;
+  const up = liftUp(lift);
   return (
     <Press
       onPress={() => router.push(`/exercise/${lift.exerciseId}?tab=progress`)}
       accessibilityRole="button"
       accessibilityLabel={`${lift.name}: top set ${kgNum(lift.topWeight)} kg this week, ${delta}. Opens its record.`}
       feedback="highlight"
-      style={[styles.lift, divider && styles.divider]}
+      style={styles.lift}
       pressedStyle={styles.liftHeld}
     >
       <View style={styles.flex1}>
         <Text style={styles.liftName} numberOfLines={1}>
           {lift.name}
         </Text>
-        <Text style={[styles.liftDelta, up && styles.up]}>{delta}</Text>
+        <Text style={styles.liftSub}>top {kgNum(lift.topWeight)} kg</Text>
       </View>
-      <Svg width={W} height={H} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        {tops.map((t, i) => {
-          const x = (i + 0.5) * (W / Math.max(tops.length, 1));
-          const y = H - 4 - (hi === lo ? (H - 8) / 2 : ((t.topWeight - lo) / (hi - lo)) * (H - 8));
-          const inWeek = t.date >= weekStart && t.date <= end;
-          return <Rect key={`${t.date}-${i}`} x={x - 4} y={y - 1.5} width={8} height={3} rx={1} fill={color.text} opacity={inWeek ? 1 : 0.42} />;
-        })}
-      </Svg>
-      <Text style={styles.liftValue}>
-        {kgNum(lift.topWeight)}
-        <Text style={styles.liftUnit}> kg</Text>
-      </Text>
+      <Sparkline values={tops.map((t) => t.topWeight)} width={64} height={28} color={up ? color.accent : color.textMuted} />
+      <Pill label={delta} tone={up ? 'positive' : 'muted'} />
     </Press>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, divider = true }: { label: string; value: string; divider?: boolean }) {
   return (
-    <View style={styles.kv}>
+    <View style={[styles.kv, divider && styles.kvDivider]}>
       <Text style={styles.body}>{label}</Text>
       <Text style={styles.value}>{value}</Text>
     </View>
@@ -398,27 +416,44 @@ function Row({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   gapTop: { marginTop: space.md },
-  nav: { flexDirection: 'row' },
+  nav: { flexDirection: 'row', gap: space.sm },
   row: { flexDirection: 'row', gap: space.sm, marginTop: space.md },
   footnote: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm },
-  facts: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space.lg, rowGap: 2, marginTop: space.sm },
-  fact: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
+
+  volumeCard: { borderRadius: radius.xl, marginBottom: 0, marginTop: space.xs },
+  volumeHead: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, marginBottom: space.md },
+  eyebrow: { ...font.eyebrow, color: color.textMuted },
+  volume: { ...font.display, fontSize: 48, lineHeight: 52, color: color.text, paddingRight: space.xs },
+  volumeUnit: { ...font.measure, fontSize: 20, color: color.textMuted, letterSpacing: 0 },
+  axis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: space.sm },
+  axisText: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '700', color: color.textFaint },
+  axisNow: { color: color.accent },
+
+  tiles: { flexDirection: 'row', gap: space.md, marginTop: space.md },
+  tile: { flex: 1, minHeight: 104, padding: space.lg, borderRadius: radius.lg, backgroundColor: color.surface, justifyContent: 'space-between' },
+  tileLabel: { ...font.eyebrow, color: color.textMuted },
+  tileValue: { ...font.measure, fontWeight: '900', fontSize: 38, lineHeight: 42, color: color.text, paddingRight: space.xs },
+  tileUnit: { ...font.measure, fontSize: 18, color: color.textMuted, letterSpacing: 0 },
   up: { color: color.positive },
-  notes: { marginTop: space.lg, gap: space.sm, borderLeftWidth: 2, borderLeftColor: color.border, paddingLeft: space.md },
-  noteText: { ...font.label, fontSize: 14, lineHeight: 20, fontWeight: '400', color: color.text },
+  facts: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space.lg, rowGap: 2, marginTop: space.md },
+  fact: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
+
+  note: { flexDirection: 'row', gap: space.sm + 2, alignItems: 'flex-start' },
+  noteGap: { marginTop: space.md },
+  noteText: { ...font.body, fontSize: 14, lineHeight: 20, color: color.text, flex: 1 },
   cardTitle: { ...font.heading, color: color.text, marginBottom: space.sm },
-  rec: { paddingVertical: space.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
   recHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  recTitle: { ...font.label, color: color.text, fontWeight: '700', flex: 1 },
+  recTitle: { ...font.label, color: color.text, fontWeight: '800', flex: 1 },
   body: { ...font.body, color: color.text },
   muted: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted, marginTop: space.xs },
-  lift: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.sm },
-  liftHeld: { backgroundColor: color.surface },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  liftName: { ...font.label, fontWeight: '600', color: color.text },
-  liftDelta: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
-  liftValue: { ...font.measure, fontSize: 22, lineHeight: 26, color: color.text, minWidth: 64, textAlign: 'right' },
-  liftUnit: { ...font.caption, fontSize: 12, fontWeight: '400', color: color.textFaint, letterSpacing: 0 },
+
+  lift: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym + 8, paddingHorizontal: space.lg, marginBottom: space.sm, borderRadius: radius.md + 4, backgroundColor: color.surface },
+  liftHeld: { backgroundColor: color.surfaceHigh },
+  liftName: { ...font.label, fontWeight: '800', color: color.text },
+  liftSub: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '600', fontVariant: ['tabular-nums'], color: color.textFaint },
+
+  kvCard: { paddingHorizontal: space.lg, borderRadius: radius.lg, backgroundColor: color.surface },
   value: { ...font.label, fontSize: 14, fontVariant: ['tabular-nums'], color: color.text, fontWeight: '700' },
-  kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, gap: space.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default + 4, gap: space.md },
+  kvDivider: { borderTopWidth: 1, borderTopColor: color.border },
 });

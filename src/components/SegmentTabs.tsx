@@ -2,16 +2,14 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { selection } from '@/lib/haptics';
 import { transition } from '@/theme/curves';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
 import type { ChipOption } from './ChipRow';
 import { Press } from './Press';
 
 /**
  * The parts of one screen, always in view: Body's Weight, Measures and Recovery;
- * Settings' five tabs. Words over a rule, the selected one underlined in chalk —
- * a drawing's section marker, so they never read as the answer chips below them,
- * which are boxes.
+ * Settings' five tabs. A row of pills, the open one white.
  *
  * Deliberately NOT a sliding indicator. These get switched tens of times a day,
  * and at that frequency motion has to be imperceptible or absent — a pill
@@ -53,19 +51,18 @@ export function SegmentTabs<T extends string>({ options, value, onChange }: { op
  * Selection fades rather than snapping. Both properties together, or the fill
  * arrives before the edge does and the pill looks like it is assembling itself.
  */
-const SELECT_FADE = transition(['backgroundColor', 'borderColor']);
+const SELECT_FADE = transition(['backgroundColor']);
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', columnGap: space.xl, rowGap: space.xs, flexWrap: 'wrap' },
+  row: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
   pill: {
-    height: hit.default - space.md,
-    borderBottomWidth: 2,
-    borderColor: 'transparent',
-    borderTopLeftRadius: radius.sm,
-    borderTopRightRadius: radius.sm,
+    height: 38,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.pill,
+    backgroundColor: color.surface,
     justifyContent: 'center',
   },
-  on: { borderColor: color.text },
-  text: { ...font.label, fontWeight: '600', color: color.textFaint },
-  textOn: { color: color.text },
+  on: { backgroundColor: color.text },
+  text: { ...font.label, fontSize: 13, color: color.textMuted },
+  textOn: { color: color.onAccent },
 });

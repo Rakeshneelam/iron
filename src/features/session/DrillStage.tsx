@@ -197,8 +197,8 @@ export function DrillStage(p: DrillStageProps) {
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
         <View style={styles.titleBlock}>
           {/*
-            The routine as its drills, in the marks the workout uses: done solid,
-            the one you are on in heat, the rest open. Tap any to go to it.
+            The routine as its drills: done in volt, the one you are on outlined,
+            the rest dark. Tap any to go to it.
           */}
           <View style={styles.rail} accessibilityRole="adjustable" accessibilityLabel={`Drill ${idx + 1} of ${items.length}, ${done.size} done`}>
             {items.map((x, j) => (
@@ -322,7 +322,7 @@ export function DrillStage(p: DrillStageProps) {
                 pressedStyle={styles.cueHeld}
               >
                 <View style={[styles.mark, ticked && styles.markDone, j === idx && !ticked && styles.markNow]}>
-                  {ticked ? <Icon name="check" size={13} color={color.bg} strokeWidth={3} /> : null}
+                  {ticked ? <Icon name="check" size={13} color={color.onAccent} strokeWidth={3} /> : null}
                 </View>
                 <View style={styles.flex}>
                   <Text style={[styles.listName, ticked && styles.listNameDone]} numberOfLines={1}>
@@ -375,7 +375,7 @@ function Header({
 function Tool({ icon, label, a11y, onPress }: { icon: 'swap' | 'close' | 'list'; label: string; a11y: string; onPress: () => void }) {
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y} feedback="highlight" touchStyle={styles.flex} style={styles.tool} pressedStyle={styles.cueHeld}>
-      <Icon name={icon} size={20} color={color.textMuted} />
+      <Icon name={icon} size={20} color={color.text} />
       <Text style={styles.toolText} numberOfLines={1}>
         {label}
       </Text>
@@ -385,55 +385,41 @@ function Tool({ icon, label, a11y, onPress }: { icon: 'swap' | 'close' | 'list';
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingLeft: space.sm, paddingRight: space.sm, paddingTop: space.md, gap: space.xs },
-  headerText: { flex: 1, minWidth: 0 },
-  headerTitle: { ...font.heading, fontSize: 18, fontWeight: '700', color: color.text },
-  headerMeta: { ...font.caption, color: color.textMuted },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingTop: space.md, gap: space.md },
+  headerText: { flex: 1, minWidth: 0, alignItems: 'center' },
+  headerTitle: { ...font.titleSm, fontSize: 16, color: color.text, textAlign: 'center' },
+  headerMeta: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textMuted, textAlign: 'center' },
   scroll: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xl, gap: space.lg },
-  titleBlock: { gap: space.xs },
-  rail: { flexDirection: 'row', gap: 3, marginBottom: space.sm },
-  railCell: { flex: 1, maxWidth: 28 },
-  railMark: { height: 8, borderRadius: 1.5 },
-  railDone: { backgroundColor: color.text },
-  railNow: { borderWidth: 1.5, borderColor: color.accent },
-  railTodo: { borderWidth: 1, borderColor: color.textFaint },
-  eyebrow: { ...font.eyebrow, color: color.textFaint },
-  name: { ...font.title, fontSize: 28, lineHeight: 34, color: color.text },
-  why: { ...font.label, color: color.textMuted },
+  titleBlock: { gap: space.sm },
+  rail: { flexDirection: 'row', gap: 4, marginBottom: space.xs },
+  railCell: { flex: 1, maxWidth: 34 },
+  railMark: { height: 8, borderRadius: radius.pill },
+  railDone: { backgroundColor: color.accent },
+  railNow: { borderWidth: 2, borderColor: color.accent },
+  railTodo: { backgroundColor: color.surfaceHigh },
+  eyebrow: { ...font.eyebrow, color: color.textMuted },
+  // Italic display type overhangs its box; the right padding keeps the last glyph whole.
+  name: { ...font.title, fontSize: 38, lineHeight: 41, letterSpacing: -0.6, color: color.text, paddingRight: space.xs },
+  why: { ...font.body, color: color.textMuted },
 
-  /** The count on its own, in the measuring face — no box: the number is the thing. */
-  repsBlock: {
-    alignItems: 'center',
-    gap: space.xs,
-    paddingVertical: space.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: color.border,
-  },
+  /** The count on a dark slab, in the measuring face — the number is the thing. */
+  repsBlock: { alignItems: 'center', gap: space.xs, paddingVertical: space.lg, borderRadius: radius.xl, backgroundColor: color.surface },
   repsCaption: { ...font.eyebrow, color: color.textMuted },
-  repsValue: { ...font.measure, fontSize: 96, lineHeight: 100, fontWeight: '800', letterSpacing: -1, color: color.text },
-  repsNote: { ...font.caption, fontSize: 12, color: color.textMuted },
+  repsValue: { ...font.measure, fontSize: 100, lineHeight: 104, fontWeight: '900', letterSpacing: -1, color: color.accent, paddingRight: space.sm },
+  repsNote: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textMuted },
 
-
-  cueHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    minHeight: hit.default,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.sm,
-  },
+  cueHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym, paddingHorizontal: space.lg, borderRadius: radius.lg, backgroundColor: color.surface },
   cueHeld: { backgroundColor: color.surfaceHigh },
-  cueHeadText: { ...font.label, fontWeight: '600', color: color.text, flex: 1 },
-  cues: { gap: space.md, alignItems: 'center', borderLeftWidth: 2, borderLeftColor: color.border, paddingLeft: space.lg, paddingVertical: space.xs, marginTop: -space.sm },
+  cueHeadText: { ...font.label, color: color.text, flex: 1 },
+  cues: { gap: space.md, alignItems: 'center', padding: space.lg, borderRadius: radius.lg, backgroundColor: color.surface, marginTop: -space.sm },
   cueRow: { flexDirection: 'row', gap: space.md - 2, alignItems: 'flex-start' },
-  cue: { ...font.label, color: color.text, flex: 1, lineHeight: 22 },
+  cue: { ...font.label, fontWeight: '500', color: color.text, flex: 1, lineHeight: 22 },
 
-  tools: { flexDirection: 'row', minHeight: hit.gym, backgroundColor: color.surface, borderRadius: radius.button, borderWidth: 1, borderColor: color.border, overflow: 'hidden' },
-  tool: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, minHeight: hit.gym },
-  toolText: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '600', color: color.textMuted },
+  tools: { flexDirection: 'row', gap: space.sm },
+  tool: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs + 2, minHeight: 68, borderRadius: radius.md + 4, backgroundColor: color.surface },
+  toolText: { ...font.caption, fontSize: 12, lineHeight: 15, fontWeight: '700', color: color.text },
 
-  dock: { gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: color.bg, borderTopWidth: 1, borderTopColor: color.border },
+  dock: { gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.sm, backgroundColor: color.bg },
   navRow: { flexDirection: 'row', alignItems: 'center' },
 
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.lg, paddingHorizontal: space.lg },
@@ -442,22 +428,12 @@ const styles = StyleSheet.create({
   sheetHint: { ...font.caption, color: color.textMuted, marginBottom: space.md },
   sheetModes: { marginBottom: space.md },
   sheetList: { gap: space.sm, paddingBottom: space.lg },
-  listRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    minHeight: hit.gym,
-    paddingHorizontal: space.lg,
-    backgroundColor: color.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym + 4, paddingHorizontal: space.lg, backgroundColor: color.surfaceHigh, borderRadius: radius.lg, borderWidth: 1.5, borderColor: 'transparent' },
   listRowNow: { borderColor: color.accent, boxShadow: material.heat },
-  listName: { ...font.label, fontWeight: '600', color: color.text },
+  listName: { ...font.label, color: color.text },
   listNameDone: { color: color.textMuted },
   listSub: { ...font.caption, fontSize: 12, color: color.textFaint },
-  mark: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 2, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
-  markDone: { backgroundColor: color.text, borderColor: color.text },
+  mark: { width: 26, height: 26, borderRadius: radius.pill, borderWidth: 2, borderColor: color.rule, alignItems: 'center', justifyContent: 'center' },
+  markDone: { backgroundColor: color.accent, borderColor: color.accent },
   markNow: { borderColor: color.accent },
 });

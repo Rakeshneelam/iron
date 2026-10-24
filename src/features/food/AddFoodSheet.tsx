@@ -358,8 +358,9 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
                   accessibilityLabel={slot ? `Add ${f.name} to ${meal}` : `Add ${f.name}`}
                   style={styles.plus}
                   pressedStyle={styles.plusPressed}
+                  hitSlop={4}
                 >
-                  <Icon name="plus" size={20} color={color.text} />
+                  <Icon name="plus" size={20} color={color.onTile} strokeWidth={2.6} />
                 </Press>
               </Press>
             ))}
@@ -580,22 +581,20 @@ const styles = StyleSheet.create({
     paddingLeft: space.lg,
     paddingRight: space.xs,
     backgroundColor: color.surfaceHigh,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
+    borderRadius: radius.pill,
   },
   searchInput: { ...font.body, color: color.text, flex: 1, minHeight: hit.gym },
-  /** An open list on hairlines, not a box in a sheet: the sheet is already the container. */
-  list: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: color.border },
+  /** An open list of rows, not a box in a sheet: the sheet is already the container. */
+  list: {},
   foodRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 60, paddingVertical: space.xs, paddingHorizontal: space.xs, borderRadius: radius.sm },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  divider: { borderTopWidth: 1, borderTopColor: color.border },
   pressed: { backgroundColor: color.surfaceHigh },
   portion: { ...font.caption, fontSize: 12, color: color.textFaint },
   nums: { alignItems: 'flex-end' },
   kcal: { ...font.measure, fontSize: 19, lineHeight: 23, color: color.text },
-  plus: { width: hit.default, height: hit.default, borderRadius: radius.button, borderWidth: 1, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
-  plusPressed: { backgroundColor: color.border },
-  name: { ...font.label, fontWeight: '600', color: color.text },
+  plus: { width: 42, height: 42, borderRadius: radius.pill, backgroundColor: color.peach, alignItems: 'center', justifyContent: 'center' },
+  plusPressed: { opacity: 0.85 },
+  name: { ...font.label, color: color.text },
   strong: { color: color.text, fontWeight: '600' },
   label: { ...font.label, color: color.text, fontWeight: '600', marginBottom: space.sm },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
@@ -607,7 +606,7 @@ const styles = StyleSheet.create({
     padding: space.lg,
     backgroundColor: color.surface,
     borderRadius: radius.lg,
-    // A proposal you have not logged yet: outlined, as everything planned is (docs/13).
+    // A proposal you have not logged yet: outlined, not filled.
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: color.textMuted,

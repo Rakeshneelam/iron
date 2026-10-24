@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { EmptyState, Icon, ListCard, ListRow, PrimaryButton, Screen, SectionHeader, SegmentTabs, TitleBlock, toast } from '@/components';
+import { Card, EmptyState, Icon, ListCard, ListRow, MiniBars, PrimaryButton, Screen, SectionHeader, SegmentTabs, TitleBlock, toast, TrendChart } from '@/components';
 import { CATALOG_BY_ID, EQUIPMENT_LABEL, type Equipment } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { getExercise } from '@/db/repositories/exercises';
@@ -10,11 +10,10 @@ import { exerciseSessions } from '@/db/repositories/sessions';
 import { setSetting, useSettings } from '@/db/repositories/settings';
 import { e1rmSeries } from '@/db/repositories/stats';
 import { ExerciseGuide, guideMeta } from '@/features/exercises/ExerciseGuide';
-import { LoadLine, RecordLegend } from '@/features/progress/LoadLine';
 import { fmtSet, fmtSetList } from '@/features/session/prescription';
 import { fmtDayLabel } from '@/lib/date';
 import { kgNum } from '@/lib/format';
-import { color, font, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
 const TABS = [
   { label: 'Record', value: 'progress' as const },
@@ -91,17 +90,11 @@ export default function ExerciseScreen() {
 }
 
 /**
- * The lift's whole record, the signature view of this app (brief §6, §13).
- *
- * It used to be a chart of one estimated number per session over a chosen range,
- * plus three tiles of bests. Now it is the same record the logging screen draws
- * mid-set, at full length: every working set of every session as its own mark,
- * scrolled to the newest, with your best as a datum across it and the estimated
- * 1RM in its own lane above — a line, labelled as an estimate, never mixed in with
- * what you lifted. Tap a session to read its sets and open that workout.
- *
- * The title block says the four facts people come here for, and the bests below
- * are each a set you actually lifted, with its date.
+ * The lift's record. A loaded lift leads with its estimated 1RM on a volt card, the
+ * estimate's line under it — labelled as an estimate, never mixed in with what you
+ * lifted. A lift without load shows its best reps or hold per session as bars, each
+ * of which opens that workout. The tiles say the facts people come here for, and
+ * the bests below are each a set you actually lifted, with its date.
  */
 function ProgressView({
   measure,
@@ -127,36 +120,69 @@ function ProgressView({
   const atWeight = all.filter((x) => x.set.weight === workWeight).reduce<(typeof all)[number] | undefined>((b, x) => (!b || x.set.reps > b.set.reps ? x : b), undefined);
   const weighted = measure === 'reps' && (heaviest?.set.weight ?? 0) > 0;
   const longest = measure === 'time' ? all.reduce((m, x) => Math.max(m, x.set.reps), 0) : 0;
+  // Newest first from the query; oldest first on a chart.
+  const recent = sessions.slice(0, 12).reverse();
+  const bestOf = (s: (typeof sessions)[number]) => s.sets.reduce((m, x) => Math.max(m, x.reps), 0);
+  const newest = recent[recent.length - 1];
 
   return (
     <>
-      <TitleBlock
-        cells={[
-          weighted && heaviest
-            ? { label: 'Heaviest', value: kgNum(heaviest.set.weight), unit: `× ${heaviest.set.reps}` }
-            : measure === 'time'
-              ? { label: 'Longest', value: String(longest), unit: 's' }
-              : { label: 'Most reps', value: String(all.reduce((m, x) => Math.max(m, x.set.reps), 0)) },
-          ...(weighted && latest ? [{ label: 'Est. 1RM', value: kgNum(Math.round(latest.e1rm)), unit: 'kg' }] : []),
-          { label: 'Sessions', value: String(sessions.length) },
-        ]}
-      />
-      {weighted && gain !== null ? (
-        <Text style={[styles.gain, gain > 0.5 && styles.gainUp]}>
-          {Math.abs(gain) < 0.5 ? 'Estimated 1RM level since your first session.' : `Estimated 1RM ${gain > 0 ? '+' : '−'}${kgNum(Math.round(Math.abs(gain)))} kg since your first session, ${fmtDayLabel(first?.date ?? '')}.`}
-        </Text>
-      ) : null}
+      {weighted && latest ? (
+        <Card tone="volt" style={styles.hero}>
+          <Text style={styles.heroEyebrow}>Estimated 1RM</Text>
+          <Text style={styles.heroValue} numberOfLines={1}>
+            {kgNum(Math.round(latest.e1rm))}
+            <Text style={styles.heroUnit}> kg</Text>
+          </Text>
+          {gain !== null && Math.abs(gain) >= 0.5 ? (
+            <View style={styles.heroChip}>
+              <Icon name={gain > 0 ? 'arrowUp' : 'arrowDown'} size={13} color={color.accent} strokeWidth={2.6} />
+              <Text style={styles.heroChipText}>
+                {gain > 0 ? '+' : '−'}
+                {kgNum(Math.round(Math.abs(gain)))} kg since {fmtDayLabel(first?.date ?? '')}
+              </Text>
+            </View>
+          ) : null}
+          {series.length > 1 ? (
+            <View style={styles.heroChart}>
+              <TrendChart
+                trend={series.map((p, i) => ({ x: i, y: p.e1rm }))}
+                height={120}
+                readout={false}
+                ink={color.onTile}
+                format={(y) => `${kgNum(Math.round(y))} kg`}
+                formatX={(x) => fmtDayLabel(series[x]?.date ?? '')}
+              />
+            </View>
+          ) : null}
+        </Card>
+      ) : (
+        <Card style={styles.barsCard}>
+          <Text style={styles.barsEyebrow}>{measure === 'time' ? 'Longest hold, each session' : 'Most reps, each session'}</Text>
+          <MiniBars
+            data={recent.map((s) => ({ label: '', value: bestOf(s), a11y: `${fmtDayLabel(s.date)}: ${bestOf(s)} ${measure === 'time' ? 'seconds' : 'reps'}. Opens that workout.` }))}
+            highlight={recent.length - 1}
+            height={120}
+            bubble={newest ? `${bestOf(newest)}${measure === 'time' ? ' s' : ''}` : undefined}
+            onSelect={(i) => {
+              const s = recent[i];
+              if (s) router.push(`/session/summary/${s.sessionId}`);
+            }}
+          />
+        </Card>
+      )}
 
-      <View style={styles.record}>
-        <LoadLine
-          sessions={sessions}
-          measure={measure}
-          height={150}
-          full
-          estimate={weighted ? series.map((p) => ({ sessionId: p.sessionId, e1rm: p.e1rm })) : undefined}
-          onOpenSession={(sid) => router.push(`/session/summary/${sid}`)}
+      <View style={styles.tiles}>
+        <TitleBlock
+          cells={[
+            weighted && heaviest
+              ? { label: 'Heaviest', value: kgNum(heaviest.set.weight), unit: `× ${heaviest.set.reps}` }
+              : measure === 'time'
+                ? { label: 'Longest', value: String(longest), unit: 's' }
+                : { label: 'Most reps', value: String(all.reduce((m, x) => Math.max(m, x.set.reps), 0)) },
+            { label: 'Sessions', value: String(sessions.length) },
+          ]}
         />
-        <RecordLegend estimate={weighted} />
       </View>
 
       {weighted && heaviest ? (
@@ -202,9 +228,16 @@ function ProgressView({
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   pair: { flexDirection: 'row', gap: space.sm },
-  gain: { ...font.label, fontSize: 14, fontWeight: '500', fontVariant: ['tabular-nums'], color: color.textMuted, marginTop: space.sm },
-  gainUp: { color: color.positive },
-  record: { marginTop: space.lg, gap: space.md },
+  hero: { marginTop: space.sm, marginBottom: 0, borderRadius: radius.xl, padding: space.xl - 4 },
+  heroEyebrow: { ...font.eyebrow, color: color.onTileMuted },
+  heroValue: { ...font.display, fontSize: 64, lineHeight: 68, color: color.onTile, paddingRight: space.xs },
+  heroUnit: { ...font.measure, fontSize: 24, color: color.onTile, letterSpacing: 0 },
+  heroChip: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.onTile, marginTop: space.xs },
+  heroChipText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.accent, fontVariant: ['tabular-nums'] },
+  heroChart: { marginTop: space.md, marginHorizontal: -space.sm },
+  barsCard: { marginTop: space.sm, marginBottom: 0, borderRadius: radius.xl },
+  barsEyebrow: { ...font.eyebrow, color: color.textMuted, marginBottom: space.md },
+  tiles: { marginTop: space.md },
   value: { ...font.label, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], color: color.text, flexShrink: 1, textAlign: 'right' },
   footnote: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm },
 });

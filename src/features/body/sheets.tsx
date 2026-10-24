@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   cell: { width: '47%' },
   save: { marginTop: space.xl, marginBottom: space.md },
   big: { ...font.measure, fontSize: 34, lineHeight: 38, color: color.text, textAlign: 'center' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.border },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default, borderBottomWidth: 1, borderBottomColor: color.border },
   rowEnd: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   editRow: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md },
   editBlock: { gap: space.sm, paddingVertical: space.sm },

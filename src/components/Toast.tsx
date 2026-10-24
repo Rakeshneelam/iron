@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
 import { EASE_OUT } from '@/theme/curves';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { color, font, hit, material, radius, space } from '@/theme/tokens';
 
 interface ToastData {
   id: number;
@@ -156,14 +156,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     backgroundColor: color.surfaceHigh,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border,
-    paddingLeft: space.lg,
-    paddingRight: space.xs,
-    minHeight: hit.gym,
+    borderRadius: radius.pill,
+    paddingLeft: space.xl,
+    paddingRight: 6,
+    minHeight: hit.gym + 4,
+    boxShadow: material.lift,
   },
-  message: { ...font.label, color: color.text, flex: 1, paddingVertical: space.sm },
-  action: { minHeight: hit.default, minWidth: hit.default, paddingHorizontal: space.md, alignItems: 'center', justifyContent: 'center' },
-  actionText: { ...font.body, color: color.text, fontWeight: '700', textDecorationLine: 'underline' },
+  message: { ...font.label, fontSize: 14, color: color.text, flex: 1, paddingVertical: space.sm },
+  action: { minHeight: hit.default, minWidth: hit.default, paddingHorizontal: space.lg, borderRadius: radius.pill, backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center' },
+  actionText: { ...font.label, fontSize: 14, color: color.onAccent },
 });
