@@ -53,7 +53,7 @@ export function CheckInSheet({ visible, onClose, date, datePicker = false, onSta
     <Sheet
       visible={visible}
       onClose={onClose}
-      title={onStart ? 'Before you start' : day === todayISO() ? 'Daily check-in' : `Check-in · ${fmtDayLabel(day)}`}
+      title={onStart ? 'Before you start' : day === todayISO() ? 'Daily check-in' : `Check-in, ${fmtDayLabel(day)}`}
     >
       {/* Mounted per opening and per day, so the answers are read fresh without an effect. */}
       {visible ? <CheckInForm key={day} date={day} datePicker={datePicker} onClose={onClose} onStart={onStart} onSkip={onSkip} startLabel={startLabel} /> : null}
@@ -115,10 +115,10 @@ export function CheckInForm({ date, datePicker, onClose, onStart, onSkip, startL
       <Answer label="Sleep last night" hint={recorded(sleep)}>
         <ChipRow options={SLEEP} value={sleep} onChange={toggle(sleep, setSleep)} />
       </Answer>
-      <Answer label="Soreness" hint={recorded(soreness) ?? '1 fresh · 5 wrecked'}>
+      <Answer label="Soreness" hint={recorded(soreness) ?? '1 fresh, 5 wrecked'}>
         <ChipRow options={SCALE} value={soreness} onChange={toggle(soreness, setSoreness)} />
       </Answer>
-      <Answer label="Stress" hint={recorded(stress) ?? '1 calm · 5 stressed'}>
+      <Answer label="Stress" hint={recorded(stress) ?? '1 calm, 5 stressed'}>
         <ChipRow options={SCALE} value={stress} onChange={toggle(stress, setStress)} />
       </Answer>
 

@@ -205,7 +205,7 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
       <Sheet visible={visible} onClose={close} title={name}>
         <Stepper label={food ? unit(food.servingLabel) : 'servings'} value={servings} step={0.5} min={0.5} max={20} size="gym" onChange={setServings} />
         <Text style={styles.macro}>
-          {Math.round(per.kcal * servings)} kcal · {Math.round(per.protein * servings)} g protein · {Math.round(per.carb * servings)} g carbs ·{' '}
+          {Math.round(per.kcal * servings)} kcal, {Math.round(per.protein * servings)} g protein, {Math.round(per.carb * servings)} g carbs,{' '}
           {Math.round(per.fat * servings)} g fat
         </Text>
         {/* Opened without a meal: ask, rather than quietly picking breakfast. */}
@@ -237,7 +237,7 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
       visible={visible}
       onClose={close}
       title={slot ? 'Add food' : 'Food & recipes'}
-      subtitle={[slot ? mealName : null, fmtDayLabel(dateISO), soFar ? `so far ${soFar}` : null].filter(Boolean).join(' · ')}
+      subtitle={[slot ? mealName : null, fmtDayLabel(dateISO), soFar ? `so far ${soFar}` : null].filter(Boolean).join(', ')}
     >
       {slot !== null ? (
         <View style={styles.block}>
@@ -288,10 +288,10 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
                   <View style={styles.flex}>
                     <Text style={styles.name} numberOfLines={1}>
                       {it.name}
-                      {it.score < UNSURE ? <Text style={styles.unsure}> · check this</Text> : null}
+                      {it.score < UNSURE ? <Text style={styles.unsure}> (check this)</Text> : null}
                     </Text>
                     <Text style={styles.portion} numberOfLines={2}>
-                      {it.reason} · from “{it.text}”
+                      {it.reason}, from “{it.text}”
                     </Text>
                   </View>
                   <Text style={styles.kcal}>{kcalOf(it)}</Text>
@@ -303,7 +303,7 @@ export function AddFoodSheet({ visible, slot, dateISO, start = 'frequent', soFar
                 </Text>
               ) : null}
               <Text style={styles.parsedTotal}>
-                {Math.round(parsedTotals.kcal)} kcal · {Math.round(parsedTotals.protein)} g protein · {Math.round(parsedTotals.carb)} g carbs ·{' '}
+                {Math.round(parsedTotals.kcal)} kcal, {Math.round(parsedTotals.protein)} g protein, {Math.round(parsedTotals.carb)} g carbs,{' '}
                 {Math.round(parsedTotals.fat)} g fat
               </Text>
               {slot === null ? (
@@ -499,7 +499,7 @@ function NewRecipe({
     <View>
       <Field label="Recipe name" value={draft.name} onChange={(v) => onDraft({ ...draft, name: v })} numeric={false} />
       <Stepper label="Makes servings" value={draft.servings} step={1} min={1} max={20} onChange={(v) => onDraft({ ...draft, servings: v })} />
-      <Text style={[styles.muted, styles.gap]}>{draft.items.length === 0 ? 'Ingredients — none yet' : `Ingredients · ${draft.items.length}`}</Text>
+      <Text style={[styles.muted, styles.gap]}>{draft.items.length === 0 ? 'Ingredients — none yet' : `Ingredients, ${draft.items.length}`}</Text>
       {draft.items.map((it, i) => (
         <View key={`${it.food.id}-${i}`} style={styles.pair}>
           <Text style={[styles.name, styles.flex]} numberOfLines={1}>
@@ -598,8 +598,10 @@ const styles = StyleSheet.create({
     padding: space.lg,
     backgroundColor: color.surface,
     borderRadius: radius.lg,
+    // A proposal you have not logged yet: outlined, as everything planned is (docs/13).
     borderWidth: 1,
-    borderColor: color.accent,
+    borderStyle: 'dashed',
+    borderColor: color.textMuted,
   },
   parsedHead: { ...font.eyebrow, color: color.textFaint },
   parsedRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default, paddingVertical: space.xs },

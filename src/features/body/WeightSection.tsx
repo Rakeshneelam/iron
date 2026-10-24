@@ -1,8 +1,9 @@
 import { router } from 'expo-router';
 import { type ReactNode, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { ChipRow, EmptyState, Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, SectionHeader, TrendChart, type ScreenProps } from '@/components';
+import { ChipRow, EmptyState, Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, SectionHeader, TrendChart, useReducedMotion, type ScreenProps } from '@/components';
 import { useLive } from '@/db/live';
 import { countWeighIns, listMeasurements, listWeighIns } from '@/db/repositories/body';
 import { PHASES, useSettings } from '@/db/repositories/settings';
@@ -44,6 +45,7 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
   const lastMeasured = useLive(() => listMeasurements()[0]?.date ?? null, ['measurement']);
   const [range, setRange] = useState(90);
   const [weigh, setWeigh] = useState<WeighEntry | null>(null);
+  const reduced = useReducedMotion();
 
   const todays = weighIns.find((w) => w.date === today);
   const trend = useMemo(() => weightTrend(weighIns), [weighIns]);
@@ -85,38 +87,47 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
       {weighIns.length === 0 ? (
         <EmptyState message="No weigh-ins yet." hint="Same time each morning, before food. The trend is the signal; one morning is noise." />
       ) : (
-        <View style={styles.card}>
-          <Text style={styles.eyebrow}>Trend weight</Text>
+        <View style={styles.trendBlock}>
+          {/*
+            The trend leads, in the measuring face, because it is the number that
+            means something. Labelled as a trend — it is smoothed, not a reading —
+            and this morning's reading sits underneath, quieter (AGENTS §6).
+          */}
+          <Text style={styles.eyebrow}>Trend, smoothed</Text>
           <View style={styles.heroRow}>
             <Text style={styles.hero}>{lastTrend === null ? '—' : kgNum(Math.round(lastTrend * 10) / 10)}</Text>
             <Text style={styles.unit}>kg</Text>
-            <View style={styles.flex1} />
-            {change !== null ? <Text style={[styles.change, { color: changeColor(settings.phase, change) }]}>{signed(change)} kg</Text> : null}
           </View>
-          {trend.length >= 7 ? (
-            <Text style={styles.muted}>
-              Over {weeks} {weeks === 1 ? 'week' : 'weeks'} — about {signed(rate, 2)} kg a week.
+          {change !== null ? (
+            <Text style={styles.changeLine}>
+              <Text style={[styles.change, { color: changeColor(settings.phase, change) }]}>
+                {signed(change)} kg
+              </Text>
+              {` over ${weeks} ${weeks === 1 ? 'week' : 'weeks'}${trend.length >= 7 ? `, about ${signed(rate, 2)} kg a week` : ''}`}
             </Text>
           ) : null}
           {check ? <Text style={[styles.muted, check.onTrack ? styles.onTrack : styles.offTrack]}>{check.message}</Text> : null}
           {trend.length >= 2 ? (
             <View style={styles.chart}>
-              <TrendChart
-                trend={trendPts}
-                raw={rawPts}
-                height={150}
-                format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`}
-                formatX={(x) => fmtDayLabel(addDays(first, x))}
-              />
+              {/* A new range redraws the line; a 150ms fade says it is the same record at a new scale. */}
+              <Animated.View key={range} entering={reduced ? undefined : FadeIn.duration(150)}>
+                <TrendChart
+                  trend={trendPts}
+                  raw={rawPts}
+                  height={160}
+                  format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`}
+                  formatX={(x) => fmtDayLabel(addDays(first, x))}
+                />
+              </Animated.View>
               <ChipRow options={RANGES} value={range} onChange={setRange} />
               {/* The chart is not the only way to read this (UX-11). */}
               <Text style={styles.hint}>
-                {`Latest ${kg(shown[shown.length - 1]?.raw ?? 0)} on ${fmtDayLabel(shown[shown.length - 1]?.date ?? today)}`}
-                {shown.length > 1 ? `, from ${kg(shown[0]?.raw ?? 0)} on ${fmtDayLabel(first)}.` : '.'}
+                {`Latest reading ${kg(shown[shown.length - 1]?.raw ?? 0)} on ${fmtDayLabel(shown[shown.length - 1]?.date ?? today)}`}
+                {shown.length > 1 ? `, first in this range ${kg(shown[0]?.raw ?? 0)} on ${fmtDayLabel(first)}. Dots are readings; the line is the trend.` : '.'}
               </Text>
             </View>
           ) : (
-            <Text style={styles.hint}>Log a few mornings and your trend line appears here.</Text>
+            <Text style={styles.hint}>A trend needs a few mornings. Each weigh-in adds a point; the line appears with the second.</Text>
           )}
         </View>
       )}
@@ -134,7 +145,7 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
           divider
           left={<Icon name="target" size={20} color={color.textMuted} />}
           title="Body-weight goal"
-          sub={`${goal} · sets your calorie and water targets`}
+          sub={`${goal}. Sets your calorie and water targets.`}
           onPress={() => router.push('/settings/profile')}
         />
       </ListCard>
@@ -180,12 +191,13 @@ function changeColor(phase: Phase, change: number): string {
 
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
-  card: { backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, padding: space.lg + 2, gap: space.xs },
-  eyebrow: { ...font.eyebrow, color: color.textFaint },
-  heroRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.md - 2 },
-  hero: { ...font.display, fontSize: 46, lineHeight: 52, ...font.numeric, color: color.text },
-  unit: { ...font.heading, fontWeight: '700', color: color.textMuted },
-  change: { ...font.label, fontSize: 16, fontWeight: '700', ...font.numeric },
+  trendBlock: { gap: space.xs, marginTop: space.sm },
+  eyebrow: { ...font.eyebrow, color: color.textMuted },
+  heroRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  hero: { ...font.display, fontSize: 72, lineHeight: 74, color: color.text },
+  unit: { ...font.measure, fontSize: 26, fontWeight: '600', color: color.textMuted },
+  changeLine: { ...font.label, fontWeight: '400', fontVariant: ['tabular-nums'], color: color.textMuted },
+  change: { fontWeight: '700' },
   muted: { ...font.caption, color: color.textMuted },
   onTrack: { color: color.positive },
   offTrack: { color: color.warning },
@@ -196,15 +208,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.md,
     minHeight: 56,
-    marginTop: space.md,
-    paddingLeft: space.lg,
-    backgroundColor: color.surface,
+    marginTop: space.lg,
+    paddingLeft: space.md,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: color.border,
   },
   morningLabel: { ...font.label, fontWeight: '400', color: color.textMuted, flex: 1 },
-  morningValue: { ...font.heading, fontSize: 18, fontWeight: '700', ...font.numeric, color: color.text },
+  morningValue: { ...font.measure, fontSize: 20, lineHeight: 24, color: color.text },
   gapTop: { marginTop: space.md },
   value: { ...font.label, fontWeight: '600', ...font.numeric, color: color.text },
 });

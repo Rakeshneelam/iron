@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { router } from 'expo-router';
 
-import { FitText, Icon, IconButton, ListCard, ListRow, PrimaryButton, Screen, Sheet, Stepper } from '@/components';
+import { Icon, IconButton, ListCard, ListRow, Press, PrimaryButton, Screen, Sheet, Stepper } from '@/components';
 import { DateStepper, useSelectedDate } from '@/components/DateStepper';
 import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
@@ -23,6 +23,7 @@ import {
   type UsualMeal,
 } from '@/db/repositories/food';
 import { AddFoodSheet } from '@/features/food/AddFoodSheet';
+import { IntakeBar } from '@/features/food/IntakeBar';
 import { FoodTargetSheet } from '@/features/food/TargetSheet';
 import { computeTargets, confidenceLabel } from '@/features/food/targets';
 import { getDayTotal } from '@/db/repositories/water';
@@ -32,6 +33,7 @@ import { hydrationTarget } from '@/services/hydration';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 const cap = (s: string) => (s ? s[0]?.toUpperCase() + s.slice(1) : s);
+const SHORT: Record<MealSlot, string> = { breakfast: 'B', lunch: 'L', snack: 'S', dinner: 'D' };
 const fmtServings = (n: number) => (Math.round(n * 2) / 2).toString();
 const unit = (label: string | null) => (label ?? 'serving').replace(/^1\s+/, '');
 
@@ -68,6 +70,8 @@ export default function FoodScreen() {
   const [servings, setServings] = useState(1);
 
   const soFar = `${Math.round(day.totals.kcal).toLocaleString()} / ${t.kcal.toLocaleString()} kcal`;
+  /** A target is an estimate until your own logging measures it, or you set it. */
+  const estimated = !t.manual && t.basis === 'estimated';
 
   return (
     <Screen
@@ -79,32 +83,56 @@ export default function FoodScreen() {
       {/* Labelled controls, and a way back to today — the bare ‹ › said nothing to
           a screen reader and left no exit from three days ago. */}
       <DateStepper value={date} onChange={setDate} />
-      <View style={styles.tiles}>
-        <MacroTile label="Protein" value={day.totals.protein} target={t.proteinG} unit=" g" tone="accent" />
-        <MacroTile label="Calories" value={day.totals.kcal} target={t.kcal} />
+      {/*
+        The day's intake as composition: one segment per meal inside the target's
+        outline, dashed while that target is still an estimate (features/food/IntakeBar).
+        Protein leads because it is the number this app plans training around.
+      */}
+      <View style={styles.intake}>
+        <IntakeBar
+          label="Calories"
+          unit="kcal"
+          target={t.kcal}
+          estimated={estimated}
+          segments={MEAL_SLOTS.map((m) => ({ key: m, short: SHORT[m], name: cap(m), value: day.bySlot[m].reduce((a, e) => a + e.macros.kcal, 0) }))}
+        />
+        <IntakeBar
+          label="Protein"
+          unit="g"
+          target={t.proteinG}
+          estimated={estimated}
+          segments={MEAL_SLOTS.map((m) => ({ key: m, short: SHORT[m], name: cap(m), value: day.bySlot[m].reduce((a, e) => a + e.macros.protein, 0) }))}
+        />
+        {/* Carbs and fat follow from the two above; they are a line, not two more bars. */}
+        <View style={styles.minor}>
+          <Text style={styles.secondary}>
+            Carbs <Text style={styles.secondaryStrong}>{Math.round(day.totals.carb)}</Text> of {t.carbG} g
+          </Text>
+          <Text style={styles.secondary}>
+            Fat <Text style={styles.secondaryStrong}>{Math.round(day.totals.fat)}</Text> of {t.fatG} g
+          </Text>
+        </View>
+        <Text style={styles.note}>
+          {t.manual ? 'Targets you set.' : t.basis === 'estimated' ? `Targets are Iron's estimate (dashed) — ${confidenceLabel(t).toLowerCase()}.` : `Targets measured from your own logging — ${confidenceLabel(t).toLowerCase()}.`}
+        </Text>
       </View>
-      {/* Carbs and fat follow from the two above; they are a line, not a second pair of tiles. */}
-      <Text style={styles.secondary}>
-        Carbs {Math.round(day.totals.carb)} / {t.carbG} g{'   ·   '}Fat {Math.round(day.totals.fat)} / {t.fatG} g
-      </Text>
-      <Text style={styles.note}>
-        {t.manual ? 'Your own targets' : t.basis === 'estimated' ? `Estimate · ${confidenceLabel(t)}` : `Measured · ${confidenceLabel(t)}`}
-      </Text>
 
       {/* A link to the Water screen, on the day being browsed — not a second copy of it. */}
-      <Pressable
+      <Press
         onPress={() => router.push(`/water?date=${date}`)}
         accessibilityRole="button"
         accessibilityLabel={`Water: ${ml(water.ml)} of ${ml(water.target)} on ${fmtDayLabel(date)}. Opens the water screen.`}
-        style={({ pressed }) => [styles.waterRow, pressed && styles.pressed]}
+        feedback="highlight"
+        style={styles.waterRow}
+        pressedStyle={styles.pressed}
       >
-        <Icon name="water" size={18} color={color.accent} />
+        <Icon name="water" size={18} color={color.cold} />
         <Text style={[styles.body, styles.flex1]}>Water</Text>
         <Text style={styles.waterValue}>
           {ml(water.ml)} <Text style={styles.waterOf}>of {ml(water.target)}</Text>
         </Text>
         <Icon name="chevronRight" size={18} color={color.textFaint} />
-      </Pressable>
+      </Press>
 
       {prev.entries.length > 0 && day.entries.length === 0 ? (
         <PrimaryButton
@@ -132,7 +160,7 @@ export default function FoodScreen() {
               {entries.length ? <Text style={styles.mealKcal}>{Math.round(kcal)} kcal</Text> : null}
               <View style={styles.flex1} />
               {repeat ? (
-                <Pressable
+                <Press
                   onPress={() => {
                     const ids = repeatMeal(yesterday, slot, date);
                     toast(`Copied ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`, { label: 'Undo', onPress: () => deleteEntries(ids) });
@@ -140,17 +168,18 @@ export default function FoodScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`Repeat ${date === todayISO() ? "yesterday's" : `${fmtDayLabel(yesterday)}'s`} ${slot}`}
                   hitSlop={{ top: space.md, bottom: space.md, left: space.sm, right: space.sm }}
-                  style={({ pressed }) => pressed && styles.dim}
                 >
                   <Text style={styles.link}>Repeat {date === todayISO() ? 'yesterday' : fmtDayLabel(yesterday)}</Text>
-                </Pressable>
+                </Press>
               ) : null}
             </View>
             <View style={styles.meal}>
               {entries.map((e, i) => (
-                <Pressable
+                <Press
                   key={e.id}
-                  style={({ pressed }) => [styles.entry, i > 0 && styles.divider, pressed && styles.dim]}
+                  feedback="highlight"
+                  style={[styles.entry, i > 0 && styles.divider]}
+                  pressedStyle={styles.entryHeld}
                   accessibilityRole="button"
                   accessibilityLabel={`Edit ${e.label}`}
                   onPress={() => {
@@ -158,31 +187,37 @@ export default function FoodScreen() {
                     setEditing(e);
                   }}
                 >
-                  <Text style={styles.entryName} numberOfLines={2}>
-                    {fmtServings(e.servings)} × {unit(e.servingLabel)} · {e.label}
-                  </Text>
-                  <Text style={styles.entryMacro}>
-                    {Math.round(e.macros.kcal)} kcal{'   '}
-                    {Math.round(e.macros.protein)} g protein
-                  </Text>
-                </Pressable>
+                  <View style={styles.flex1}>
+                    <Text style={styles.entryName} numberOfLines={2}>
+                      {e.label}
+                    </Text>
+                    <Text style={styles.entryAmount}>
+                      {fmtServings(e.servings)} × {unit(e.servingLabel)}
+                    </Text>
+                  </View>
+                  <View style={styles.entryRight}>
+                    <Text style={styles.entryKcal}>{Math.round(e.macros.kcal)}</Text>
+                    <Text style={styles.entryMacro}>{Math.round(e.macros.protein)} g protein</Text>
+                  </View>
+                </Press>
               ))}
               {usual[slot].length > 0 ? (
                 <View style={[styles.usual, entries.length > 0 && styles.usualAfter]}>
                   {usual[slot].map((u) => (
-                    <Pressable
+                    <Press
                       key={`${u.foodId ?? ''}:${u.recipeId ?? ''}`}
                       onPress={() => addUsual(slot, u)}
                       accessibilityRole="button"
                       accessibilityLabel={`Add your usual ${u.label} to ${slot}`}
                       hitSlop={{ top: space.xs, bottom: space.xs }}
-                      style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
+                      style={styles.pill}
+                      pressedStyle={styles.pressed}
                     >
-                      <Icon name="plus" size={14} color={color.textMuted} />
+                      <Icon name="plus" size={14} color={color.text} />
                       <Text style={styles.pillText} numberOfLines={1}>
                         {u.label}
                       </Text>
-                    </Pressable>
+                    </Press>
                   ))}
                 </View>
               ) : null}
@@ -246,66 +281,42 @@ export default function FoodScreen() {
   );
 }
 
-/** A macro against its target, with the progress line under it. Protein leads, in accent. */
-function MacroTile({ label, value, target, unit: suffix = '', tone }: { label: string; value: number; target: number; unit?: string; tone?: 'accent' }) {
-  const pct = target > 0 ? Math.min(1, value / target) : 0;
-  return (
-    <View style={styles.tile} accessible accessibilityLabel={`${label}: ${Math.round(value)} of ${target}${suffix}`}>
-      <FitText style={[styles.tileValue, tone === 'accent' && styles.accent]} numberOfLines={1} minimumFontScale={0.8}>
-        {Math.round(value)}
-        <Text style={styles.tileOf}>
-          {' '}
-          / {target}
-          {suffix}
-        </Text>
-      </FitText>
-      <Text style={styles.tileLabel}>{label}</Text>
-      <View style={styles.track}>
-        <View style={[styles.fill, { width: `${pct * 100}%`, backgroundColor: tone === 'accent' ? color.accent : color.textMuted }]} />
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
-  tiles: { flexDirection: 'row', gap: space.md - 2, marginTop: space.md },
-  tile: { flex: 1, minWidth: 0, backgroundColor: color.surface, borderRadius: radius.button, borderWidth: 1, borderColor: color.border, padding: space.md + 2, gap: 2 },
-  tileValue: { ...font.title, fontSize: 24, lineHeight: 30, ...font.numeric, color: color.text },
-  tileOf: { ...font.label, fontSize: 16, fontWeight: '600', color: color.textFaint, letterSpacing: 0 },
-  accent: { color: color.accent },
-  tileLabel: { ...font.caption, fontSize: 12, color: color.textMuted },
-  track: { height: 4, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, marginTop: space.sm, overflow: 'hidden' },
-  fill: { height: 4, borderRadius: radius.pill },
-  secondary: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: space.md },
-  note: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.xs },
+  intake: { gap: space.lg, marginTop: space.lg },
+  minor: { flexDirection: 'row', gap: space.xl, marginTop: -space.xs },
+  secondary: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
+  secondaryStrong: { color: color.text, fontWeight: '600' },
+  note: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: -space.sm },
   waterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md - 2,
     minHeight: hit.gym,
-    marginTop: space.md,
-    paddingHorizontal: space.lg,
-    backgroundColor: color.surface,
+    marginTop: space.lg,
+    paddingHorizontal: space.md,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: color.border,
   },
   pressed: { backgroundColor: color.surfaceHigh },
-  dim: { opacity: 0.6 },
-  body: { ...font.label, color: color.text, fontWeight: '400' },
-  waterValue: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text },
-  waterOf: { fontWeight: '400', color: color.textFaint },
+  body: { ...font.label, color: color.text, fontWeight: '500' },
+  waterValue: { ...font.label, fontWeight: '700', fontVariant: ['tabular-nums'], color: color.cold },
+  waterOf: { fontWeight: '400', color: color.textMuted },
   gap: { marginTop: space.lg },
   mealHead: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginTop: space.xl, marginBottom: space.sm, minHeight: 28 },
-  mealTitle: { ...font.heading, fontSize: 18, fontWeight: '700', color: color.text },
-  mealKcal: { ...font.caption, ...font.numeric, color: color.textFaint },
-  link: { ...font.caption, fontSize: 14, fontWeight: '600', color: color.accent },
-  meal: { backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border, paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: space.md + 2 },
-  entry: { minHeight: hit.default, paddingVertical: space.sm, justifyContent: 'center', gap: 2 },
+  mealTitle: { ...font.heading, fontSize: 19, fontWeight: '700', color: color.text },
+  mealKcal: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
+  link: { ...font.caption, fontSize: 14, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
+  meal: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border, paddingBottom: space.sm },
+  entry: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.sm },
+  entryHeld: { backgroundColor: color.surface },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  entryName: { ...font.label, fontSize: 14, fontWeight: '400', color: color.text },
-  entryMacro: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint },
+  entryName: { ...font.label, fontSize: 15, fontWeight: '500', color: color.text },
+  entryAmount: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
+  entryRight: { alignItems: 'flex-end' },
+  entryKcal: { ...font.measure, fontSize: 20, lineHeight: 24, color: color.text },
+  entryMacro: { ...font.caption, fontSize: 12, fontVariant: ['tabular-nums'], color: color.textMuted },
   usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2, paddingTop: space.md },
   usualAfter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
   pill: {
@@ -314,12 +325,12 @@ const styles = StyleSheet.create({
     gap: space.xs + 2,
     height: 40,
     paddingHorizontal: space.md,
-    borderRadius: radius.pill,
+    borderRadius: radius.button,
     borderWidth: 1,
     borderColor: color.border,
     maxWidth: '100%',
   },
   pillText: { ...font.caption, fontWeight: '500', color: color.text, flexShrink: 1 },
-  addFood: { marginTop: space.md, backgroundColor: color.surfaceHigh },
+  addFood: { marginTop: space.md },
   stack: { gap: space.md, paddingBottom: space.lg },
 });

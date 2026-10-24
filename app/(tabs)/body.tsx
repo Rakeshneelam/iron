@@ -58,7 +58,7 @@ export default function BodyScreen() {
       <ListRow
         left={<Icon name="body" size={20} color={color.textMuted} />}
         title="Profile & goals"
-        sub={`${settings.name || 'Your details'} · ${settings.age}, ${settings.heightCm} cm — used for calorie and water targets.`}
+        sub={`${settings.name || 'Your details'}, ${settings.age}, ${settings.heightCm} cm. Used for calorie and water targets.`}
         onPress={() => router.push('/settings/profile')}
       />
     </ListCard>

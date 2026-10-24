@@ -63,7 +63,7 @@ function WeighInForm({ entry, onClose }: { entry: WeighEntry; onClose: () => voi
   return (
     <View style={styles.stack}>
       <DateStepper value={date} onChange={goTo} />
-      <WeightField draft={draft} onChange={setDraft} pendingLabel="Will save when you tap Save" size="gym" />
+      <WeightField key={date} date={date} draft={draft} onChange={setDraft} pendingLabel="Will save when you tap Save" size="hero" />
       <Text style={styles.hint}>{"Same time each morning, before food. One reading per day — saving replaces that day's."}</Text>
       <PrimaryButton
         label="Save"

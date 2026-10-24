@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, Icon, IconButton, ListCard, ListRow, MiniBars, Pill, PrimaryButton, Ring, Screen, SectionHeader, Sheet, Stepper, toast } from '@/components';
+import { Icon, IconButton, ListCard, ListRow, MiniBars, PrimaryButton, Screen, SectionHeader, Sheet, Stepper, toast, useNow } from '@/components';
 import { DateStepper, useSelectedDate } from '@/components/DateStepper';
 import { Press } from '@/components/Press';
 import { useLive } from '@/db/live';
@@ -15,7 +15,8 @@ import { ml } from '@/lib/format';
 import { hydrationPlan } from '@/services/hydration';
 import { rescheduleAll } from '@/services/notifications';
 import { WaterTargetSheet } from '@/features/water/TargetSheet';
-import { color, font, radius, space } from '@/theme/tokens';
+import { WaterLevel } from '@/features/water/WaterLevel';
+import { color, font, hit, motion, radius, space } from '@/theme/tokens';
 
 const QUICK = [
   { ml: 250, label: 'glass' },
@@ -53,6 +54,14 @@ export default function WaterScreen() {
    */
   const [sheet, setSheet] = useState<AmountTarget | null>(params.log === 'custom' ? { mode: 'add' } : null);
 
+  const now = useNow();
+  /** The entry just logged, drawn hot on the level for `motion.cool`. */
+  const [fresh, setFresh] = useState<string | null>(null);
+  useEffect(() => {
+    if (!fresh) return;
+    const t = setTimeout(() => setFresh(null), motion.cool);
+    return () => clearTimeout(t);
+  }, [fresh]);
   const entries = useLive(() => getDayEntries(date), ['water_log'], [date]);
   const dayTotal = useLive(() => getDayTotal(date), ['water_log'], [date]);
   const plan = useLive(() => hydrationPlan(), ['water_log', 'setting', 'weigh_in', 'session']);
@@ -65,6 +74,7 @@ export default function WaterScreen() {
     // Only today's total can move today's schedule; a back-dated drink cannot.
     if (isToday) void rescheduleAll();
     if (!row) return;
+    setFresh(row.id);
     toast(`Added ${ml(amount)}${isToday ? '' : ` to ${fmtDayLabel(date)}`}`, {
       label: 'Undo',
       onPress: () => {
@@ -83,8 +93,9 @@ export default function WaterScreen() {
   const daysHit = history.filter((d) => d.ml >= target).length;
   const avg = logged.length ? logged.reduce((a, d) => a + d.ml, 0) / logged.length : 0;
   const litres = dayTotal >= 1000 ? { n: (Math.round(dayTotal / 100) / 10).toString(), u: 'L' } : { n: String(Math.round(dayTotal)), u: 'ml' };
-  const pace = !isToday ? null : reached ? { label: 'Target reached', tone: 'positive' as const } : plan.ahead ? { label: 'Ahead of pace', tone: 'positive' as const } : { label: 'Behind pace', tone: 'muted' as const };
   const gapMl = Math.round(Math.abs(plan.consumedMl - plan.expectedByNowMl) / 10) * 10;
+  /** Where the level stands against the pace line, in millilitres — never a grade. */
+  const pace = !isToday ? null : reached ? 'Target reached' : plan.ahead ? `${ml(gapMl)} ahead of the pace line` : `${ml(gapMl)} under the pace line`;
   const remindersOn = settings.reminders.water.on;
   const reminderTitle = !remindersOn ? 'Reminders are off' : reached || plan.ahead ? 'Reminders are quiet' : next ? `Next reminder ${fmtClockOfDay(next.atMinutes)}` : 'No more reminders today';
   const reminderText = !remindersOn
@@ -110,22 +121,26 @@ export default function WaterScreen() {
     >
       <DateStepper value={date} onChange={setDate} />
 
-      <View style={styles.center}>
-        <Ring progress={target > 0 ? dayTotal / target : 0} size={248} thickness={16} tone={isToday && reached ? 'positive' : 'accent'}>
-          <Text style={styles.big} numberOfLines={1}>
-            {litres.n}
-            <Text style={styles.bigUnit}> {litres.u}</Text>
-          </Text>
-          <Text style={styles.of}>
-            of {ml(target)} {isToday ? 'today' : '(current target)'}
-          </Text>
-          {pace ? (
-            <View style={styles.pace}>
-              <Pill label={pace.label} tone={pace.tone} />
-            </View>
-          ) : null}
-        </Ring>
+      {/* The figure, then the level it is the top of. */}
+      <View style={styles.readout}>
+        <Text style={styles.big} numberOfLines={1}>
+          {litres.n}
+          <Text style={styles.bigUnit}> {litres.u}</Text>
+        </Text>
+        <View style={styles.readoutSide}>
+          <Text style={styles.of}>of {ml(target)}{isToday ? '' : ' (current target)'}</Text>
+          {pace ? <Text style={[styles.pace, isToday && (reached || plan.ahead) && styles.paceAhead]}>{pace}</Text> : null}
+        </View>
       </View>
+
+      <WaterLevel
+        steps={entries.map((e) => ({ id: e.id, at: minutesSinceMidnight(new Date(e.loggedAt)), ml: e.ml }))}
+        target={target}
+        wake={plan.wakeMinutes}
+        sleep={plan.sleepMinutes}
+        now={isToday ? minutesSinceMidnight(now) : null}
+        fresh={fresh}
+      />
 
       <View style={styles.quickRow}>
         {QUICK.map((q) => (
@@ -134,23 +149,24 @@ export default function WaterScreen() {
             onPress={() => log(q.ml)}
             accessibilityRole="button"
             accessibilityLabel={`Add ${ml(q.ml)} to ${isToday ? 'today' : fmtDayLabel(date)}`}
+            touchStyle={styles.flex1}
             style={styles.quick}
             pressedStyle={styles.pressed}
           >
-            <Text style={styles.quickAmount}>{q.ml}</Text>
-            <Text style={styles.quickLabel}>ml · {q.label}</Text>
+            <Text style={styles.quickAmount}>+{q.ml}</Text>
+            <Text style={styles.quickLabel}>ml, {q.label}</Text>
           </Press>
         ))}
       </View>
 
       {isToday ? (
-        <Card style={styles.reminders}>
-          <View style={styles.rowBetween}>
+        <View style={styles.reminders}>
+          <Icon name="bell" size={18} color={remindersOn ? color.text : color.textFaint} />
+          <View style={styles.flex1}>
             <Text style={styles.cardTitle}>{reminderTitle}</Text>
-            <Text style={styles.faint}>{remindersOn ? 'On' : 'Off'}</Text>
+            <Text style={styles.hint}>{reminderText}</Text>
           </View>
-          <Text style={styles.hint}>{reminderText}</Text>
-        </Card>
+        </View>
       ) : null}
 
       <SectionHeader title={isToday ? 'Today' : fmtDayLabel(date)} />
@@ -171,16 +187,15 @@ export default function WaterScreen() {
       </ListCard>
 
       <SectionHeader title="Last 14 days" hint={plan.breakdown} />
-      <Card>
-        <MiniBars
-          data={history.map((d) => ({ label: WEEKDAY[parseISODate(d.date).getDay()] ?? '', value: d.ml }))}
-          target={target}
-          highlight={history.length - 1}
-        />
-        <Text style={styles.hint}>
-          {daysHit} of 14 days at or above the current target{logged.length ? ` · average ${ml(avg)} on days you logged` : ''}
-        </Text>
-      </Card>
+      <MiniBars
+        data={history.map((d) => ({ label: WEEKDAY[parseISODate(d.date).getDay()] ?? '', value: d.ml }))}
+        target={target}
+        highlight={history.length - 1}
+        ink={color.cold}
+      />
+      <Text style={styles.hint}>
+        {daysHit} of 14 days at or above the current target{logged.length ? `. On the days you logged, ${ml(avg)} on average.` : '.'}
+      </Text>
 
       <AmountSheet sheet={sheet} date={date} onClose={() => setSheet(null)} onAdd={log} />
       <WaterTargetSheet visible={targetSheet} onClose={() => setTargetSheet(false)} />
@@ -256,32 +271,31 @@ function AmountForm({ sheet, onClose, onAdd, date }: AmountProps & { sheet: Amou
 }
 
 const styles = StyleSheet.create({
+  flex1: { flex: 1 },
   headerBtns: { flexDirection: 'row', alignItems: 'center' },
-  center: { alignItems: 'center', marginVertical: space.lg },
-  big: { ...font.hero, fontSize: 56, lineHeight: 60, ...font.numeric, color: color.text },
-  bigUnit: { ...font.title, fontSize: 26, color: color.textMuted, letterSpacing: 0 },
-  of: { ...font.caption, fontSize: 14, color: color.textMuted },
-  pace: { marginTop: space.sm },
-  quickRow: { flexDirection: 'row', gap: space.md - 2 },
+  readout: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md, marginTop: space.lg, marginBottom: space.md },
+  big: { ...font.display, fontSize: 64, lineHeight: 66, color: color.text },
+  bigUnit: { ...font.measure, fontSize: 28, fontWeight: '600', color: color.textMuted, letterSpacing: 0 },
+  readoutSide: { flex: 1, paddingBottom: space.sm, gap: 2 },
+  of: { ...font.label, fontVariant: ['tabular-nums'], color: color.textMuted },
+  pace: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
+  paceAhead: { color: color.cold },
+  quickRow: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
   quick: {
-    flex: 1,
-    minHeight: 72,
+    minHeight: hit.gym + space.md,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
+    gap: 2,
+    borderRadius: radius.button,
     borderWidth: 1,
-    borderColor: color.border,
+    borderColor: color.cold,
   },
-  pressed: { backgroundColor: color.surfaceHigh },
-  quickAmount: { ...font.heading, fontWeight: '700', ...font.numeric, color: color.text },
-  quickLabel: { ...font.caption, fontSize: 12, color: color.textFaint },
-  reminders: { marginTop: space.lg, marginBottom: 0, gap: space.xs },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.sm },
-  cardTitle: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text, flex: 1 },
-  faint: { ...font.caption, color: color.textFaint },
-  amount: { ...font.label, fontSize: 14, fontWeight: '700', ...font.numeric, color: color.text },
+  pressed: { backgroundColor: color.coldSoft },
+  quickAmount: { ...font.measure, fontSize: 24, lineHeight: 28, color: color.cold },
+  quickLabel: { ...font.caption, fontSize: 12, color: color.textMuted },
+  reminders: { flexDirection: 'row', gap: space.md, alignItems: 'flex-start', marginTop: space.xl },
+  cardTitle: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text },
+  amount: { ...font.label, fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'], color: color.text },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   stack: { gap: space.md, paddingBottom: space.lg },
   row: { flexDirection: 'row', justifyContent: 'center' },

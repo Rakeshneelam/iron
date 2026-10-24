@@ -166,7 +166,7 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
                   key={c.date}
                   divider={i > 0}
                   title={fmtDayLabel(c.date)}
-                  sub={parts.length ? parts.join(' · ') : 'Not recorded'}
+                  sub={parts.length ? parts.join(', ') : 'Not recorded'}
                   onPress={() => setEditing(c.date)}
                   accessibilityLabel={`Check-in for ${fmtDayLabel(c.date)}: ${parts.length ? parts.join(', ') : 'nothing recorded'}. Tap to correct.`}
                 />
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   readyTitle: { ...font.titleSm, color: color.text, flexShrink: 1 },
   muted: { ...font.caption, color: color.textMuted },
   linkWrap: { alignSelf: 'flex-start' },
-  link: { ...font.caption, fontWeight: '600', color: color.accent },
+  link: { ...font.caption, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
   dim: { opacity: 0.6 },
   legend: { ...font.caption, fontSize: 12, color: color.textFaint },
   muscle: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 44 },
