@@ -437,6 +437,6 @@ const styles = StyleSheet.create({
   listNameDone: { color: color.textMuted },
   listSub: { ...font.caption, fontSize: 12, color: color.textFaint },
   mark: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 2, borderColor: color.border, alignItems: 'center', justifyContent: 'center' },
-  markDone: { backgroundColor: color.positive, borderColor: color.positive },
+  markDone: { backgroundColor: color.text, borderColor: color.text },
   markNow: { borderColor: color.accent },
 });

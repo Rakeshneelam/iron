@@ -434,7 +434,6 @@ export default function Today() {
         */}
         <Headline
           kicker={`${done.status === 'completed' ? 'Done' : 'Logged, partly'} at ${fmtClockOfDay(at.getHours() * 60 + at.getMinutes())}`}
-          kickerTone="positive"
           title={state.doneDay?.label ?? 'Workout'}
         />
         <TitleBlock

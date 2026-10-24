@@ -14,11 +14,11 @@
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { create } from 'zustand';
 
-import { ChipRow, EmptyState, Icon, IconButton, Pill, TextField } from '@/components';
+import { ChipRow, EmptyState, Icon, IconButton, Pill, Press, TextField } from '@/components';
 import { useLive } from '@/db/live';
 import { searchWorkoutsPage, type HistoryCursor, type HistoryRow } from '@/db/repositories/progress';
 import { isNoTraining } from '@/db/repositories/sessions';
@@ -189,11 +189,13 @@ export default function HistoryScreen() {
             // "0 sets · 0 min" under a rest day is noise: the day itself is the entry.
             const marked = isNoTraining(r.session.status);
             return (
-              <Pressable
+              <Press
                 onPress={() => router.push(`/session/summary/${r.session.id}`)}
                 accessibilityRole="button"
                 accessibilityLabel={`${name}, ${fmtDayLabel(r.session.date)}${marked ? '' : `, ${r.sets} sets`}. Open it.`}
-                style={({ pressed }) => [styles.row, first && styles.rowFirst, last && styles.rowLast, !first && styles.divider, pressed && styles.pressed]}
+                feedback="highlight"
+                style={[styles.row, first && styles.rowFirst, last && styles.rowLast, !first && styles.divider]}
+                pressedStyle={styles.pressed}
               >
                 <View style={styles.flex1}>
                   <Text style={styles.name} numberOfLines={1}>
@@ -204,6 +206,8 @@ export default function HistoryScreen() {
                       .filter(Boolean)
                       .join(', ')}
                   </Text>
+                  {/* The workout as its sets — the same marks the session rail draws. */}
+                  <SetMarks sets={r.sets} status={r.session.status} />
                   {/* The reason you searched, on the row itself, so you never have to open it. */}
                   {r.top ? (
                     <Text style={styles.top}>
@@ -213,7 +217,7 @@ export default function HistoryScreen() {
                   ) : null}
                 </View>
                 {r.session.status !== 'completed' ? <Pill label={STATUS_LABEL[r.session.status]} tone={STATUS_TONE[r.session.status]} /> : null}
-              </Pressable>
+              </Press>
             );
           }}
         />
@@ -222,7 +226,34 @@ export default function HistoryScreen() {
   );
 }
 
+/** Marks drawn before the rest become a number: a long workout should not out-shout the row's name. */
+const MAX_MARKS = 28;
+
+/**
+ * A workout's sets as marks: solid because they were logged; a cancelled one's in
+ * outline, because cancelling never counts as done (AGENTS §1.4); a day off as one
+ * short rule. Hidden from screen readers — the row's label already says it in words.
+ */
+function SetMarks({ sets, status }: { sets: number; status: HistoryRow['session']['status'] }) {
+  if (status === 'rest' || status === 'skipped') return <View style={styles.offMark} importantForAccessibility="no-hide-descendants" />;
+  if (sets === 0) return null;
+  const open = status === 'cancelled';
+  return (
+    <View style={styles.marks} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+      {Array.from({ length: Math.min(sets, MAX_MARKS) }, (_, i) => (
+        <View key={i} style={[styles.mark, open && styles.markOpen]} />
+      ))}
+      {sets > MAX_MARKS ? <Text style={styles.more}>+{sets - MAX_MARKS}</Text> : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  marks: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2, marginTop: space.xs + 2 },
+  mark: { width: 5, height: 9, borderRadius: 1, backgroundColor: color.text, opacity: 0.85 },
+  markOpen: { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.textFaint, opacity: 1 },
+  offMark: { width: 14, height: 2, borderRadius: 1, backgroundColor: color.textFaint, marginTop: space.sm },
+  more: { ...font.caption, fontSize: 11, lineHeight: 12, fontVariant: ['tabular-nums'], color: color.textFaint, marginLeft: 2 },
   root: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   padded: { paddingHorizontal: layout.screenPadding },
@@ -242,7 +273,7 @@ const styles = StyleSheet.create({
     borderColor: color.border,
   },
   input: { flex: 1, minHeight: hit.gym, backgroundColor: 'transparent', paddingHorizontal: 0 },
-  month: { ...font.eyebrow, color: color.textFaint, marginTop: space.lg, marginBottom: space.sm },
+  month: { ...font.label, fontSize: 14, fontWeight: '700', color: color.text, marginTop: space.lg, marginBottom: space.sm },
   // One card per month, drawn by its rows: the first rounds the top, the last the bottom.
   row: {
     flexDirection: 'row',

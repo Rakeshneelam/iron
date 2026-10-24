@@ -217,7 +217,7 @@ export default function ProgressScreen() {
         action about today filed under a date three months ago (UX-09).
       */}
       {!isThisWeek ? null : deloadRunning && deloadSince ? (
-        <Card tone="positive" style={styles.gapTop}>
+        <Card style={styles.gapTop}>
           <Text style={styles.cardTitle}>Deload week in progress</Text>
           <Text style={styles.muted}>Half the sets, a bit lighter. Normal targets return {fmtDayLabel(addDays(deloadSince, 7))}.</Text>
           {/* Reversible, so it happens at once with an Undo rather than behind an

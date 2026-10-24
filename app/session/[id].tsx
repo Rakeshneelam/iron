@@ -901,7 +901,7 @@ export default function SessionScreen() {
             */}
             {done && !addingExtra ? (
               <View style={styles.doneRow}>
-                <Icon name="check" size={16} color={color.positive} strokeWidth={3} />
+                <Icon name="check" size={16} color={color.text} strokeWidth={3} />
                 <Text style={styles.doneText}>
                   All {exWork.length} logged
                   {top && measure === 'reps' && top.weight > 0 ? `. Top set ${kgNum(top.weight)} × ${top.reps}, estimated 1RM ${Math.round(e1RM(top.weight, top.reps, top.rir))} kg` : ''}
@@ -931,7 +931,7 @@ export default function SessionScreen() {
                         sub={w ? `${w.pct}%, logged` : 'logged'}
                         tone="muted"
                         chevron={false}
-                        right={<Icon name="check" size={18} color={color.positive} />}
+                        right={<Icon name="check" size={18} color={color.textMuted} />}
                         onPress={() => setEditing(saved)}
                         accessibilityLabel={`Warm-up ${i + 1}: ${setText(saved.weight, saved.reps)}. Tap to edit.`}
                       />
@@ -1245,7 +1245,12 @@ function Tool({ icon, label, a11y, on, onPress }: { icon: IconName; label: strin
   );
 }
 
-/** Done is a filled tick, the current one a ring with a dot, the rest an empty ring. */
+/**
+ * In the app's marks: done is solid chalk with a tick, the one you are on is a heat
+ * ring with a dot (the live thing), started is a chalk ring, the rest an open faint
+ * ring, skipped a short rule. Finishing is the normal case, so it is not green —
+ * green is kept for a best.
+ */
 function StatusMark({ state, now }: { state: ExState; now: boolean }) {
   if (state === 'done') {
     return (
@@ -1254,7 +1259,8 @@ function StatusMark({ state, now }: { state: ExState; now: boolean }) {
       </View>
     );
   }
-  const ring = now || state === 'partial' ? color.accent : color.border;
+  if (state === 'skipped' && !now) return <View style={styles.markSkipped} />;
+  const ring = now ? color.accent : state === 'partial' ? color.text : color.textFaint;
   return <View style={[styles.mark, { borderColor: ring }]}>{now ? <View style={styles.markDot} /> : null}</View>;
 }
 
@@ -1340,7 +1346,8 @@ const styles = StyleSheet.create({
     borderTopColor: color.border,
   },
   mark: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  markDone: { backgroundColor: color.positive, borderColor: color.positive },
+  markDone: { backgroundColor: color.text, borderColor: color.text },
+  markSkipped: { width: 24, alignItems: 'center', justifyContent: 'center', height: 2, borderRadius: 1, backgroundColor: color.textFaint },
   markDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: color.accent },
   menuEnd: { gap: space.sm, marginTop: space.sm, paddingBottom: space.md },
   restOnlyDock: { gap: space.sm },
