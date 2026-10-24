@@ -187,7 +187,7 @@ export function DrillStage(p: DrillStageProps) {
    * one big button on screen reading as a dead end.
    */
   const wouldFinish = isDone ? done.size >= items.length : done.size + 1 >= items.length;
-  const doneLabel = wouldFinish ? copy.done : isDone ? 'Next drill' : 'Done · next drill';
+  const doneLabel = wouldFinish ? copy.done : isDone ? 'Next drill' : 'Done, next drill';
 
   return (
     <View style={styles.flex}>
@@ -197,7 +197,7 @@ export function DrillStage(p: DrillStageProps) {
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
         <View style={styles.titleBlock}>
           <Text style={styles.eyebrow}>
-            {PHASE_LABEL[item.phase]} · {idx + 1} of {items.length}
+            {PHASE_LABEL[item.phase]}, {idx + 1} of {items.length}
           </Text>
           <Text style={styles.name} numberOfLines={2}>
             {item.drill.name}
@@ -211,7 +211,7 @@ export function DrillStage(p: DrillStageProps) {
             itself, at the size the weight on the exercise screen is set in — what
             you have to read across a gym floor is the figure, not its label. */}
         {total > 0 ? (
-          <Countdown timer={timer} total={total} size={192} caption={item.dose.perSide ? 'Hold · each side' : 'Hold'} note={sideNote} />
+          <Countdown timer={timer} total={total} size={192} caption={item.dose.perSide ? 'Hold, each side' : 'Hold'} note={sideNote} />
         ) : (
           <View style={styles.repsCard}>
             <Text style={styles.repsCaption}>{item.dose.perSide ? 'Each side' : 'Reps'}</Text>
@@ -243,7 +243,7 @@ export function DrillStage(p: DrillStageProps) {
             {demo ? <FigureDemo pattern={demo} size={132} /> : null}
             {item.drill.cues.map((c) => (
               <View key={c} style={styles.cueRow}>
-                <Icon name="check" size={14} color={color.accent} strokeWidth={2.4} />
+                <Icon name="check" size={14} color={color.text} strokeWidth={2.4} />
                 <Text style={styles.cue}>{c}</Text>
               </View>
             ))}
@@ -280,7 +280,7 @@ export function DrillStage(p: DrillStageProps) {
         <PrimaryButton label={copy.skip} tone="ghost" onPress={p.onSkip} />
       </View>
 
-      <Sheet visible={list} onClose={() => setList(false)} title={`${copy.heading} · ${p.totalLabel}`}>
+      <Sheet visible={list} onClose={() => setList(false)} title={`${copy.heading}, ${p.totalLabel}`}>
         <Text style={styles.sheetHint}>{copy.hint}</Text>
         {p.modes ? (
           <View style={styles.sheetModes}>
@@ -311,7 +311,7 @@ export function DrillStage(p: DrillStageProps) {
                     {x.drill.name}
                   </Text>
                   <Text style={styles.listSub} numberOfLines={1}>
-                    {PHASE_LABEL[x.phase]} · {doseLabel(x.dose)}
+                    {PHASE_LABEL[x.phase]}, {doseLabel(x.dose)}
                   </Text>
                 </View>
               </Press>
@@ -339,7 +339,7 @@ function Header({
           {copy.heading}
         </Text>
         <Text style={styles.headerMeta} numberOfLines={1}>
-          {title} · {totalLabel} · {count}
+          {title}, {totalLabel}, {count}
         </Text>
       </View>
       {/*

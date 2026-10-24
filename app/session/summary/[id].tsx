@@ -2,13 +2,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Pill, PrimaryButton, Screen, SectionHeader, StatTile, TextField, toast } from '@/components';
+import { ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, Pill, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { countFinishedWorkouts, recentWorkouts, sessionRecords } from '@/db/repositories/progress';
 import { deleteSession, getSessionSummary, isNoTraining, reopenSession, setSessionFeedback, type SetRow } from '@/db/repositories/sessions';
 import { workoutMilestone } from '@/engine/records';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
+import { SessionScore } from '@/features/session/SessionScore';
 import { fmtSet } from '@/features/session/prescription';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
 import { BatteryCard } from '@/features/settings/BatteryCard';
@@ -176,9 +177,14 @@ export default function SummaryScreen() {
       ) : (
         <>
           <View style={styles.tiles}>
-            <StatTile label="Hard sets" value={String(summary.hardSets)} />
-            <StatTile label="Volume, kg" value={summary.totalTonnage >= 10000 ? `${(summary.totalTonnage / 1000).toFixed(1)}k` : String(Math.round(summary.totalTonnage))} />
-            <StatTile label="New bests" value={String(records.length)} tone={records.length ? 'positive' : 'default'} />
+            <TitleBlock
+              cells={[
+                { label: 'Sets', value: String(summary.hardSets) },
+                { label: 'Lifted', value: summary.totalTonnage >= 10000 ? `${(summary.totalTonnage / 1000).toFixed(1)}k` : String(Math.round(summary.totalTonnage)), unit: 'kg' },
+                { label: 'Time', value: String(summary.durationMin), unit: 'min' },
+                { label: 'New bests', value: String(records.length), tone: records.length ? ('positive' as const) : undefined },
+              ]}
+            />
           </View>
           {/* Seconds held are not reps: timed work gets its own sentence, never a sum with reps (UX-09). */}
           {totalSeconds > 0 ? (
@@ -189,24 +195,38 @@ export default function SummaryScreen() {
           {summary.progress.planned > 0 ? (
             <Text style={styles.note}>
               {summary.progress.done} of {summary.progress.planned} planned exercises done
-              {summary.progress.skipped ? ` · ${summary.progress.skipped} skipped` : ''}
+              {summary.progress.skipped ? `, ${summary.progress.skipped} skipped` : ''}
             </Text>
           ) : null}
 
+          {/*
+            The hour as it went: every set at the minute it was logged, a lane per
+            exercise (features/session/SessionScore). The list below has the numbers;
+            this has the shape.
+          */}
+          <SectionHeader title="How it went" />
+          <SessionScore
+            lanes={summary.perExercise.map((e) => ({ exerciseId: e.exerciseId, name: e.name, rows: e.rows, isPR: e.isPR }))}
+            startedAt={s.startedAt}
+            endedAt={s.endedAt}
+          />
+
+          {/*
+            A best is a fact with a number attached, set as a datum would be: a green
+            rule and the lifts that crossed it. No trophy, no confetti (AGENTS §6).
+          */}
           {records.length ? (
-            <Card tone="positive" style={styles.records}>
-              <View style={styles.row}>
-                <Icon name="star" size={18} color={color.positive} />
-                <Text style={[styles.name, styles.flex1]}>
-                  {records.length === 1 ? 'One lift went past its best' : `${records.length} lifts went past their best`}
-                </Text>
-              </View>
+            <View style={styles.records}>
+              <Text style={styles.recordsTitle}>
+                {records.length === 1 ? 'One lift went past its best' : `${records.length} lifts went past their best`}
+              </Text>
               {records.map((r) => (
                 <Text key={r.exerciseId} style={styles.recordLine}>
-                  <Text style={styles.recordName}>{r.name}</Text> — {r.events.map((e) => e.label).join(', ')}
+                  <Text style={styles.recordName}>{r.name}</Text>
+                  {`  ${r.events.map((e) => e.label).join(', ')}`}
                 </Text>
               ))}
-            </Card>
+            </View>
           ) : null}
 
           {perExercise}
@@ -248,7 +268,7 @@ export default function SummaryScreen() {
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   pills: { flexDirection: 'row', gap: space.sm },
-  tiles: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
+  tiles: { marginTop: space.lg },
   note: { ...font.label, color: color.textMuted, marginTop: space.md },
   input: {
     ...font.body,
@@ -260,8 +280,9 @@ const styles = StyleSheet.create({
     minHeight: hit.gym,
     marginTop: space.md,
   },
-  records: { gap: space.sm },
-  recordLine: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted },
+  records: { gap: space.xs, marginTop: space.lg, borderLeftWidth: 2, borderLeftColor: color.positive, paddingLeft: space.md },
+  recordsTitle: { ...font.label, fontWeight: '700', color: color.positive },
+  recordLine: { ...font.caption, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'], color: color.textMuted },
   recordName: { color: color.text, fontWeight: '600' },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm, minHeight: hit.gym },
   setRow: {

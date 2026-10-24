@@ -87,7 +87,7 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onStart }: RestTime
     >
       <Icon name="timer" size={16} color={color.textFaint} />
       <Text style={styles.idleText} numberOfLines={1}>
-        Rest {fmtClock(seconds)} <Text style={styles.idleHint}>{autoStart ? 'starts when you log a set' : '· tap to start now'}</Text>
+        Rest {fmtClock(seconds)} <Text style={styles.idleHint}>{autoStart ? 'starts when you log a set' : ', tap to start now'}</Text>
       </Text>
     </Pressable>
   );

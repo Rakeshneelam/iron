@@ -5,6 +5,7 @@ import { ChipRow, Chips } from '@/components/ChipRow';
 import { Icon } from '@/components/Icon';
 import { Press } from '@/components/Press';
 import { PrimaryButton } from '@/components/PrimaryButton';
+import type { RuleProps } from '@/components/Rule';
 import { Stepper } from '@/components/Stepper';
 import { color, family, font, hit, material, radius, space } from '@/theme/tokens';
 
@@ -79,9 +80,14 @@ export interface SetControlsProps {
   /** The load field's label and unit; a null label hides it (cardio). */
   weightLabel?: string | null;
   weightSuffix?: string;
-  /** Under each number, inside its card: today's target, or the way back to it. */
-  weightFooter?: ReactNode;
-  repsFooter?: ReactNode;
+  /**
+   * The rule under each number: last time solid, the plan hollow (components/Rule).
+   * `context` is the same facts in words, for a screen reader.
+   */
+  weightRule?: Pick<RuleProps, 'marks' | 'band' | 'major'>;
+  repsRule?: Pick<RuleProps, 'marks' | 'band' | 'major'>;
+  weightContext?: string;
+  repsContext?: string;
   /** Hide the effort chips (cardio). */
   showEffort?: boolean;
   onWeight: (v: number) => void;
@@ -118,14 +124,36 @@ export function SetControls(p: SetControlsProps) {
   return (
     <View style={styles.wrap}>
       {weightLabel !== null ? (
-        <Stepper label={weightLabel} suffix={p.weightSuffix} footer={p.weightFooter} value={p.weight} step={p.step} min={0} max={500} size="hero" onChange={p.onWeight} />
+        <Stepper
+          label={weightLabel}
+          suffix={p.weightSuffix}
+          rule={p.weightRule ?? {}}
+          context={p.weightContext}
+          value={p.weight}
+          step={p.step}
+          min={0}
+          max={500}
+          size="hero"
+          onChange={p.onWeight}
+        />
       ) : null}
       {unit === 'min' ? (
-        <Stepper label="Minutes" footer={p.repsFooter} value={Math.round(p.reps / 60)} step={1} min={1} max={180} size="hero" onChange={(v) => p.onReps(v * 60)} />
+        <Stepper
+          label="Minutes"
+          rule={p.repsRule ?? {}}
+          context={p.repsContext}
+          value={Math.round(p.reps / 60)}
+          step={1}
+          min={1}
+          max={180}
+          size="hero"
+          onChange={(v) => p.onReps(v * 60)}
+        />
       ) : (
         <Stepper
           label={unit === 'sec' ? 'Seconds' : 'Reps'}
-          footer={p.repsFooter}
+          rule={p.repsRule ?? {}}
+          context={p.repsContext}
           value={p.reps}
           step={unit === 'sec' ? 5 : 1}
           min={0}
