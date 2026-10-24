@@ -17,14 +17,20 @@
       "android": {
         "buildType": "apk"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "env": {
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "armeabi-v7a,arm64-v8a"
+      }
     },
     "production": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       },
-      "environment": "production"
+      "environment": "production",
+      "env": {
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "armeabi-v7a,arm64-v8a"
+      }
     }
   }
 }
