@@ -587,3 +587,136 @@ function nutritionWeek(weekStart: string, end: string, targetProteinG: number): 
     targetProteinG,
   };
 }
+
+/* ============================ the long record =========================== */
+
+export interface WeekRecord {
+  weekStart: string;
+  /** Workouts that happened: completed or partly. */
+  trained: number;
+  /** Planned workouts marked as missed. Shown, never scored. */
+  missed: number;
+  /** Days taken off on purpose. */
+  rest: number;
+  /** Working sets logged. */
+  sets: number;
+  /** Smoothed bodyweight at the week's end, once any reading exists by then. */
+  trend: number | null;
+  /** Days with any food logged, and their mean kcal. Blank days are absent, never zero. */
+  foodDays: number;
+  avgKcal: number | null;
+  /** Days with any water logged, and how many reached `waterTargetMl`. */
+  waterDays: number;
+  waterHit: number;
+}
+
+/**
+ * Many weeks at once, for Progress's long record — in five queries, whatever the
+ * span. `weekSummary` per week would be ~10 queries each plus a full bodyweight
+ * trend every time, which on twelve weeks is the slow screen docs/05 forbids.
+ *
+ * Every figure is a count or a mean of what was logged. Water is compared with the
+ * target in force now, because no historical target was ever stored — the screen
+ * says so rather than pretending otherwise.
+ */
+export function weeksRecord(lastWeekStart: string, weeks: number, waterTargetMl: number): WeekRecord[] {
+  const starts = Array.from({ length: weeks }, (_, i) => addDays(lastWeekStart, -7 * (weeks - 1 - i)));
+  const from = starts[0] ?? lastWeekStart;
+  const to = addDays(lastWeekStart, 6);
+  const weekOf = (date: string) => Math.floor(daysBetweenISO(from, date) / 7);
+  const out: WeekRecord[] = starts.map((weekStart) => ({
+    weekStart,
+    trained: 0,
+    missed: 0,
+    rest: 0,
+    sets: 0,
+    trend: null,
+    foodDays: 0,
+    avgKcal: null,
+    waterDays: 0,
+    waterHit: 0,
+  }));
+  const at = (date: string) => out[weekOf(date)];
+
+  const sessions = db
+    .select({ date: schema.session.date, status: schema.session.status })
+    .from(schema.session)
+    .where(and(gte(schema.session.date, from), lte(schema.session.date, to), isNotNull(schema.session.endedAt)))
+    .all();
+  for (const s of sessions) {
+    const w = at(s.date);
+    if (!w) continue;
+    if (s.status === 'completed' || s.status === 'partial') w.trained += 1;
+    else if (s.status === 'skipped') w.missed += 1;
+    else if (s.status === 'rest') w.rest += 1;
+  }
+
+  const sets = db
+    .select({ date: schema.session.date, n: sql<number>`count(*)` })
+    .from(schema.setLog)
+    .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
+    .where(and(gte(schema.session.date, from), lte(schema.session.date, to), isNotNull(schema.session.endedAt), eq(schema.setLog.isWarmup, 0)))
+    .groupBy(schema.session.date)
+    .all();
+  for (const r of sets) {
+    const w = at(r.date);
+    if (w) w.sets += Number(r.n);
+  }
+
+  const trend = weightTrend(listWeighIns().filter((x) => x.date <= to));
+  for (const w of out) {
+    const end = addDays(w.weekStart, 6);
+    const last = [...trend].reverse().find((t) => t.date <= end);
+    w.trend = last?.trend ?? null;
+  }
+
+  const water = db
+    .select({ date: schema.waterLog.date, ml: sql<number>`sum(${schema.waterLog.ml})` })
+    .from(schema.waterLog)
+    .where(and(gte(schema.waterLog.date, from), lte(schema.waterLog.date, to)))
+    .groupBy(schema.waterLog.date)
+    .all();
+  for (const r of water) {
+    const w = at(r.date);
+    if (!w || !(Number(r.ml) > 0)) continue;
+    w.waterDays += 1;
+    if (Number(r.ml) >= waterTargetMl) w.waterHit += 1;
+  }
+
+  const kcal = new Map<number, number[]>();
+  for (const d of intakeBetween(from, to)) {
+    const i = weekOf(d.date);
+    kcal.set(i, [...(kcal.get(i) ?? []), d.kcal]);
+  }
+  for (const [i, days] of kcal) {
+    const w = out[i];
+    if (!w) continue;
+    w.foodDays = days.length;
+    w.avgKcal = Math.round(days.reduce((a, b) => a + b, 0) / days.length);
+  }
+  return out;
+}
+
+/** The top set of each of a lift's recent sessions, oldest first — the lift's own record, in miniature. */
+export function liftTops(exerciseIds: readonly string[], perLift = 8): Map<string, { date: string; topWeight: number; bestE1rm: number }[]> {
+  const out = new Map<string, { date: string; topWeight: number; bestE1rm: number }[]>();
+  if (exerciseIds.length === 0) return out;
+  const rows = db
+    .select({
+      exerciseId: schema.exerciseSessionStat.exerciseId,
+      date: schema.exerciseSessionStat.date,
+      topWeight: schema.exerciseSessionStat.topWeight,
+      bestE1rm: schema.exerciseSessionStat.bestE1rm,
+    })
+    .from(schema.exerciseSessionStat)
+    .where(inArray(schema.exerciseSessionStat.exerciseId, [...exerciseIds]))
+    .orderBy(desc(schema.exerciseSessionStat.date))
+    .all();
+  for (const r of rows) {
+    const list = out.get(r.exerciseId) ?? [];
+    if (list.length < perLift) list.push({ date: r.date, topWeight: r.topWeight, bestE1rm: r.bestE1rm });
+    out.set(r.exerciseId, list);
+  }
+  for (const [k, v] of out) out.set(k, v.reverse());
+  return out;
+}

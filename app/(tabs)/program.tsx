@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, Icon, IconButton, ListCard, ListRow, Pill, PrimaryButton, Screen, SectionHeader, Sheet, toast } from '@/components';
+import { Card, confirm, Icon, IconButton, ListCard, ListRow, Pill, Press, PrimaryButton, Screen, SectionHeader, Sheet, toast } from '@/components';
 import { CATALOG, CATALOG_BY_ID } from '@/data/catalog';
 import { PLAN_TEMPLATES, type PlanTemplate } from '@/data/templates';
 import { useLive } from '@/db/live';
@@ -16,13 +16,35 @@ import { color, font, hit, radius, space } from '@/theme/tokens';
 const LEVEL = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' } as const;
 const GOAL = { hypertrophy: 'Muscle', strength: 'Strength', general: 'Fitness' } as const;
 
+/**
+ * A day's planned sets, drawn as the session rail will draw them once they happen
+ * — open marks, grouped by exercise. A plan is the hollow version of a workout,
+ * and the rail fills these in, one set at a time (docs/13).
+ */
+function PlannedSets({ sets }: { sets: readonly number[] }) {
+  return (
+    <View style={styles.planned} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+      {sets.map((n, i) => (
+        <View key={i} style={[styles.plannedGroup, { flexGrow: n }]}>
+          {Array.from({ length: n }, (_, j) => (
+            <View key={j} style={styles.plannedMark} />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /** All saved plans. Nothing here changes on its own; switching is one tap and undoable. */
 export default function PlansScreen() {
   const settings = useSettings();
   const plans = useLive(
     () =>
       listRoutines().map((r) => {
-        const days = getDays(r.id).map((d) => ({ id: d.id, label: d.label, count: getSlots(d.id).length }));
+        const days = getDays(r.id).map((d) => {
+          const slots = getSlots(d.id);
+          return { id: d.id, label: d.label, count: slots.length, sets: slots.map((x) => x.targetSets) };
+        });
         return { routine: r, days, next: r.active ? resolveNextDay(r.id)?.id : undefined, exercises: days.reduce((n, d) => n + d.count, 0) };
       }),
     ['routine', 'routine_day', 'routine_slot', 'exercise'],
@@ -66,10 +88,10 @@ export default function PlansScreen() {
       subtitle="One active, as many as you like"
       tab
       right={
-        <Pressable onPress={() => setCreating(true)} accessibilityRole="button" accessibilityLabel="New plan" style={({ pressed }) => [styles.newBtn, pressed && styles.pressed]}>
+        <Press onPress={() => setCreating(true)} accessibilityRole="button" accessibilityLabel="New plan" style={styles.newBtn} pressedStyle={styles.pressed}>
           <Icon name="plus" size={16} />
           <Text style={styles.newText}>New</Text>
-        </Pressable>
+        </Press>
       }
     >
       {/*
@@ -79,7 +101,7 @@ export default function PlansScreen() {
       */}
       <ListCard>
         <ListRow
-          left={<Icon name="calendar" size={20} color={color.accent} />}
+          left={<Icon name="calendar" size={20} color={color.textMuted} />}
           title="Training schedule"
           sub={scheduleLabel({ rotation: activeRotation, scheduledDays: settings.trainingDays.length })}
           onPress={() => router.push('/plan/schedule')}
@@ -96,42 +118,48 @@ export default function PlansScreen() {
 
       {active ? (
         <View style={styles.active}>
-          <Pressable
+          <Press
             onPress={() => router.push(`/plan/${active.routine.id}`)}
             accessibilityRole="button"
             accessibilityLabel={`${active.routine.name}, your active plan. Edit it.`}
-            style={({ pressed }) => [styles.activeHead, pressed && styles.dim]}
+            feedback="highlight"
+            style={styles.activeHead}
+            pressedStyle={styles.pressed}
           >
             <Text style={styles.activeName} numberOfLines={2}>
               {active.routine.name}
             </Text>
-            <Pill label="Active" tone="accent" />
-          </Pressable>
+            <Pill label="Active" tone="muted" />
+          </Press>
           {/* "4 days a week" for a four-workout rotation was not what the number meant. */}
           <Text style={styles.muted}>
-            {rotationLabel(active.days.length)} · {active.exercises} {active.exercises === 1 ? 'exercise' : 'exercises'}
+            {rotationLabel(active.days.length)}, {active.exercises} {active.exercises === 1 ? 'exercise' : 'exercises'} in all
           </Text>
           {active.days.length ? (
             <View style={styles.days}>
               {active.days.map((d, i) => {
                 const next = d.id === active.next;
                 return (
-                  <Pressable
+                  <Press
                     key={d.id}
                     onPress={() => router.push(`/program/${d.id}`)}
                     accessibilityRole="button"
-                    accessibilityLabel={`${d.label}, ${d.count} exercises${next ? ', next up' : ''}. Edit this day.`}
-                    style={({ pressed }) => [styles.planDay, i > 0 && styles.divider, pressed && styles.dim]}
+                    accessibilityLabel={`${d.label}, ${d.count} exercises, ${d.sets.reduce((a, b) => a + b, 0)} sets${next ? ', next up' : ''}. Edit this day.`}
+                    feedback="highlight"
+                    style={[styles.planDay, i > 0 && styles.divider]}
+                    pressedStyle={styles.pressed}
                   >
-                    <View style={[styles.dot, next && styles.dotNext]} />
-                    <Text style={styles.planDayLabel} numberOfLines={1}>
-                      {d.label}
-                    </Text>
-                    <Text style={styles.dayDetail}>
-                      {d.count} {d.count === 1 ? 'exercise' : 'exercises'}
-                      {next ? ' · next' : ''}
-                    </Text>
-                  </Pressable>
+                    <View style={styles.planDayHead}>
+                      <Text style={styles.planDayLabel} numberOfLines={1}>
+                        {d.label}
+                      </Text>
+                      {next ? <Text style={styles.next}>next</Text> : null}
+                      <Text style={styles.dayDetail}>
+                        {d.count} {d.count === 1 ? 'exercise' : 'exercises'}
+                      </Text>
+                    </View>
+                    <PlannedSets sets={d.sets} />
+                  </Press>
                 );
               })}
             </View>
@@ -146,17 +174,18 @@ export default function PlansScreen() {
               key={r.id}
               divider={i > 0}
               title={r.name}
-              sub={`${rotationLabel(days.length)} · ${exercises} ${exercises === 1 ? 'exercise' : 'exercises'}`}
+              sub={`${rotationLabel(days.length)}, ${exercises} ${exercises === 1 ? 'exercise' : 'exercises'}`}
               right={
-                <Pressable
+                <Press
                   onPress={() => activate(r)}
                   accessibilityRole="button"
                   accessibilityLabel={`Use ${r.name} as your plan`}
                   hitSlop={{ top: space.md, bottom: space.md }}
-                  style={({ pressed }) => [styles.use, pressed && styles.pressed]}
+                  style={styles.use}
+                  pressedStyle={styles.pressed}
                 >
                   <Text style={styles.useText}>Use</Text>
-                </Pressable>
+                </Press>
               }
               onPress={() => router.push(`/plan/${r.id}`)}
             />
@@ -176,7 +205,7 @@ export default function PlansScreen() {
       {archived.length ? (
         <>
           <SectionHeader
-            title={`Archived · ${archived.length}`}
+            title={`Archived, ${archived.length}`}
             action={{ label: showArchived ? 'Hide' : 'Show', onPress: () => setShowArchived(!showArchived), accessibilityLabel: showArchived ? 'Hide archived plans' : 'Show archived plans' }}
           />
           {showArchived ? (
@@ -215,7 +244,7 @@ export default function PlansScreen() {
       <Sheet visible={creating && !preview} onClose={() => setCreating(false)} title="New plan">
         <Text style={styles.muted}>Ranked for your goal, days, time and equipment. Templates are copied — edit anything afterwards.</Text>
         {ranked.map((m, i) => (
-          <Pressable key={m.template.id} style={({ pressed }) => [styles.option, pressed && styles.pressed, !m.fits && styles.dim]} onPress={() => setPreview(m.template)}>
+          <Press key={m.template.id} feedback="highlight" style={[styles.option, !m.fits && styles.dim]} pressedStyle={styles.pressed} onPress={() => setPreview(m.template)} accessibilityRole="button">
             <View style={styles.flex1}>
               <View style={styles.titleRow}>
                 <Text style={styles.body}>{m.template.name}</Text>
@@ -223,19 +252,19 @@ export default function PlansScreen() {
               </View>
               <Text style={styles.muted}>
                 {m.template.daysPerWeek} days a week, about {m.template.minutes} minutes
-                <Text style={styles.mutedFaint}>{`\n${GOAL[m.template.goal]} · ${LEVEL[m.template.level]}`}</Text>
+                <Text style={styles.mutedFaint}>{`\n${GOAL[m.template.goal]}, ${LEVEL[m.template.level].toLowerCase()}`}</Text>
               </Text>
             </View>
             <Icon name="chevronRight" size={20} color={color.textMuted} />
-          </Pressable>
+          </Press>
         ))}
-        <Pressable style={({ pressed }) => [styles.option, pressed && styles.pressed]} onPress={() => add(null)}>
+        <Press feedback="highlight" style={styles.option} pressedStyle={styles.pressed} onPress={() => add(null)} accessibilityRole="button">
           <View style={styles.flex1}>
             <Text style={styles.body}>Blank plan</Text>
             <Text style={styles.muted}>Build your own from scratch</Text>
           </View>
           <Icon name="plus" size={20} color={color.textMuted} />
-        </Pressable>
+        </Press>
       </Sheet>
 
       <Sheet visible={preview !== null} onClose={() => setPreview(null)} title={preview?.name}>
@@ -243,7 +272,7 @@ export default function PlansScreen() {
           <View style={styles.stack}>
             <Text style={styles.body}>{preview.summary}</Text>
             <View style={styles.pills}>
-              <Pill label={GOAL[preview.goal]} tone="accent" />
+              <Pill label={GOAL[preview.goal]} />
               <Pill label={LEVEL[preview.level]} />
               <Pill label={`${preview.daysPerWeek} days`} />
               <Pill label={`~${preview.minutes} min`} />
@@ -291,16 +320,19 @@ const styles = StyleSheet.create({
     borderColor: color.border,
   },
   newText: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text },
-  active: { backgroundColor: color.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: color.accent, padding: space.lg + 2, marginBottom: space.md, gap: space.xs },
+  active: { borderRadius: radius.lg, borderWidth: 1, borderColor: color.text, padding: space.lg, marginTop: space.md, marginBottom: space.md, gap: space.xs },
   activeHead: { flexDirection: 'row', alignItems: 'center', gap: space.md - 2 },
   activeName: { ...font.heading, fontWeight: '700', color: color.text, flex: 1 },
   days: { marginTop: space.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  planDay: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default },
+  planDay: { gap: space.sm, minHeight: hit.default, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.sm },
+  planDayHead: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  dot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: color.border },
-  dotNext: { backgroundColor: color.accent },
-  planDayLabel: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text, flex: 1 },
-  dayDetail: { ...font.caption, color: color.textFaint },
+  planDayLabel: { ...font.label, fontSize: 15, fontWeight: '600', color: color.text, flexShrink: 1 },
+  next: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.text, textDecorationLine: 'underline' },
+  dayDetail: { ...font.caption, color: color.textFaint, marginLeft: 'auto' },
+  planned: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
+  plannedGroup: { flexDirection: 'row', flexShrink: 1, flexBasis: 0, gap: 2 },
+  plannedMark: { flex: 1, maxWidth: 8, height: 10, borderRadius: 1.5, borderWidth: 1, borderColor: color.textFaint },
   use: { height: 32, paddingHorizontal: space.md, borderRadius: radius.pill, borderWidth: 1, borderColor: color.border, justifyContent: 'center' },
   useText: { ...font.caption, fontWeight: '600', color: color.text },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
@@ -321,11 +353,11 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: color.surfaceHigh },
   dim: { opacity: 0.5 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
-  badge: { ...font.caption, color: color.accent, fontWeight: '700' },
+  badge: { ...font.caption, color: color.text, fontWeight: '700', textDecorationLine: 'underline' },
   stack: { gap: space.md, paddingBottom: space.lg },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   day: { gap: 2 },
   dayLabel: { ...font.label, color: color.text, fontWeight: '700' },
   slot: { ...font.caption, color: color.textMuted },
-  swapped: { color: color.accent },
+  swapped: { color: color.textMuted },
 });

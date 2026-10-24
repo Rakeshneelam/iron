@@ -1,8 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { ChipRow, EmptyState, Icon, ListCard, ListRow, PrimaryButton, Screen, SectionHeader, SegmentTabs, toast, TrendChart } from '@/components';
+import { EmptyState, Icon, ListCard, ListRow, PrimaryButton, Screen, SectionHeader, SegmentTabs, TitleBlock, toast } from '@/components';
 import { CATALOG_BY_ID, EQUIPMENT_LABEL, type Equipment } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import { getExercise } from '@/db/repositories/exercises';
@@ -10,20 +10,15 @@ import { exerciseSessions } from '@/db/repositories/sessions';
 import { setSetting, useSettings } from '@/db/repositories/settings';
 import { e1rmSeries } from '@/db/repositories/stats';
 import { ExerciseGuide, guideMeta } from '@/features/exercises/ExerciseGuide';
+import { LoadLine, RecordLegend } from '@/features/progress/LoadLine';
 import { fmtSet, fmtSetList } from '@/features/session/prescription';
-import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
+import { fmtDayLabel } from '@/lib/date';
 import { kgNum } from '@/lib/format';
 import { color, font, space } from '@/theme/tokens';
 
 const TABS = [
-  { label: 'Progress', value: 'progress' as const },
+  { label: 'Record', value: 'progress' as const },
   { label: 'How-to', value: 'how' as const },
-];
-const RANGES = [
-  { label: '4 W', value: 28 },
-  { label: '12 W', value: 84 },
-  { label: '6 M', value: 182 },
-  { label: 'All', value: 0 },
 ];
 
 /**
@@ -40,10 +35,6 @@ export default function ExerciseScreen() {
   const exercise = useLive(() => getExercise(id), ['exercise'], [id]);
   const data = useLive(() => ({ series: e1rmSeries(id, 1000), sessions: exerciseSessions(id) }), ['exercise_session_stat', 'set_log', 'session'], [id]);
   const [tab, setTab] = useState<'progress' | 'how'>(params.tab === 'progress' ? 'progress' : 'how');
-  const [range, setRange] = useState(84);
-
-  const today = todayISO();
-  const shown = useMemo(() => (range ? data.series.filter((p) => p.date >= addDays(today, -range)) : data.series), [data.series, range, today]);
 
   if (!exercise) {
     return (
@@ -69,7 +60,7 @@ export default function ExerciseScreen() {
   return (
     <Screen
       title={exercise.name}
-      subtitle={tab === 'progress' && last ? `${equipment} · last done ${fmtDayLabel(last.date)}` : guideMeta(exercise)}
+      subtitle={tab === 'progress' && last ? `${equipment}, last done ${fmtDayLabel(last.date)}` : guideMeta(exercise)}
       back
       strip={<SegmentTabs options={TABS} value={tab} onChange={setTab} />}
       dock={
@@ -91,39 +82,41 @@ export default function ExerciseScreen() {
           <Text style={styles.footnote}>{"Hidden exercises are left out of swaps and new plans. Plans you already have don't change."}</Text>
         </>
       ) : !last ? (
-        <EmptyState message="Not logged yet." hint="Your first session of it starts the history here." />
+        <EmptyState message="Not logged yet." hint="Your first set of it starts its record here — every session after adds a column." />
       ) : (
-        <ProgressView measure={measure} loadType={exercise.loadType} series={shown} range={range} onRange={setRange} sessions={data.sessions} />
+        <ProgressView measure={measure} loadType={exercise.loadType} series={data.series} sessions={data.sessions} />
       )}
     </Screen>
   );
 }
 
+/**
+ * The lift's whole record, the signature view of this app (brief §6, §13).
+ *
+ * It used to be a chart of one estimated number per session over a chosen range,
+ * plus three tiles of bests. Now it is the same record the logging screen draws
+ * mid-set, at full length: every working set of every session as its own mark,
+ * scrolled to the newest, with your best as a datum across it and the estimated
+ * 1RM in its own lane above — a line, labelled as an estimate, never mixed in with
+ * what you lifted. Tap a session to read its sets and open that workout.
+ *
+ * The title block says the four facts people come here for, and the bests below
+ * are each a set you actually lifted, with its date.
+ */
 function ProgressView({
   measure,
   loadType,
   series,
-  range,
-  onRange,
   sessions,
 }: {
   measure: 'reps' | 'time';
   loadType: string;
-  series: { date: string; e1rm: number }[];
-  range: number;
-  onRange: (v: number) => void;
+  series: { sessionId: string; date: string; e1rm: number }[];
   sessions: ReturnType<typeof exerciseSessions>;
 }) {
   const latest = series[series.length - 1];
   const first = series[0];
   const gain = latest && first && series.length > 1 ? latest.e1rm - first.e1rm : null;
-  const span = RANGES.find((r) => r.value === range)?.label.replace(' W', ' weeks').replace(' M', ' months') ?? '';
-  // Raw per-session estimates plus a 3-session average, same smoothing as the body trend.
-  const raw = series.map((p, i) => ({ x: i, y: p.e1rm }));
-  const trend = raw.map((p, i) => {
-    const w = raw.slice(Math.max(0, i - 2), i + 1);
-    return { x: p.x, y: w.reduce((a, b) => a + b.y, 0) / w.length };
-  });
 
   // Personal bests, from sets you actually lifted.
   const all = sessions.flatMap((s) => s.sets.map((set) => ({ set, date: s.date })));
@@ -133,53 +126,55 @@ function ProgressView({
   const workWeight = sessions[0]?.sets.reduce((m, x) => Math.max(m, x.weight), 0) ?? 0;
   const atWeight = all.filter((x) => x.set.weight === workWeight).reduce<(typeof all)[number] | undefined>((b, x) => (!b || x.set.reps > b.set.reps ? x : b), undefined);
   const weighted = measure === 'reps' && (heaviest?.set.weight ?? 0) > 0;
+  const longest = measure === 'time' ? all.reduce((m, x) => Math.max(m, x.set.reps), 0) : 0;
 
   return (
     <>
-      {measure === 'reps' ? (
-        <>
-          <ChipRow options={RANGES} value={range} onChange={onRange} columns={4} />
-          <View style={styles.hero}>
-            <Text style={styles.eyebrow}>Estimated 1-rep max</Text>
-            <View style={styles.heroRow}>
-              <Text style={styles.big}>{latest ? kgNum(Math.round(latest.e1rm)) : '—'}</Text>
-              <Text style={styles.unit}>kg</Text>
-            </View>
-            {gain !== null ? (
-              <Text style={[styles.gain, { color: gain > 0.5 ? color.positive : color.textMuted }]}>
-                {Math.abs(gain) < 0.5 ? 'Level' : `${gain > 0 ? '+' : '−'}${kgNum(Math.round(Math.abs(gain)))} kg`} {range ? `in ${span}` : 'since you started'}
-              </Text>
-            ) : null}
-          </View>
-          {raw.length >= 3 ? (
-            <TrendChart
-              trend={trend}
-              raw={raw}
-              height={160}
-              format={(y) => `${kgNum(Math.round(y * 10) / 10)} kg`}
-              formatX={(x) => fmtDayLabel(series[Math.max(0, Math.min(series.length - 1, Math.round(x)))]?.date ?? '')}
-            />
-          ) : (
-            <Text style={styles.footnote}>Three sessions in this range and the line appears.</Text>
-          )}
-        </>
+      <TitleBlock
+        cells={[
+          weighted && heaviest
+            ? { label: 'Heaviest', value: kgNum(heaviest.set.weight), unit: `× ${heaviest.set.reps}` }
+            : measure === 'time'
+              ? { label: 'Longest', value: String(longest), unit: 's' }
+              : { label: 'Most reps', value: String(all.reduce((m, x) => Math.max(m, x.set.reps), 0)) },
+          ...(weighted && latest ? [{ label: 'Est. 1RM', value: kgNum(Math.round(latest.e1rm)), unit: 'kg' }] : []),
+          { label: 'Sessions', value: String(sessions.length) },
+        ]}
+      />
+      {weighted && gain !== null ? (
+        <Text style={[styles.gain, gain > 0.5 && styles.gainUp]}>
+          {Math.abs(gain) < 0.5 ? 'Estimated 1RM level since your first session.' : `Estimated 1RM ${gain > 0 ? '+' : '−'}${kgNum(Math.round(Math.abs(gain)))} kg since your first session, ${fmtDayLabel(first?.date ?? '')}.`}
+        </Text>
       ) : null}
+
+      <View style={styles.record}>
+        <LoadLine
+          sessions={sessions}
+          measure={measure}
+          height={150}
+          full
+          estimate={weighted ? series.map((p) => ({ sessionId: p.sessionId, e1rm: p.e1rm })) : undefined}
+          onOpenSession={(sid) => router.push(`/session/summary/${sid}`)}
+        />
+        <RecordLegend estimate={weighted} />
+      </View>
 
       {weighted && heaviest ? (
         <>
-          <SectionHeader title="Personal bests" />
+          <SectionHeader title="Bests, each a set you lifted" />
           <ListCard>
-            <ListRow title="Heaviest set" sub={fmtDayLabel(heaviest.date)} right={<Text style={styles.value}>{fmtSet(measure, heaviest.set.weight, heaviest.set.reps, loadType)}</Text>} />
+            <ListRow title="Heaviest set" sub={fmtDayLabel(heaviest.date)} chevron={false} right={<Text style={styles.value}>{fmtSet(measure, heaviest.set.weight, heaviest.set.reps, loadType)}</Text>} />
             {bestVolume ? (
               <ListRow
                 divider
-                title="Best volume"
-                sub={`${fmtDayLabel(bestVolume.date)} · ${bestVolume.sets.length} ${bestVolume.sets.length === 1 ? 'set' : 'sets'}`}
+                title="Most volume in a session"
+                sub={`${fmtDayLabel(bestVolume.date)}, ${bestVolume.sets.length} ${bestVolume.sets.length === 1 ? 'set' : 'sets'}`}
+                chevron={false}
                 right={<Text style={styles.value}>{Math.round(volumeOf(bestVolume)).toLocaleString()} kg</Text>}
               />
             ) : null}
             {atWeight ? (
-              <ListRow divider title={`Most reps at ${kgNum(workWeight)} kg`} sub={fmtDayLabel(atWeight.date)} right={<Text style={styles.value}>{atWeight.set.reps} reps</Text>} />
+              <ListRow divider title={`Most reps at ${kgNum(workWeight)} kg`} sub={fmtDayLabel(atWeight.date)} chevron={false} right={<Text style={styles.value}>{atWeight.set.reps} reps</Text>} />
             ) : null}
           </ListCard>
         </>
@@ -199,7 +194,7 @@ function ProgressView({
           />
         ))}
       </ListCard>
-      {measure === 'reps' ? <Text style={styles.footnote}>The estimate comes from your best set each session.</Text> : null}
+      {weighted ? <Text style={styles.footnote}>The estimate comes from your best set each session. It is a calculation, not a lift.</Text> : null}
     </>
   );
 }
@@ -207,12 +202,9 @@ function ProgressView({
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   pair: { flexDirection: 'row', gap: space.sm },
-  hero: { marginTop: space.lg, marginBottom: space.md },
-  eyebrow: { ...font.eyebrow, color: color.textFaint },
-  heroRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
-  big: { ...font.hero, fontSize: 64, lineHeight: 70, ...font.numeric, color: color.text },
-  unit: { ...font.heading, fontWeight: '700', color: color.textMuted },
-  gain: { ...font.label, fontSize: 14, fontWeight: '600' },
-  value: { ...font.label, fontSize: 15, fontWeight: '700', ...font.numeric, color: color.text, flexShrink: 1, textAlign: 'right' },
+  gain: { ...font.label, fontSize: 14, fontWeight: '500', fontVariant: ['tabular-nums'], color: color.textMuted, marginTop: space.sm },
+  gainUp: { color: color.positive },
+  record: { marginTop: space.lg, gap: space.md },
+  value: { ...font.label, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], color: color.text, flexShrink: 1, textAlign: 'right' },
   footnote: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm },
 });
