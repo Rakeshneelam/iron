@@ -27,13 +27,13 @@ import { MODE_OPTIONS } from '@/features/warmup/labels';
 import { WaterTargetSheet } from '@/features/water/TargetSheet';
 import { todayISO } from '@/lib/date';
 import { kcal, ml } from '@/lib/format';
-import { backupNow, lastBackupAt } from '@/services/backup';
-import { connect, currentAccount, disconnect, isConfigured } from '@/services/drive';
+import { cloudAccount, deleteCloudCopies, signOut } from '@/services/cloud';
 import { exportAll } from '@/services/export';
 import { hydrationTarget } from '@/services/hydration';
 import { notificationsAllowed, requestPermissions, rescheduleAll } from '@/services/notifications';
 import { color, font, radius, space } from '@/theme/tokens';
 
+import { CloudCard } from './CloudCard';
 import { Field, GoalField } from './ProfileFields';
 import { TimeAdjuster } from './Row';
 import { fmtClockOfDay } from './time';
@@ -267,17 +267,6 @@ export function AlertsTab() {
 
 /* ================================== Data ================================== */
 
-/** "2 hours ago" beats a timestamp for something you only want reassurance about. */
-function fmtWhen(iso: string): string {
-  const mins = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
-  if (mins < 2) return 'Just now';
-  if (mins < 60) return `${mins} minutes ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-  const days = Math.round(hours / 24);
-  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
-}
-
 /**
  * Backup, restore and export: getting your training off this phone, and back.
  * A backup is for you, later, and is encrypted with the recovery phrase; an export
@@ -285,61 +274,53 @@ function fmtWhen(iso: string): string {
  */
 export function DataTab() {
   const workouts = useLive(() => countFinishedWorkouts(), ['session']);
+  const signedIn = useLive(() => cloudAccount() !== null, ['setting']);
   const [phrase] = useState(recoveryPhrase);
-  const [account, setAccount] = useState<string | null>(null);
-  const [lastAt, setLastAt] = useState(lastBackupAt);
-  const [busy, setBusy] = useState<'backup' | 'export' | null>(null);
+  const [busy, setBusy] = useState<'export' | 'delete' | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    void currentAccount().then(setAccount);
-  }, []);
-
-  const backup = () => {
-    if (!account) {
-      setMessage(null);
-      // Authorisation only. Connecting does not start uploading anything.
-      void connect().then(
-        (email) => email && setAccount(email),
-        (e: unknown) => setMessage(`Could not connect: ${e instanceof Error ? e.message : String(e)}`),
-      );
-      return;
-    }
+  const exportNow = () => {
+    if (busy) return;
     setMessage(null);
-    setBusy('backup');
-    backupNow()
+    setBusy('export');
+    exportAll()
       .then(
-        () => {
-          setLastAt(lastBackupAt());
-          setMessage('Backed up.');
-        },
-        (e: unknown) => setMessage(`Backup failed: ${e instanceof Error ? e.message : String(e)}`),
+        (n) => setMessage(n === null ? null : `Saved ${n} files.`),
+        (e: unknown) => setMessage(`Export failed: ${e instanceof Error ? e.message : String(e)}`),
       )
       .finally(() => setBusy(null));
   };
 
+  /** Everything, everywhere: the cloud copy first (it needs the sign-in), then this phone. */
+  const deleteAll = () => {
+    setBusy('delete');
+    void (async () => {
+      if (signedIn) {
+        try {
+          await deleteCloudCopies();
+        } catch {
+          /* best effort: this phone is wiped regardless, and the copy can be removed from Google */
+        }
+        await signOut();
+      }
+      wipeAllData();
+      router.replace('/setup');
+    })();
+  };
+
   return (
     <>
-      <Card style={styles.backup}>
-        <Text style={styles.eyebrow}>Last backup</Text>
-        <Text style={styles.backupWhen}>{lastAt ? fmtWhen(lastAt) : 'Never'}</Text>
-        <Text style={styles.hint}>
-          {workouts} {workouts === 1 ? 'workout' : 'workouts'},{' '}
-          {!isConfigured() ? 'Drive backup is not available in this build' : account ? `Google Drive, ${account}` : 'stored only on this phone'}
-        </Text>
-      </Card>
-      {isConfigured() ? (
-        <View style={styles.pair}>
-          <PrimaryButton label={busy === 'backup' ? 'Backing up…' : account ? 'Back up now' : 'Connect Drive'} disabled={busy !== null} style={styles.flex1} onPress={backup} />
-          <PrimaryButton label="Restore" tone="neutral" style={styles.flex1} onPress={() => router.push('/settings/restore')} />
-        </View>
-      ) : (
-        <PrimaryButton label="Restore from a file" tone="neutral" onPress={() => router.push('/settings/restore')} />
-      )}
+      <CloudCard />
+      <View style={styles.gapTop} />
+      <ListCard>
+        <ListRow title="Restore" sub="From the cloud or a backup file" onPress={() => router.push('/settings/restore')} />
+        <ListRow divider title={busy === 'export' ? 'Exporting…' : 'Export for a spreadsheet or coach'} sub="Readable CSVs and JSON, not encrypted" onPress={exportNow} />
+        <ListRow divider title="What Iron stores and sends" onPress={() => router.push('/settings/privacy')} />
+      </ListCard>
       {message ? <Text style={styles.hint}>{message}</Text> : null}
 
-      <SectionHeader title="Recovery phrase" hint="The only thing that can open a backup on another phone. Write it down." />
+      <SectionHeader title="Recovery phrase" hint="Opens a backup file, or a cloud copy made before sign-in." />
       <Card>
         {phrase ? (
           <Text selectable style={styles.phrase} accessibilityLabel={`Recovery phrase: ${phrase.split('').join(' ')}`}>
@@ -350,75 +331,56 @@ export function DataTab() {
         )}
       </Card>
 
-      <ListCard>
-        <ListRow
-          title={busy === 'export' ? 'Exporting…' : 'Export for a spreadsheet or coach'}
-          sub="JSON and CSVs of workouts, food and body. Readable on purpose, so not encrypted."
-          onPress={() => {
-            if (busy) return;
-            setMessage(null);
-            setBusy('export');
-            exportAll()
-              .then(
-                (n) => setMessage(n === null ? null : `Saved ${n} files.`),
-                (e: unknown) => setMessage(`Export failed: ${e instanceof Error ? e.message : String(e)}`),
-              )
-              .finally(() => setBusy(null));
-          }}
-        />
-        <ListRow divider title="What Iron stores and sends" sub="And how to delete any of it." onPress={() => router.push('/settings/privacy')} />
-        {account ? (
-          <ListRow
-            divider
-            title="Disconnect Google Drive"
-            sub="Backups already there are left alone."
-            onPress={() => void disconnect().then(() => setAccount(null))}
-          />
-        ) : null}
-      </ListCard>
-
       <SectionHeader title="Danger zone" />
       <PrimaryButton label="Delete all data" tone="dangerOutline" onPress={() => setDeleting(true)} />
-      <Text style={styles.version}>Iron {Constants.expoConfig?.version ?? ''}. No account, no server.</Text>
+      <Text style={styles.version}>Iron {Constants.expoConfig?.version ?? ''}</Text>
 
-      <DeleteSheet visible={deleting} workouts={workouts} onBackUp={isConfigured() ? backup : undefined} onClose={() => setDeleting(false)} />
+      <DeleteSheet visible={deleting} workouts={workouts} cloud={signedIn} busy={busy === 'delete'} onExport={exportNow} onDelete={deleteAll} onClose={() => setDeleting(false)} />
     </>
   );
 }
 
 /**
- * The one confirmation in Settings, because this is the one thing with no undo
- * (AGENTS §1.4): what goes, a way to keep a copy first, and a way out that is as
- * easy to hit as the way through.
+ * The one confirmation here, because this is the one thing with no undo (AGENTS
+ * §1.4): what goes, a way to keep a copy first, and a way out that is as easy to
+ * hit as the way through.
  */
-function DeleteSheet({ visible, workouts, onBackUp, onClose }: { visible: boolean; workouts: number; onBackUp?: () => void; onClose: () => void }) {
+function DeleteSheet({
+  visible,
+  workouts,
+  cloud,
+  busy,
+  onExport,
+  onDelete,
+  onClose,
+}: {
+  visible: boolean;
+  workouts: number;
+  cloud: boolean;
+  busy: boolean;
+  onExport: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
   return (
     <Sheet visible={visible} onClose={onClose} title="Delete everything?">
       <View style={styles.stack}>
-        <Text style={styles.body}>This removes every workout, meal, weigh-in and setting from this phone. There is no undo, and nothing to recover from a server.</Text>
+        <Text style={styles.body}>
+          {cloud ? 'This removes everything from this phone and its copy in your Google account, and signs you out.' : 'This removes everything from this phone.'} There is no undo.
+        </Text>
         <ListCard style={styles.flush}>
           <ListRow title={`${workouts} ${workouts === 1 ? 'workout' : 'workouts'}`} sub="And all their sets, notes and pain flags" />
           <ListRow divider title="Plans, food, water and body logs" sub="Every entry, on every day" />
         </ListCard>
-        {onBackUp ? (
-          <PrimaryButton
-            label="Back up first"
-            tone="neutral"
-            onPress={() => {
-              onClose();
-              onBackUp();
-            }}
-          />
-        ) : null}
         <PrimaryButton
-          label="Delete all data"
-          tone="danger"
-          size="gym"
+          label="Export a copy first"
+          tone="neutral"
           onPress={() => {
-            wipeAllData();
-            router.replace('/setup');
+            onClose();
+            onExport();
           }}
         />
+        <PrimaryButton label={busy ? 'Deleting…' : 'Delete all data'} tone="danger" size="gym" disabled={busy} onPress={onDelete} />
         <PrimaryButton label="Keep my data" tone="ghost" onPress={onClose} />
       </View>
     </Sheet>
@@ -429,7 +391,6 @@ const styles = StyleSheet.create({
   flex1: { flex: 1 },
   stack: { gap: space.md + 2 },
   flush: { marginBottom: 0 },
-  pair: { flexDirection: 'row', gap: space.md - 2, marginBottom: space.sm },
   gapTop: { marginTop: space.md },
   body: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted },
   hint: { ...font.caption, fontSize: 12, color: color.textFaint },
@@ -441,9 +402,6 @@ const styles = StyleSheet.create({
   subLabel: { ...font.caption, fontWeight: '600', color: color.textMuted, flex: 1 },
   divider: { borderTopWidth: 1, borderTopColor: color.border },
   rowTitle: { ...font.label, fontWeight: '600', color: color.text },
-  backup: { gap: 2 },
-  eyebrow: { ...font.eyebrow, color: color.textFaint },
-  backupWhen: { ...font.titleSm, color: color.text },
   phrase: { ...font.body, ...font.numeric, color: color.text, fontWeight: '700', letterSpacing: 0.5 },
   version: { ...font.caption, fontSize: 12, color: color.textFaint, textAlign: 'center', marginTop: space.lg, borderRadius: radius.sm },
 });

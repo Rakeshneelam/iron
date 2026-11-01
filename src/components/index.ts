@@ -29,3 +29,4 @@ export { DayStrip, type StripDay } from './DayStrip';
 export { Sparkline } from './Sparkline';
 export { EntryRow } from './EntryRow';
 export { WeekdayPicker } from './WeekdayPicker';
+export { GoogleButton } from './GoogleButton';

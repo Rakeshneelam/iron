@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChipRow, Icon, Press, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, WeekdayPicker, type IconName } from '@/components';
+import { ChipRow, GoogleButton, Icon, Press, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, WeekdayPicker, type IconName } from '@/components';
 import { CATALOG_BY_ID, type Level, type Stress } from '@/data/catalog';
 import { PLAN_TEMPLATES, type EquipmentPreset, type Goal } from '@/data/templates';
 import { getLatestWeight, upsertWeighIn } from '@/db/repositories/body';
@@ -16,6 +16,7 @@ import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle
 import { GOALS } from '@/features/settings/goals';
 import { Field } from '@/features/settings/ProfileFields';
 import { todayISO } from '@/lib/date';
+import { cloudAvailable, requestSync, restoreLatest, signIn } from '@/services/cloud';
 import { rescheduleAll } from '@/services/notifications';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
@@ -31,11 +32,13 @@ type Step = (typeof STEPS)[number]['value'];
 const WEIGHT_ANCHOR_KG = 75;
 
 /**
- * First run on a fresh install. No account, no network.
+ * First run on a fresh install.
  *
- * Before it, once, the welcome: what Iron is and the way in from another phone. It
- * is this route's first state, not a route of its own, so it only ever appears on
- * a fresh install.
+ * Before it, once, the welcome: what Iron is, and Continue with Google — which on a
+ * new phone finds the cloud copy and restores it straight into Today, and otherwise
+ * carries the name into setup. An account is optional; "without an account" keeps
+ * everything on the phone. The welcome is this route's first state, not a route of
+ * its own, so it only ever appears on a fresh install.
  *
  * Then one screen in three steps — You, Training, Plan — walked with Next and
  * closed with Finish, so nobody skips two-thirds of it by tapping Finish on the
@@ -44,6 +47,7 @@ const WEIGHT_ANCHOR_KG = 75;
 export default function Setup() {
   const insets = useSafeAreaInsets();
   const [started, setStarted] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const [step, setStep] = useState<Step>('you');
   const [initial] = useState(getSettings);
   const [name, setName] = useState(initial.name);
@@ -70,6 +74,35 @@ export default function Setup() {
   const choice = picked ?? ranked[0]?.template.id ?? OWN;
   const shown = showAll ? ranked : ranked.slice(0, 3);
 
+  /**
+   * Google first. A copy in the cloud means this is a new phone for someone who has
+   * used Iron before: put it all back and open Today. No copy, it is a first sign-in.
+   */
+  const google = () => {
+    setSigningIn(true);
+    void (async () => {
+      const r = await signIn();
+      if (r.kind !== 'signed-in') {
+        setSigningIn(false);
+        if (r.kind === 'failed') toast(r.reason);
+        return;
+      }
+      if (r.backup?.phrase) {
+        const restored = await restoreLatest(r.backup);
+        if (restored.ok) {
+          toast(`Welcome back — ${restored.workouts} ${restored.workouts === 1 ? 'workout' : 'workouts'} restored`);
+          router.replace('/');
+          return;
+        }
+        toast(restored.reason);
+      }
+      const first = r.account.givenName ?? r.account.name ?? '';
+      if (first && !name.trim()) setName(first);
+      setSigningIn(false);
+      setStarted(true);
+    })();
+  };
+
   if (!started) {
     return (
       <View style={[styles.welcome, { paddingTop: insets.top + space.xl, paddingBottom: insets.bottom + space.lg }]}>
@@ -84,13 +117,19 @@ export default function Setup() {
         </Text>
         <Text style={styles.pitch}>Training, food, water and body in one place.</Text>
         <View style={styles.welcomeActions}>
-          <PrimaryButton label="Get started" size="gym" icon={<Icon name="chevronRight" size={22} color={color.onAccent} />} onPress={() => setStarted(true)} />
-          {/* For a new phone, not part of starting: a quiet line, not a second pill. */}
-          <Press onPress={() => router.push('/settings/restore')} accessibilityRole="button" accessibilityLabel="Restore a backup from another phone" hitSlop={10} style={styles.restore}>
-            <Text style={styles.restoreText}>
-              Have a backup? <Text style={styles.restoreLink}>Restore it</Text>
-            </Text>
-          </Press>
+          {cloudAvailable() ? (
+            <>
+              <GoogleButton busy={signingIn} onPress={google} />
+              {/* The account is optional: a quiet line, not a second pill. */}
+              <Press onPress={() => setStarted(true)} disabled={signingIn} accessibilityRole="button" hitSlop={10} style={styles.restore}>
+                <Text style={styles.restoreText}>
+                  or <Text style={styles.restoreLink}>continue without an account</Text>
+                </Text>
+              </Press>
+            </>
+          ) : (
+            <PrimaryButton label="Get started" size="gym" icon={<Icon name="chevronRight" size={22} color={color.onAccent} />} onPress={() => setStarted(true)} />
+          )}
         </View>
       </View>
     );
@@ -145,6 +184,8 @@ export default function Setup() {
     setSetting('setupDone', true);
     // Reminders are off until asked for; this only lays down the channels.
     void rescheduleAll();
+    // Signed in with Google: the first copy goes up now, in the background.
+    requestSync();
     // Always Today, plan or not (AGENTS §1.2): Today logs a workout with no plan at all.
     router.replace('/');
   };

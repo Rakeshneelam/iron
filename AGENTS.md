@@ -11,15 +11,20 @@ If you read only one file, read this one. Everything else is detail in `/docs`.
 
 ## 1. Hard rules — never violate these
 
-1. **No backend. Ever.** SQLite on the device is the only source of truth. The only
-   network call the app is allowed to make is an optional, user-initiated encrypted
-   backup to the user's own Google Drive `appDataFolder`. No analytics, no crash
-   reporting SaaS, no remote config, no ads, no telemetry.
-2. **No accounts, no login.** A fresh install shows one welcome (what Iron is, and
-   Restore for a new phone) and then ONE setup screen in three steps — You,
-   Training, Plan — walked with Next and closed with Finish (the steps stay
-   tappable, so going back is one tap); after that the app opens straight into
-   today's workout. An upgrade of an existing install never shows either.
+1. **No server of our own. Ever.** SQLite on the device is the source of truth. The
+   only network use is the user's own Google account: Google sign-in, and an
+   encrypted copy of the database in their Drive's hidden `appDataFolder`, synced
+   automatically once they sign in (after a workout, when the app is put away with
+   new data, on opening after a long gap — `src/services/cloud.ts`). One phone at a
+   time: the newest copy wins, nothing merges. No analytics, no crash reporting SaaS,
+   no remote config, no ads, no telemetry.
+2. **Accounts are optional Google sign-in, never a gate.** (Owner's decision, Nov
+   2026 — it replaced "no accounts".) A fresh install shows one welcome with
+   Continue with Google — which restores a cloud copy straight into Today on a new
+   phone — or continue without an account. Then ONE setup screen in three steps —
+   You, Training, Plan — walked with Next and closed with Finish (the steps stay
+   tappable); after that the app opens straight into today's workout. Signing in or
+   out is in You. An upgrade of an existing install never shows the welcome.
 3. **Writes are immediate.** Every logged set hits SQLite the moment the user taps.
    Never hold a workout in React state and save "on finish" — the app will be killed
    in the background and the session must survive it.
@@ -146,7 +151,7 @@ Each one is excluded because of documented user harm, not taste.
 | Automatic exercise rotation / "AI picks your workout" | The single most-cited complaint about Fitbod. Stable exercise selection is better for hypertrophy and for tracking progression. |
 | Opaque suggestions | Every number shows its reasoning. |
 | Nagging about accuracy ("you didn't weigh this!") | Precision perfectionism kills the logging habit. "Good enough" logging that continues beats perfect logging that stops. |
-| Paywalls, tiers, upsells, ads, accounts | Non-problems in a single-user local app. Do not build defences for them either — no sync-conflict resolution, no multi-device merge. |
+| Paywalls, tiers, upsells, ads | Non-problems in a single-user app. Do not build defences for them either — sync is newest-copy-wins, with no conflict resolution and no multi-device merge. |
 | Daily raw-weight celebration/alarm | Daily scale weight swings 1–2 kg on water alone. Only the trend is shown prominently. |
 
 ---

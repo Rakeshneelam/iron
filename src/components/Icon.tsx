@@ -61,6 +61,7 @@ const ICONS = {
   bolt: { d: 'M13.5 3L5.5 13.5h6L10.5 21l8-10.5h-6z' },
   sun: { d: 'M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4L6 18M18 6l1.4-1.4', circles: [[12, 12, 4]] },
   lock: { d: 'M6.5 11h11v9h-11zM8.5 11V8a3.5 3.5 0 0 1 7 0v3' },
+  cloud: { d: 'M7 18.5h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6 9.5a4.5 4.5 0 0 0 1 9z' },
 } as const;
 
 export type IconName = keyof typeof ICONS;

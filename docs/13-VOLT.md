@@ -104,8 +104,11 @@ padding or Android clips the last glyph.
 - **Plans** — the active plan as a volt card with its days inside.
 - **Summary** — a volt hero card, then the reward card: XP earned and where it came
   from, the level bar, a level-up, any badge unlocked.
-- **You** (avatar) — level card, badges, profile, then Reminders, Backup & data,
+- **You** (avatar) — the account card (Continue with Google, or synced-when with
+  Sync now and Sign out), level card, badges, profile, then Reminders, Backup & data,
   Haptics, Battery, Privacy. **Settings** (sliders) — Body · Training · Workout.
+- **Welcome** — Google's own white button (`GoogleButton`, brand colours in
+  `tokens.brand`) leads; "continue without an account" is a quiet line under it.
 
 ## Levels and badges
 

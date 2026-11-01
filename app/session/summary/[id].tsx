@@ -16,6 +16,7 @@ import { minutesLabel } from '@/features/warmup/labels';
 import { fmtDayLabel } from '@/lib/date';
 import { signed } from '@/lib/format';
 import { success } from '@/lib/haptics';
+import { requestSync } from '@/services/cloud';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 /** Session RPE, in words — easier than a 1–10 scale after a hard session. */
@@ -51,6 +52,10 @@ export default function SummaryScreen() {
   useEffect(() => {
     if (reward && reward.gained > 0) success();
   }, [reward]);
+  // A finished workout is the moment most worth keeping: up to the cloud now, in the background.
+  useEffect(() => {
+    if (justFinished) requestSync();
+  }, [justFinished]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editing, setEditing] = useState<SetRow | null>(null);
 

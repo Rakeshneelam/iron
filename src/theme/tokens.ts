@@ -77,6 +77,20 @@ export const color = {
   chartFaint: 'rgba(246,246,247,0.3)',
 } as const;
 
+/**
+ * Google's own sign-in button: white, with the four-colour G. Brand colours, not
+ * theme colours — Google's branding rules fix them, so they never follow the palette.
+ */
+export const brand = {
+  googleSurface: '#FFFFFF',
+  googleSurfacePressed: '#EDEDED',
+  googleInk: '#1F1F1F',
+  googleBlue: '#4285F4',
+  googleGreen: '#34A853',
+  googleYellow: '#FBBC05',
+  googleRed: '#EA4335',
+} as const;
+
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 } as const;
 
 /** Space BETWEEN groups clearly exceeds space WITHIN them, so grouping reads. */

@@ -21,6 +21,7 @@ import { Card, confirm, PrimaryButton, Screen, SectionHeader, TextField, TitleBl
 import { inspectBackup, restoreBackup, type BackupSummary } from '@/db/repositories/restore';
 import { PHRASE_CHARS, formatPhrase, normalisePhrase } from '@/lib/recoveryPhrase';
 import { inspectDriveBackup, listBackups, type DriveFile } from '@/services/backup';
+import { keepingSignIn } from '@/services/cloud';
 import { connect, currentAccount, isConfigured } from '@/services/drive';
 import { fmtDayLabel } from '@/lib/date';
 import { color, font, space } from '@/theme/tokens';
@@ -75,7 +76,8 @@ export default function RestoreScreen() {
   const check = (f: DriveFile) => {
     setBusy(true);
     setProblem(null);
-    void inspectDriveBackup(f, phrase)
+    // A copy made since sign-in carries its own phrase; an older one needs it typed.
+    void inspectDriveBackup(f, f.phrase ?? phrase)
       .then((found) => {
         if (found.ok) {
           setLoaded({ summary: found.summary, tables: found.tables, from: `${fmtDayLabel(f.createdTime.slice(0, 10))}, Google Drive` });
@@ -120,7 +122,7 @@ export default function RestoreScreen() {
       destructive: true,
       onConfirm: () => {
         try {
-          const n = restoreBackup(l.tables);
+          const n = keepingSignIn(() => restoreBackup(l.tables));
           toast(`Restored ${plural(n, 'workout')}.`);
           router.replace('/');
         } catch {
@@ -202,6 +204,7 @@ export default function RestoreScreen() {
                     onPress={() => {
                       setPicked(f);
                       setProblem(null);
+                      if (f.phrase) check(f);
                     }}
                   />
                 ))}
@@ -209,7 +212,7 @@ export default function RestoreScreen() {
             </>
           ) : null}
 
-          {picked ? (
+          {picked && !picked.phrase ? (
             <>
               <SectionHeader title="Recovery phrase" hint="From the phone that made this backup." />
               <Card>

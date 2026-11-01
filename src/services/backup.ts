@@ -2,15 +2,18 @@
  * Drive backup and restore (docs/07-BACKUP.md, and the design spec beside it).
  *
  * The payload is the SQLCipher database file itself, already encrypted with the key
- * derived from the recovery phrase. Nothing here handles the phrase, and nothing
- * here decrypts: the bytes leave the phone unreadable and come back unreadable.
+ * derived from the recovery phrase. The phrase rides along in the file's private
+ * app properties, so signing in on a new phone restores without typing it: the
+ * copy is protected by the Google account that owns the folder, not by a secret
+ * that never leaves the phone. Nothing here decrypts the live database.
  */
 import { File, Paths } from 'expo-file-system';
 
-import { expoDb, openKeyedDatabaseFile } from '@/db/client';
-import { inspectTables, BACKUP_TABLES, type Inspection } from '@/db/repositories/restore';
+import { expoDb, openKeyedDatabaseFile, recoveryPhrase } from '@/db/client';
+import { inspectTables, restoreBackup, BACKUP_TABLES, type Inspection } from '@/db/repositories/restore';
 import { getRaw, setRaw } from '@/db/repositories/settings';
 import { nowISO } from '@/lib/date';
+import { normalisePhrase } from '@/lib/recoveryPhrase';
 
 import { deleteBackup, downloadBackup, listBackups, uploadBackup, type DriveFile } from './drive';
 
@@ -19,6 +22,8 @@ const KEEP = 5;
 const LAST_BACKUP_KEY = 'backup:lastAt';
 
 export const lastBackupAt = (): string | null => getRaw(LAST_BACKUP_KEY) ?? null;
+/** After a restore, this phone matches the copy it came from. */
+export const markBackedUp = (iso: string): void => setRaw(LAST_BACKUP_KEY, iso);
 
 function stamp(): string {
   // iron-2026-09-12-1614.db.enc — sorts chronologically as a plain string.
@@ -48,8 +53,9 @@ async function snapshot(): Promise<{ file: File; bytes: Uint8Array }> {
 export async function backupNow(): Promise<string> {
   const { file, bytes } = await snapshot();
   const name = stamp();
+  const phrase = recoveryPhrase();
   try {
-    await uploadBackup(name, bytes);
+    await uploadBackup(name, bytes, phrase ? { phrase: normalisePhrase(phrase) } : undefined);
   } finally {
     try {
       file.delete();
@@ -70,21 +76,39 @@ export async function backupNow(): Promise<string> {
 }
 
 /*
- * There is deliberately no backupIfDue() here any more.
- *
- * AGENTS.md §1 allows exactly one network call, "an optional, USER-INITIATED
- * encrypted backup". A daily upload fired from the root layout on every cold start
- * is not user-initiated, and connecting Drive used to switch it on by itself — so
- * ticking a box to reach a restore also signed you up to a background upload.
- * The switch, the startup call and the "on Wi-Fi, in the background" copy that
- * described a Wi-Fi check nothing implemented are all gone (UX-12, UX-13).
- *
- * Backing up is Back up now. If scheduled backups are wanted later they need a real
- * design — a constraint-aware job, a visible state, and words that match it.
+ * When a backup runs is decided by services/cloud: signing in with Google is the
+ * consent to sync, and it syncs after a workout, when the app is put away with new
+ * data, and on opening if the last copy is old (AGENTS.md §1.1).
  */
 
 export type { DriveFile };
 export { listBackups };
+
+/** The newest copy in the cloud, or null when there is none. */
+export async function latestBackup(): Promise<DriveFile | null> {
+  return (await listBackups())[0] ?? null;
+}
+
+/**
+ * Puts a cloud copy onto this phone in one step, for a sign-in on a new phone. Only
+ * for a copy that carries its phrase; older ones go through the Restore screen,
+ * which asks for it. Validates before writing, and writes in one transaction.
+ */
+export async function restoreFromDrive(file: DriveFile): Promise<{ ok: true; workouts: number } | { ok: false; reason: string }> {
+  if (!file.phrase) return { ok: false, reason: 'This copy predates sign-in. Restore it from You → Backup & data with its recovery phrase.' };
+  const found = await inspectDriveBackup(file, file.phrase);
+  if (!found.ok) return found;
+  try {
+    return { ok: true, workouts: restoreBackup(found.tables) };
+  } catch {
+    return { ok: false, reason: 'The restore failed part-way and was undone. Nothing on this phone changed.' };
+  }
+}
+
+/** Removes every copy from the cloud — part of deleting everything. */
+export async function deleteAllBackups(): Promise<void> {
+  for (const f of await listBackups()) await deleteBackup(f.id);
+}
 
 /**
  * Downloads a Drive backup and reads it with the phrase the user typed. Changes

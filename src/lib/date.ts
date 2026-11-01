@@ -119,3 +119,15 @@ export function fmtDayLabel(iso: string): string {
   const label = `${WEEKDAYS[d.getDay()] ?? ''} ${d.getDate()} ${MONTHS[d.getMonth()] ?? ''}`;
   return d.getFullYear() === new Date().getFullYear() ? label : `${label} ${d.getFullYear()}`;
 }
+
+/** "2 hours ago" beats a timestamp for something you only want reassurance about. */
+export function fmtAgo(iso: string, nowMs: number = Date.now()): string {
+  const mins = Math.max(0, Math.round((nowMs - Date.parse(iso)) / 60000));
+  if (!Number.isFinite(mins)) return 'a while ago';
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins} minutes ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? 'day' : 'days'} ago`;
+}
