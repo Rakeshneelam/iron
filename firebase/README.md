@@ -18,9 +18,13 @@ are the record of what is out there.
 
 `site/` holds the home page, privacy policy and terms of service that Google's
 sign-in screen links to, served free by Firebase Hosting at
-https://iron-508406.firebaseapp.com (`/`, `/privacy`, `/terms`). Replace
-`CONTACT_EMAIL` in `privacy.html` and `terms.html` before deploying, then:
+https://iron-508406.firebaseapp.com (`/`, `/privacy`, `/terms`). Deploy with:
 
     npx firebase-tools deploy --only hosting --project iron-508406
 
 `--only hosting` leaves the Firestore rules above untouched.
+
+Showing a logo on the sign-in screen needs Google's branding verification: the home
+page must name the app, explain it and link the privacy policy, and the domain must
+be verified in Search Console (drop Google's `google….html` file into `site/` and
+deploy again). Without a logo, publishing needs no verification.
