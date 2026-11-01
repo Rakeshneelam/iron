@@ -13,3 +13,14 @@ would only lose the description of what is protecting them.
 Retiring the project — deleting the user documents, then the project itself — is
 external, destructive, and separate work. Until someone does it, these two files
 are the record of what is out there.
+
+## Hosting: the three public pages
+
+`site/` holds the home page, privacy policy and terms of service that Google's
+sign-in screen links to, served free by Firebase Hosting at
+https://iron-508406.firebaseapp.com (`/`, `/privacy`, `/terms`). Replace
+`CONTACT_EMAIL` in `privacy.html` and `terms.html` before deploying, then:
+
+    npx firebase-tools deploy --only hosting --project iron-508406
+
+`--only hosting` leaves the Firestore rules above untouched.
