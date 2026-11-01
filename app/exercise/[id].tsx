@@ -78,7 +78,6 @@ export default function ExerciseScreen() {
       {tab === 'how' ? (
         <>
           <ExerciseGuide exercise={exercise} />
-          <Text style={styles.footnote}>{"Hidden exercises are left out of swaps and new plans. Plans you already have don't change."}</Text>
         </>
       ) : !last ? (
         <EmptyState message="Not logged yet." hint="Your first set of it starts its record here — every session after adds a column." />
@@ -220,7 +219,6 @@ function ProgressView({
           />
         ))}
       </ListCard>
-      {weighted ? <Text style={styles.footnote}>The estimate comes from your best set each session. It is a calculation, not a lift.</Text> : null}
     </>
   );
 }
@@ -239,5 +237,4 @@ const styles = StyleSheet.create({
   barsEyebrow: { ...font.eyebrow, color: color.textMuted, marginBottom: space.md },
   tiles: { marginTop: space.md },
   value: { ...font.label, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'], color: color.text, flexShrink: 1, textAlign: 'right' },
-  footnote: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm },
 });

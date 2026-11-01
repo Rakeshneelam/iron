@@ -74,12 +74,14 @@ const COPY = {
   warmup: {
     heading: 'Warm-up',
     skip: 'Skip warm-up',
+    skipOne: 'Skip drill',
     done: 'Warm-up done — on to the lifts',
     hint: 'Move through these before you load anything. Tap Done on each one.',
   },
   cooldown: {
     heading: 'Cool-down',
     skip: 'Skip cool-down',
+    skipOne: 'Skip stretch',
     done: 'Cool-down done',
     hint: 'Hold each stretch and breathe. Optional, and your workout is already saved.',
   },
@@ -93,6 +95,8 @@ export function DrillStage(p: DrillStageProps) {
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<RoutineItem[]>(p.routine.items);
   const [done, setDone] = useState<ReadonlySet<string>>(new Set());
+  /** Drills passed over on purpose. Not done, and not asked about again. */
+  const [skipped, setSkipped] = useState<ReadonlySet<string>>(new Set());
   const [i, setI] = useState(0);
   const [cues, setCues] = useState(false);
   const [list, setList] = useState(false);
@@ -104,6 +108,7 @@ export function DrillStage(p: DrillStageProps) {
     setShownFor(p.routine);
     setItems(p.routine.items);
     setDone(new Set());
+    setSkipped(new Set());
     setI(0);
   }
 
@@ -114,29 +119,49 @@ export function DrillStage(p: DrillStageProps) {
   const timer = useCountdown(total, item?.drill.id);
   const remainingCount = items.filter((x) => !done.has(x.drill.id)).length;
 
-  /** The next drill not yet ticked, wrapping past the end. -1 when they all are. */
-  const nextOpen = (from: number): number => {
+  /** The next drill neither ticked nor skipped, wrapping past the end. -1 when none is left. */
+  const nextOpen = (from: number, ticked: ReadonlySet<string>, passed: ReadonlySet<string>): number => {
     for (let k = 1; k <= items.length; k++) {
       const j = (from + k) % items.length;
       const d = items[j];
-      if (d && !done.has(d.drill.id)) return j;
+      if (d && !ticked.has(d.drill.id) && !passed.has(d.drill.id)) return j;
     }
     return -1;
+  };
+
+  /**
+   * On to the next open drill, or out of the stage when none is left. Skipping
+   * every drill one by one is the same as skipping the stage, and is recorded as
+   * that — a skipped warm-up earns the first big lift an extra ramp set.
+   */
+  const advance = (ticked: ReadonlySet<string>, passed: ReadonlySet<string>) => {
+    const j = nextOpen(idx, ticked, passed);
+    if (j >= 0) {
+      setI(j);
+      setCues(false);
+    } else if (ticked.size > 0) p.onFinish();
+    else p.onSkip();
   };
 
   const complete = () => {
     if (!item) return;
     const next = new Set(done);
     next.add(item.drill.id);
+    const passed = new Set(skipped);
+    passed.delete(item.drill.id);
     setDone(next);
+    setSkipped(passed);
     success();
-    // Last one: the stage is over, and the screen moves on without another tap.
-    if (next.size >= items.length) {
-      p.onFinish();
-      return;
-    }
-    const j = nextOpen(idx);
-    if (j >= 0) setI(j);
+    advance(next, passed);
+  };
+
+  /** Pass over this one drill and keep going: the warm-up is not all or nothing. */
+  const skipDrill = () => {
+    if (!item) return;
+    const passed = new Set(skipped);
+    passed.add(item.drill.id);
+    setSkipped(passed);
+    advance(done, passed);
   };
 
   const go = (j: number) => {
@@ -167,7 +192,7 @@ export function DrillStage(p: DrillStageProps) {
 
   if (!item) {
     return (
-      <View style={styles.flex}>
+      <View style={[styles.flex, { paddingTop: insets.top }]}>
         <Header {...p} copy={copy} count="0 of 0" />
         <View style={styles.empty}>
           <Text style={styles.emptyText}>Nothing needed today.</Text>
@@ -186,11 +211,12 @@ export function DrillStage(p: DrillStageProps) {
    * drill currently is. "Already done · 2 left" described the state and left the
    * one big button on screen reading as a dead end.
    */
-  const wouldFinish = isDone ? done.size >= items.length : done.size + 1 >= items.length;
+  const open = items.filter((x) => !done.has(x.drill.id) && !skipped.has(x.drill.id) && x.drill.id !== item.drill.id).length;
+  const wouldFinish = open === 0;
   const doneLabel = wouldFinish ? copy.done : isDone ? 'Next drill' : 'Done, next drill';
 
   return (
-    <View style={styles.flex}>
+    <View style={[styles.flex, { paddingTop: insets.top }]}>
       <Header {...p} copy={copy} count={`${done.size} of ${items.length}`} />
       {p.strip}
 
@@ -210,13 +236,10 @@ export function DrillStage(p: DrillStageProps) {
                 hitSlop={{ top: space.sm, bottom: space.sm }}
                 touchStyle={styles.railCell}
                 feedback="none"
-                style={[styles.railMark, done.has(x.drill.id) ? styles.railDone : j === idx ? styles.railNow : styles.railTodo]}
+                style={[styles.railMark, done.has(x.drill.id) ? styles.railDone : j === idx ? styles.railNow : skipped.has(x.drill.id) ? styles.railSkipped : styles.railTodo]}
               />
             ))}
           </View>
-          <Text style={styles.eyebrow}>
-            {PHASE_LABEL[item.phase]}, {idx + 1} of {items.length}
-          </Text>
           <Text style={styles.name} numberOfLines={2}>
             {item.drill.name}
           </Text>
@@ -240,19 +263,12 @@ export function DrillStage(p: DrillStageProps) {
           </View>
         )}
 
-        <Press
-          onPress={() => setCues(!cues)}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: cues }}
-          accessibilityLabel={`How to do ${item.drill.name}`}
-          feedback="highlight"
-          style={styles.cueHead}
-          pressedStyle={styles.cueHeld}
-        >
-          <Icon name="book" size={18} color={color.textMuted} />
-          <Text style={styles.cueHeadText}>How to do it</Text>
-          <Icon name={cues ? 'chevronUp' : 'chevronDown'} size={18} color={color.textFaint} />
-        </Press>
+        <View style={styles.tools}>
+          <Tool icon="book" label={cues ? 'Hide how-to' : 'How to'} a11y={`How to do ${item.drill.name}`} onPress={() => setCues(!cues)} />
+          <Tool icon="swap" label="Swap" a11y={`Swap ${item.drill.name} for something else`} onPress={swap} />
+          <Tool icon="close" label="Remove" a11y={`Remove ${item.drill.name} from today`} onPress={drop} />
+          <Tool icon="list" label="All" a11y="Show every drill in this routine" onPress={() => setList(true)} />
+        </View>
         {/* The figure lives in here with the cues, collapsed. On its own above the
             timer it cost 170dp of a screen whose whole job is one big clock, and
             the person who needs to see the movement is the person opening this. */}
@@ -268,11 +284,6 @@ export function DrillStage(p: DrillStageProps) {
           </View>
         ) : null}
 
-        <View style={styles.tools}>
-          <Tool icon="swap" label="Swap" a11y={`Swap ${item.drill.name} for something else`} onPress={swap} />
-          <Tool icon="close" label="Remove" a11y={`Remove ${item.drill.name} from today`} onPress={drop} />
-          <Tool icon="list" label="All drills" a11y="Show every drill in this routine" onPress={() => setList(true)} />
-        </View>
       </ScrollView>
 
       <View
@@ -282,11 +293,6 @@ export function DrillStage(p: DrillStageProps) {
         // with the label and with the user's text size (UX-11).
         onLayout={(e) => setToastObstruction(e.nativeEvent.layout.height)}
       >
-        <View style={styles.navRow}>
-          <PrimaryButton label="Back" tone="ghost" disabled={idx === 0} onPress={() => go(idx - 1)} />
-          <View style={styles.flex} />
-          <PrimaryButton label="Next" tone="ghost" disabled={idx === items.length - 1} onPress={() => go(idx + 1)} />
-        </View>
         <PrimaryButton
           label={doneLabel}
           size="gym"
@@ -295,7 +301,11 @@ export function DrillStage(p: DrillStageProps) {
           onPress={complete}
           accessibilityLabel={isDone ? `${item.drill.name} is already ticked — move on. ${remainingCount} left.` : `Mark ${item.drill.name} done`}
         />
-        <PrimaryButton label={copy.skip} tone="ghost" onPress={p.onSkip} />
+        <View style={styles.navRow}>
+          <PrimaryButton label={copy.skipOne} tone="ghost" onPress={skipDrill} accessibilityLabel={`Skip ${item.drill.name} and go to the next one`} />
+          <View style={styles.flex} />
+          <PrimaryButton label={copy.skip} tone="ghost" onPress={p.onSkip} />
+        </View>
       </View>
 
       <Sheet visible={list} onClose={() => setList(false)} title={`${copy.heading}, ${p.totalLabel}`}>
@@ -347,8 +357,7 @@ function Header({
   totalLabel,
   count,
   onBack,
-  onSkip,
-}: Pick<DrillStageProps, 'title' | 'totalLabel' | 'onBack' | 'onSkip'> & { copy: (typeof COPY)[keyof typeof COPY]; count: string }) {
+}: Pick<DrillStageProps, 'title' | 'totalLabel' | 'onBack'> & { copy: (typeof COPY)[keyof typeof COPY]; count: string }) {
   return (
     <View style={styles.header}>
       <IconButton icon="chevronLeft" accessibilityLabel="Leave the workout open and go back" onPress={onBack} />
@@ -366,13 +375,13 @@ function Header({
         enough for "Warm-up" and nothing else. The count reads in the meta line
         under the heading, and the drill list is a cell of the tool strip.
       */}
-      <IconButton icon="skip" accessibilityLabel={copy.skip} onPress={onSkip} />
+      <View style={styles.headerBalance} />
     </View>
   );
 }
 
-/** One cell of the tool strip, the same one the exercise screen uses. */
-function Tool({ icon, label, a11y, onPress }: { icon: 'swap' | 'close' | 'list'; label: string; a11y: string; onPress: () => void }) {
+/** A quiet tool: an icon over a word, no box. */
+function Tool({ icon, label, a11y, onPress }: { icon: 'swap' | 'close' | 'list' | 'book'; label: string; a11y: string; onPress: () => void }) {
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y} feedback="highlight" touchStyle={styles.flex} style={styles.tool} pressedStyle={styles.cueHeld}>
       <Icon name={icon} size={20} color={color.text} />
@@ -389,6 +398,7 @@ const styles = StyleSheet.create({
   headerText: { flex: 1, minWidth: 0, alignItems: 'center' },
   headerTitle: { ...font.titleSm, fontSize: 16, color: color.text, textAlign: 'center' },
   headerMeta: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textMuted, textAlign: 'center' },
+  headerBalance: { width: 46 },
   scroll: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xl, gap: space.lg },
   titleBlock: { gap: space.sm },
   rail: { flexDirection: 'row', gap: 4, marginBottom: space.xs },
@@ -397,7 +407,7 @@ const styles = StyleSheet.create({
   railDone: { backgroundColor: color.accent },
   railNow: { borderWidth: 2, borderColor: color.accent },
   railTodo: { backgroundColor: color.surfaceHigh },
-  eyebrow: { ...font.eyebrow, color: color.textMuted },
+  railSkipped: { backgroundColor: color.rule, opacity: 0.5 },
   // Italic display type overhangs its box; the right padding keeps the last glyph whole.
   name: { ...font.title, fontSize: 38, lineHeight: 41, letterSpacing: -0.6, color: color.text, paddingRight: space.xs },
   why: { ...font.body, color: color.textMuted },
@@ -408,16 +418,14 @@ const styles = StyleSheet.create({
   repsValue: { ...font.measure, fontSize: 100, lineHeight: 104, fontWeight: '900', letterSpacing: -1, color: color.accent, paddingRight: space.sm },
   repsNote: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textMuted },
 
-  cueHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym, paddingHorizontal: space.lg, borderRadius: radius.lg, backgroundColor: color.surface },
   cueHeld: { backgroundColor: color.surfaceHigh },
-  cueHeadText: { ...font.label, color: color.text, flex: 1 },
   cues: { gap: space.md, alignItems: 'center', padding: space.lg, borderRadius: radius.lg, backgroundColor: color.surface, marginTop: -space.sm },
   cueRow: { flexDirection: 'row', gap: space.md - 2, alignItems: 'flex-start' },
   cue: { ...font.label, fontWeight: '500', color: color.text, flex: 1, lineHeight: 22 },
 
-  tools: { flexDirection: 'row', gap: space.sm },
-  tool: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs + 2, minHeight: 68, borderRadius: radius.md + 4, backgroundColor: color.surface },
-  toolText: { ...font.caption, fontSize: 12, lineHeight: 15, fontWeight: '700', color: color.text },
+  tools: { flexDirection: 'row', justifyContent: 'space-around' },
+  tool: { alignItems: 'center', justifyContent: 'center', gap: space.xs, minHeight: hit.gym, minWidth: 64, paddingHorizontal: space.sm, borderRadius: radius.md },
+  toolText: { ...font.caption, fontSize: 12, lineHeight: 15, fontWeight: '700', color: color.textMuted },
 
   dock: { gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.sm, backgroundColor: color.bg },
   navRow: { flexDirection: 'row', alignItems: 'center' },

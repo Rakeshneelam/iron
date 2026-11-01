@@ -294,7 +294,7 @@ export interface AppSettings {
   wakeMinutes: number; sleepMinutes: number; activityFactor: number;
   trainingMinutes: number; ambientTempC: number | null;
   hydrationOverrideMl: number | null; calorieCycling: boolean;
-  batteryPromptShown: boolean; lastDeloadDate: string | null;
+  lastDeloadDate: string | null;
   restTimerAutoStart: boolean; hapticsEnabled: boolean;
 }
 export const DEFAULT_SETTINGS: AppSettings

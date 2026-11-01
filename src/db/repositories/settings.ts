@@ -34,7 +34,6 @@ export interface AppSettings {
   manualKcal: number | null;
   manualProteinG: number | null;
   calorieCycling: boolean;
-  batteryPromptShown: boolean;
   lastDeloadDate: string | null;
   restTimerAutoStart: boolean;
   hapticsEnabled: boolean;
@@ -70,7 +69,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   manualKcal: null,
   manualProteinG: null,
   calorieCycling: false,
-  batteryPromptShown: false,
   lastDeloadDate: null,
   restTimerAutoStart: true,
   hapticsEnabled: true,

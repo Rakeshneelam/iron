@@ -1,12 +1,10 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
-import { Icon, ListCard, ListRow, SegmentTabs } from '@/components';
-import { useSettings } from '@/db/repositories/settings';
+import { SegmentTabs } from '@/components';
 import { MeasurementsSection } from '@/features/body/MeasurementsSection';
 import { RecoverySection } from '@/features/body/RecoverySection';
 import { WeightSection } from '@/features/body/WeightSection';
-import { color } from '@/theme/tokens';
 
 const SECTIONS = [
   { label: 'Weight', value: 'weight' as const },
@@ -33,7 +31,6 @@ const isSection = (v: unknown): v is BodySection => SECTIONS.some((s) => s.value
  */
 export default function BodyScreen() {
   const params = useLocalSearchParams<{ section?: string }>();
-  const settings = useSettings();
   const [chosen, setChosen] = useState<BodySection>('weight');
   // The parameter wins while it is on the URL; clearing it returns to the
   // remembered section rather than snapping back to Weight.
@@ -46,19 +43,7 @@ export default function BodyScreen() {
   };
 
   const frame = { title: 'Body', strip: <SegmentTabs options={SECTIONS} value={section} onChange={select} /> };
-  // A link, not a second profile editor. Profile & goals owns these (UX-03).
-  const tail = (
-    <ListCard>
-      <ListRow
-        left={<Icon name="body" size={20} color={color.textMuted} />}
-        title="Profile & goals"
-        sub={`${settings.name || 'Your details'}, ${settings.age}, ${settings.heightCm} cm. Used for calorie and water targets.`}
-        onPress={() => router.push('/settings/profile')}
-      />
-    </ListCard>
-  );
-
-  if (section === 'recovery') return <RecoverySection frame={frame} tail={tail} />;
-  if (section === 'measurements') return <MeasurementsSection frame={frame} tail={tail} />;
-  return <WeightSection frame={frame} tail={tail} onMeasurements={() => select('measurements')} />;
+  if (section === 'recovery') return <RecoverySection frame={frame} />;
+  if (section === 'measurements') return <MeasurementsSection frame={frame} />;
+  return <WeightSection frame={frame} />;
 }

@@ -9,5 +9,5 @@ import { Redirect } from 'expo-router';
  * It is a redirect, not a hidden login: there is no sign-in code left behind it.
  */
 export default function AccountRedirect() {
-  return <Redirect href="/settings/profile" />;
+  return <Redirect href="/you" />;
 }

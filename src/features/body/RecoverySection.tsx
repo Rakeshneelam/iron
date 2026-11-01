@@ -10,7 +10,7 @@ import { lastTrainedByMuscle } from '@/db/repositories/progress';
 import { readinessModifier } from '@/engine/progression';
 import { CheckInSheet, sleepLabel } from '@/features/checkin/CheckInSheet';
 import { addDays, daysBetweenISO, fmtDayLabel, lastNDays, parseISODate, todayISO } from '@/lib/date';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
 import type { BodySectionProps } from './WeightSection';
 
@@ -38,7 +38,7 @@ const READINESS: Record<string, { title: string; pill: string; tone: PillTone }>
  * coming back, sleep, and every past answer — each of which can be corrected. The
  * one action opens the same CheckInSheet Today does; there is no second form (UX-03).
  */
-export function RecoverySection({ frame, tail }: BodySectionProps) {
+export function RecoverySection({ frame }: BodySectionProps) {
   const today = todayISO();
   const checkIns = useLive(() => listCheckIns(addDays(today, -13)), ['check_in'], [today]);
   const recorded = useLive(() => recentCheckIns(14), ['check_in']);
@@ -91,12 +91,12 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
               <Text style={styles.readyTitle}>{verdict.title}</Text>
               <Pill label={verdict.pill} tone={verdict.tone} />
             </View>
-            <Text style={styles.muted}>{facts}. A rough night lowers today’s targets; nothing here raises them.</Text>
+            <Text style={styles.muted}>{facts}</Text>
           </>
         ) : (
           <>
             <Text style={styles.readyTitle}>No check-in today</Text>
-            <Text style={styles.muted}>Optional. Without one, today’s targets come from what you lifted alone.</Text>
+            <Text style={styles.muted}>Optional, before a workout or any time.</Text>
           </>
         )}
         <Press onPress={() => setEditing(today)} accessibilityRole="button" hitSlop={space.sm} style={styles.linkWrap}>
@@ -112,7 +112,7 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
         weeks on a line, with a solid mark on the day that muscle last got a
         working set: what happened, in the app's own marks, and nothing inferred.
       */}
-      <SectionHeader title="By muscle" right={<Text style={styles.legend}>last two weeks, today at the right</Text>} />
+      <SectionHeader title="Last trained" right={<Text style={styles.legend}>14 days</Text>} />
       <View>
         {muscles.map((m, i) => {
           const last = trained.get(m);
@@ -138,9 +138,8 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
           );
         })}
       </View>
-      <Text style={styles.footnote}>Each mark is the last day that muscle got a working set. It never blocks a workout.</Text>
 
-      <SectionHeader title="Sleep" hint="Last 14 nights, from your check-ins." />
+      <SectionHeader title="Sleep" />
       <Card>
         {slept.length ? (
           <>
@@ -156,7 +155,7 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
 
       {recorded.length ? (
         <>
-          <SectionHeader title="Check-ins" hint="Tap one to correct it. A missed day is just a missed day." />
+          <SectionHeader title="Check-ins" />
           <ListCard>
             {recorded.map((c, i) => {
               const parts = [
@@ -179,7 +178,6 @@ export function RecoverySection({ frame, tail }: BodySectionProps) {
         </>
       ) : null}
 
-      <View style={styles.gapTop}>{tail}</View>
       {/* Keyed by day so each opening reads that day's answers. */}
       <CheckInSheet visible={editing !== null} date={editing ?? today} datePicker onClose={() => setEditing(null)} />
     </Screen>
@@ -193,7 +191,6 @@ const styles = StyleSheet.create({
   muted: { ...font.caption, color: color.textMuted },
   linkWrap: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: space.md, marginTop: space.xs, borderRadius: radius.pill, backgroundColor: color.lavSoft },
   link: { ...font.caption, fontWeight: '800', color: color.lav },
-  dim: { opacity: 0.6 },
   legend: { ...font.caption, fontSize: 12, color: color.textFaint },
   muscle: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 44 },
   divider: { borderTopWidth: 1, borderTopColor: color.border },
@@ -202,7 +199,5 @@ const styles = StyleSheet.create({
   spanLine: { height: 4, borderRadius: radius.pill, backgroundColor: color.surfaceHigh },
   spanMark: { position: 'absolute', top: 1, width: 12, height: 12, marginLeft: -6, borderRadius: radius.pill, backgroundColor: color.lav },
   ago: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint, width: 52, textAlign: 'right' },
-  footnote: { ...font.caption, fontSize: 12, color: color.textFaint },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  gapTop: { marginTop: space.lg, minHeight: hit.default },
 });

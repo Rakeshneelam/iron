@@ -5,11 +5,12 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Keyframe } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, EmptyState, Icon, IconButton, ListCard, ListRow, Pill, type PillTone, Press, PrimaryButton, SectionHeader, setToastObstruction, Sheet, toast, useReducedMotion, type IconName } from '@/components';
+import { Card, EmptyState, Icon, IconButton, ListCard, ListRow, Pill, type PillTone, Press, PrimaryButton, setToastObstruction, Sheet, toast, useReducedMotion, type IconName } from '@/components';
 import type { RuleMark } from '@/components/Rule';
 import { CATALOG, CATALOG_BY_ID, type Stress } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import type { Exercise } from '@/db/repositories/exercises';
+import { bestBefore } from '@/db/repositories/level';
 import { getDay, getSlots } from '@/db/repositories/program';
 import {
   addSessionExercise,
@@ -129,6 +130,8 @@ export default function SessionScreen() {
    */
   const [travel, setTravel] = useState<0 | 1 | -1>(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  /** The current exercise's own tools: how-to, swap, skip, remove. */
+  const [exMenu, setExMenu] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [picker, setPicker] = useState<Picker | null>(null);
   const [plates, setPlates] = useState(false);
@@ -218,6 +221,9 @@ export default function SessionScreen() {
     () => (current ? getLastPerformance(current.exerciseId, id) : undefined),
     [current?.exerciseId, id], // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  /** The best estimated 1RM from any other workout — what a set has to beat to be a new best. */
+  const best = useLive(() => (current ? bestBefore(current.exerciseId, id) : 0), ['exercise_session_stat'], [current?.exerciseId, id]);
 
   const exSets = current ? sets.filter((s) => s.exerciseId === current.exerciseId) : [];
   const exWork = exSets.filter((s) => s.isWarmup === 0);
@@ -343,6 +349,9 @@ export default function SessionScreen() {
     setJustLogged(row.id);
     success(); // gated centrally now — lib/haptics reads the user's setting
     setPain(false);
+    // Beat every earlier workout, and every set so far today: worth saying out loud.
+    const newBest = !asWarmup && measure === 'reps' && best > 0 && row.e1rm > Math.max(best, ...exWork.map((x) => x.e1rm)) + 0.5;
+    const said = newBest ? 'New best! ' : '';
     if (asWarmup) {
       // A warm-up is a persisted row like any other, so it gets the same Undo.
       toast(`Warm-up logged, ${setText(w, r)}`, { label: 'Undo', onPress: () => deleteSet(row.id) });
@@ -353,7 +362,7 @@ export default function SessionScreen() {
     const behind = partners.find((p) => p.exerciseId !== current.exerciseId && (counts.get(p.exerciseId) ?? 0) < exWork.length + 1 && (counts.get(p.exerciseId) ?? 0) < targetOf(p));
     if (behind) {
       goTo(plan.indexOf(behind));
-      toast(`Set ${exWork.length + 1} logged, ${setText(w, r)}. Next: ${behind.exercise.name}`, {
+      toast(`${said}Set ${exWork.length + 1} logged, ${setText(w, r)}. Next: ${behind.exercise.name}`, {
         label: 'Undo',
         onPress: () => deleteSet(row.id),
       });
@@ -362,7 +371,7 @@ export default function SessionScreen() {
     const roundStart = partners.length > 1 ? partners.find((p) => (counts.get(p.exerciseId) ?? 0) < targetOf(p)) : undefined;
     if (roundStart && roundStart.exerciseId !== current.exerciseId) goTo(plan.indexOf(roundStart));
     if (settings.restTimerAutoStart && !cardio) void startRest(id, restSeconds, current.exercise.name);
-    toast(`Set ${exWork.length + 1} logged, ${setText(w, r)}`, {
+    toast(`${said}Set ${exWork.length + 1} logged, ${setText(w, r)}`, {
       label: 'Undo',
       onPress: () => {
         deleteSet(row.id);
@@ -710,8 +719,8 @@ export default function SessionScreen() {
     ? { eyebrow: nextIsLast ? 'Last exercise' : 'Next exercise', label: next.exercise.name, onPress: () => goTo(nextIdx) }
     : { eyebrow: 'Everything done', label: content.cooldown ? 'Cool-down' : 'Finish workout', onPress: finish };
 
-  /** Up to four across; beyond that, two balanced rows instead of six slivers. */
-  const toolCols = tools.length <= 4 ? Math.max(1, tools.length) : Math.ceil(tools.length / 2);
+  /** Three across, so a label never shrinks to fit. */
+  const toolCols = Math.min(3, Math.max(1, tools.length));
 
   return (
     <View style={[styles.flex, { paddingTop: insets.top }]}>
@@ -769,9 +778,12 @@ export default function SessionScreen() {
               entering={reduced || travel === 0 ? undefined : travel > 0 ? ARRIVE_NEXT : ARRIVE_PREV}
               style={styles.exHead}
             >
-              <Text style={styles.exName} numberOfLines={2} accessibilityRole="header">
-                {current.exercise.name}
-              </Text>
+              <View style={styles.nameRow}>
+                <Text style={[styles.exName, styles.flex1]} numberOfLines={2} accessibilityRole="header">
+                  {current.exercise.name}
+                </Text>
+                <IconButton icon="more" accessibilityLabel={`${current.exercise.name}: how-to, swap, skip and more`} onPress={() => setExMenu(true)} />
+              </View>
               <View style={styles.chips}>
                 {current.skipped ? (
                   <Chip text="Skipped for today" />
@@ -788,7 +800,15 @@ export default function SessionScreen() {
 
             {/* Today's sets as pills: logged, the one you are on, and the ones to come. Tap a logged one to fix it. */}
             {!current.skipped ? (
-              <SetPills sets={exWork} target={target} open={!done || addingExtra} label={(sr) => setText(sr.weight, sr.reps)} fresh={reduced ? null : justLogged} onEdit={setEditing} />
+              <SetPills
+                sets={exWork}
+                target={target}
+                open={!done || addingExtra}
+                label={(sr) => setText(sr.weight, sr.reps)}
+                fresh={reduced ? null : justLogged}
+                best={measure === 'reps' && best > 0 ? best : null}
+                onEdit={setEditing}
+              />
             ) : null}
 
             {notes.get(current.exerciseId) ? (
@@ -982,45 +1002,30 @@ export default function SessionScreen() {
           </>
         }
       >
-        {/*
-          The per-exercise tools, under the name of the exercise they act on.
-
-          They used to be a 124dp strip in the scroll of the logging screen,
-          between the sets and the steppers — five occasional actions holding the
-          space two constant ones needed, which is what pushed Weight and Reps
-          off an 800dp screen. Moving them here also ends a real ambiguity: on a
-          finished exercise that strip rendered directly under a card titled with
-          the NEXT exercise, so How-to looked like it belonged to a lift it had
-          nothing to do with.
-        */}
-        {current && tools.length ? (
-          <>
-            <SectionHeader title={current.exercise.name} />
-            <View style={styles.tools}>
-              {tools.map((t) => (
-                <View key={t.label} style={[styles.toolCell, { width: `${100 / toolCols}%` }]}>
-                  {/* Every one of these changes the screen behind the sheet, so
-                      every one of them closes it. */}
-                  <Tool
-                    {...t}
-                    onPress={() => {
-                      setMenuOpen(false);
-                      setReordering(false);
-                      t.onPress();
-                    }}
-                  />
-                </View>
-              ))}
-            </View>
-          </>
-        ) : null}
-
-        <SectionHeader
-          title="Today's exercises"
-          hint={reordering ? 'Move one up or down, or take it off today. Your plan is not changed.' : undefined}
-          action={plan.length ? { label: reordering ? 'Done' : 'Edit list', onPress: () => setReordering(!reordering) } : undefined}
-        />
+        <View style={styles.editRow}>
+          {plan.length ? (
+            <Press onPress={() => setReordering(!reordering)} accessibilityRole="button" hitSlop={10}>
+              <Text style={styles.editLink}>{reordering ? 'Done' : 'Edit list'}</Text>
+            </Press>
+          ) : null}
+        </View>
         <ListCard>
+          {warmup.items.length && !reordering ? (
+            <ListRow
+              left={<StatusMark state={warmupState === 'done' ? 'done' : warmupState === 'skipped' ? 'skipped' : 'todo'} now={false} />}
+              title="Warm-up"
+              sub={warmupState === 'done' ? 'Done' : warmupState === 'skipped' ? 'Skipped. Tap to do it now' : 'Not started'}
+              tone={warmupState === 'done' ? 'default' : 'muted'}
+              onPress={() => {
+                setMenuOpen(false);
+                // Back to pending as well as back to the stage: a warm-up marked
+                // skipped buys the first big lift an extra light ramp set, and
+                // going to do it means that no longer applies.
+                setWarmupState(id, 'pending');
+                setSessionStage(id, 'warmup');
+              }}
+            />
+          ) : null}
           {plan.map((p, i) => {
             const st = stateOf(p);
             const work = sets.filter((s) => s.exerciseId === p.exerciseId && s.isWarmup === 0);
@@ -1036,7 +1041,7 @@ export default function SessionScreen() {
             return (
               <ListRow
                 key={p.exerciseId}
-                divider={i > 0}
+                divider={i > 0 || (warmup.items.length > 0 && !reordering)}
                 left={<StatusMark state={st} now={isNow} />}
                 title={p.exercise.name}
                 sub={p.adHoc ? `${sub}, added today` : sub}
@@ -1066,53 +1071,51 @@ export default function SessionScreen() {
               />
             );
           })}
-        </ListCard>
-        <View style={styles.menuEnd}>
-          <PrimaryButton
-            label="Add exercise"
-            tone="neutral"
-            icon={<Icon name="plus" size={18} />}
-            onPress={() => {
-              setMenuOpen(false);
-              setPicker({ mode: 'add' });
-            }}
-          />
-          {warmup.items.length ? (
-            <PrimaryButton
-              label={warmupState === 'pending' ? 'Warm up first' : 'Back to the warm-up'}
-              tone="neutral"
-              icon={<Icon name="flame" size={16} color={color.textMuted} />}
+          {reordering ? null : (
+            <ListRow
+              divider
+              left={
+                <View style={styles.addMark}>
+                  <Icon name="plus" size={14} color={color.accent} strokeWidth={2.8} />
+                </View>
+              }
+              title="Add exercise"
+              tone="accent"
+              chevron={false}
               onPress={() => {
                 setMenuOpen(false);
-                // Back to pending as well as back to the stage: a warm-up marked
-                // skipped buys the first big lift an extra light ramp set, and
-                // going to do it means that no longer applies.
-                setWarmupState(id, 'pending');
-                setSessionStage(id, 'warmup');
+                setPicker({ mode: 'add' });
               }}
             />
-          ) : null}
-          {/*
-            Ending the workout lives here, deliberately. The dock offers Finish only
-            once everything is done or skipped; leaving early is a decision, and it
-            belongs with the list that shows what is being left (UX-04).
-          */}
-          <PrimaryButton
-            label={settled ? (content.cooldown ? 'Cool-down, then finish' : 'Finish workout') : 'Finish early'}
-            size="gym"
-            icon={<Icon name="check" size={20} color={color.onAccent} />}
-            onPress={finish}
-          />
-          {/*
-            A real alternative, so it looks like one. As a `ghost` it was muted grey
-            text with no frame — the app's own "dismiss, go back" weight — which on
-            the one destructive action here read as disabled (§1).
-          */}
-          <PrimaryButton label="Cancel workout" tone="dangerOutline" icon={<Icon name="close" size={16} color={color.danger} />} onPress={cancel} />
-          <Text style={styles.captionCenter}>
-            Finish saves what you did — unfinished exercises count as partial. Cancel asks first, and never counts as done.
-          </Text>
+          )}
+        </ListCard>
+        {/*
+          Ending lives here, with the list that shows what is being left; the dock
+          offers Finish only once everything is done or skipped (UX-04). Two quiet
+          buttons side by side, not a loud Finish over a red one.
+        */}
+        <View style={styles.endRow}>
+          <PrimaryButton label={settled ? (content.cooldown ? 'Cool-down' : 'Finish') : 'End workout'} tone={settled ? 'accent' : 'neutral'} style={styles.flex1} onPress={finish} />
+          <PrimaryButton label="Cancel" tone="dangerOutline" style={styles.flex1} onPress={cancel} accessibilityLabel="Cancel the workout. Asks first; never counts as done." />
         </View>
+      </Sheet>
+
+      {/* The current exercise's tools. Every one changes the screen behind, so every one closes this. */}
+      <Sheet visible={exMenu} onClose={() => setExMenu(false)} title={current?.exercise.name}>
+        <View style={styles.tools}>
+          {tools.map((t) => (
+            <View key={t.label} style={[styles.toolCell, { width: `${100 / toolCols}%` }]}>
+              <Tool
+                {...t}
+                onPress={() => {
+                  setExMenu(false);
+                  t.onPress();
+                }}
+              />
+            </View>
+          ))}
+        </View>
+        <View style={styles.sheetTail} />
       </Sheet>
 
       <Sheet visible={picker !== null} onClose={() => setPicker(null)} title={picker?.mode === 'swap' ? `Swap ${picker.from.exercise.name}` : 'Add exercise'}>
@@ -1167,7 +1170,24 @@ const SETS_PER_ROW = 5;
  * and opens for editing; the one you are on is outlined in volt; the rest wait as
  * dashes. The set logged a moment ago is filled volt for `motion.cool`, then settles.
  */
-function SetPills({ sets, target, open, label, fresh, onEdit }: { sets: readonly SetRow[]; target: number; open: boolean; label: (s: SetRow) => string; fresh: string | null; onEdit: (s: SetRow) => void }) {
+function SetPills({
+  sets,
+  target,
+  open,
+  label,
+  fresh,
+  best,
+  onEdit,
+}: {
+  sets: readonly SetRow[];
+  target: number;
+  open: boolean;
+  label: (s: SetRow) => string;
+  fresh: string | null;
+  /** The best estimated 1RM before today; a set that beats it gets a star. Null when it does not apply. */
+  best: number | null;
+  onEdit: (s: SetRow) => void;
+}) {
   const count = Math.max(target, sets.length + (open ? 1 : 0));
   const cells = Array.from({ length: count }, (_, i) => i);
   const rows = Array.from({ length: Math.ceil(count / SETS_PER_ROW) }, (_, r) => cells.slice(r * SETS_PER_ROW, r * SETS_PER_ROW + SETS_PER_ROW));
@@ -1180,19 +1200,23 @@ function SetPills({ sets, target, open, label, fresh, onEdit }: { sets: readonly
             const set = sets[i];
             if (set) {
               const hot = set.id === fresh;
+              const star = best !== null && set.e1rm > best + 0.5;
               return (
                 <Press
                   key={set.id}
                   onPress={() => onEdit(set)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Set ${i + 1}: ${label(set)}. Tap to edit.`}
+                  accessibilityLabel={`Set ${i + 1}: ${label(set)}${star ? ', a new best' : ''}. Tap to edit.`}
                   touchStyle={styles.flex1}
                   style={[styles.set, hot ? styles.setHot : styles.setDone]}
                 >
                   <Text style={[styles.setValue, hot ? styles.setValueHot : styles.setValueDone]} numberOfLines={1} adjustsFontSizeToFit>
                     {label(set)}
                   </Text>
-                  <Text style={[styles.setLabel, hot && styles.setLabelHot]}>Set {i + 1}</Text>
+                  <View style={styles.setFoot}>
+                    {star ? <Icon name="star" size={10} color={hot ? color.onAccent : color.accent} strokeWidth={2.6} /> : null}
+                    <Text style={[styles.setLabel, hot && styles.setLabelHot]}>Set {i + 1}</Text>
+                  </View>
                 </Press>
               );
             }
@@ -1309,6 +1333,13 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
 
   exHead: { gap: space.sm + 2, marginTop: space.xs },
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  setFoot: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  editRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: space.sm, minHeight: 20 },
+  editLink: { ...font.label, fontSize: 13, color: color.accent },
+  addMark: { width: 26, height: 26, borderRadius: radius.pill, backgroundColor: color.accentWash, alignItems: 'center', justifyContent: 'center' },
+  endRow: { flexDirection: 'row', gap: space.sm, marginTop: space.lg, paddingBottom: space.md },
+  sheetTail: { height: space.lg },
   // Italic display type overhangs its box; the right padding keeps the last glyph whole.
   exName: { ...font.title, fontSize: 42, lineHeight: 44, letterSpacing: -0.8, color: color.text, paddingRight: space.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2 },
@@ -1341,20 +1372,18 @@ const styles = StyleSheet.create({
   doneText: { ...font.caption, fontSize: 13, ...font.numeric, fontWeight: '600', color: color.textMuted, flex: 1 },
   delta: { ...font.caption, fontWeight: '800', ...font.numeric },
 
-  tools: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -space.xs, rowGap: space.sm },
+  tools: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -space.xs, rowGap: space.sm, marginTop: space.xs },
   toolCell: { paddingHorizontal: space.xs },
-  tool: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs + 2, minHeight: 72, borderRadius: radius.md + 4, backgroundColor: color.surface },
-  toolPressed: { backgroundColor: color.surfaceHigh },
+  tool: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs + 2, minHeight: 76, borderRadius: radius.md + 4, backgroundColor: color.surfaceHigh },
+  toolPressed: { backgroundColor: color.border },
   toolText: { ...font.caption, fontSize: 12, lineHeight: 15, fontWeight: '700', color: color.text },
   body: { ...font.body, color: color.text },
   caption: { ...font.caption, color: color.textMuted },
-  captionCenter: { ...font.caption, color: color.textMuted, textAlign: 'center' },
   accentText: { color: color.accent },
   dock: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm, backgroundColor: color.bg },
   mark: { width: 26, height: 26, borderRadius: radius.pill, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   markDone: { backgroundColor: color.accent, borderColor: color.accent },
   markSkipped: { width: 26, alignItems: 'center', justifyContent: 'center', height: 2, borderRadius: 1, backgroundColor: color.textFaint },
   markDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: color.accent },
-  menuEnd: { gap: space.sm, marginTop: space.md, paddingBottom: space.md },
   restOnlyDock: { gap: space.sm },
 });

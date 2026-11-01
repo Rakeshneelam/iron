@@ -112,7 +112,6 @@ const styles = StyleSheet.create({
   value: { ...font.body, ...font.numeric, color: color.text, flex: 1 },
   count: { width: 170 },
   del: { width: hit.default, height: hit.default, alignItems: 'center', justifyContent: 'center' },
-  delText: { ...font.label, color: color.textMuted },
   label: { ...font.label, color: color.text, fontWeight: '600', marginTop: space.lg, marginBottom: space.sm },
   hint: { ...font.caption, color: color.textMuted },
   pair: { flexDirection: 'row', gap: space.md, marginTop: space.md },

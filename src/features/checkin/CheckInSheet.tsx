@@ -103,14 +103,10 @@ export function CheckInForm({ date, datePicker, onClose, onStart, onSkip, startL
   return (
     <View style={styles.stack}>
       {datePicker ? <DateStepper value={day} onChange={goTo} /> : null}
-      <Text style={styles.hint}>
-        {onStart
-          ? "Optional. A rough night lowers today's targets; nothing here raises them. Tap an answer again to clear it."
-          : 'Optional. Only what you answer is saved. Tap an answer again to clear it.'}
-      </Text>
+      <Text style={styles.hint}>All optional. Tap an answer again to clear it.</Text>
 
-      <Answer label="Morning weight" hint={weight.given ? null : 'Saves with the check-in'}>
-        <WeightField draft={weight} onChange={setWeight} pendingLabel="Will save with the check-in" size="gym" />
+      <Answer label="Morning weight" hint={null}>
+        <WeightField draft={weight} onChange={setWeight} size="gym" />
       </Answer>
       <Answer label="Sleep last night" hint={recorded(sleep)}>
         <ChipRow options={SLEEP} value={sleep} onChange={toggle(sleep, setSleep)} />
@@ -187,10 +183,7 @@ export function CheckInForm({ date, datePicker, onClose, onStart, onSkip, startL
               />
               {/* Two different records. Clearing one must not imply the other went. */}
               {getWeighIn(day) ? (
-                <Text style={styles.hint}>
-                  Clearing removes the sleep, soreness and stress answers. The weigh-in for this day is a separate
-                  record and stays — delete it from Body → Weight.
-                </Text>
+                <Text style={styles.hint}>The weigh-in for this day stays; delete it from Body → Weight.</Text>
               ) : null}
             </>
           ) : null}
@@ -217,8 +210,6 @@ function Answer({ label, hint, children }: { label: string; hint: string | null;
 
 const styles = StyleSheet.create({
   stack: { gap: space.lg, paddingBottom: space.lg },
-  flex: { flex: 1 },
-  flex2: { flex: 2 },
   labelRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
   leader: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: color.border },
   hint: { ...font.caption, color: color.textMuted },

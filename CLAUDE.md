@@ -16,8 +16,9 @@ If you read only one file, read this one. Everything else is detail in `/docs`.
    backup to the user's own Google Drive `appDataFolder`. No analytics, no crash
    reporting SaaS, no remote config, no ads, no telemetry.
 2. **No accounts, no login.** A fresh install shows one welcome (what Iron is, and
-   Restore for a new phone) and then ONE setup screen (profile + pick a plan, as
-   tabs of one screen, never a wizard); after that the app opens straight into
+   Restore for a new phone) and then ONE setup screen in three steps — You,
+   Training, Plan — walked with Next and closed with Finish (the steps stay
+   tappable, so going back is one tap); after that the app opens straight into
    today's workout. An upgrade of an existing install never shows either.
 3. **Writes are immediate.** Every logged set hits SQLite the moment the user taps.
    Never hold a workout in React state and save "on finish" — the app will be killed
@@ -44,7 +45,7 @@ screens off them, not tabs.
 
 | # | Surface | Purpose |
 |---|---|---|
-| 1 | **Today** | What today is — the week as a strip of days, the day's workout on a volt card (lifts, sets, estimate, usual time), then water, food, weight and the week as tiles. Start workout under a thumb. No exercise list here (the workout shows it) and no check-in row (Start does) |
+| 1 | **Today** | What today is — your level on the avatar (→ You: level, badges, profile, reminders, backup), the week as a strip of days, the day's workout on a volt card (its corner button changes day or length), the day's other choices as always-visible tiles (never a "More"), then water, food and weight tiles that log with their + and the weekly goal ring. Start workout under a thumb. The sliders open Settings: body and training only |
 | 2 | **Food** | Calories/macros with one-tap repeats of his real meals, plus a compact Water row for the day on screen |
 | 3 | **Body** | Three sections in one tab: **Weight** (smoothed trend, not raw dots), **Recovery** (check-in, sleep, correctable history), **Measurements**. Each has exactly one primary action |
 | 4 | **Plans** | Any number of plans (templates or custom), one active; days → exercises. Owns the training schedule |
@@ -139,7 +140,7 @@ Each one is excluded because of documented user harm, not taste.
 
 | Excluded | Why |
 |---|---|
-| Streaks, badges, XP, "don't break the chain" | All-or-nothing framing is the top driver of tracking abandonment; one missed day makes people quit entirely. Missed days are neutral here. |
+| Streaks, "don't break the chain", anything that can be lost | All-or-nothing framing is the top driver of tracking abandonment; one missed day makes people quit entirely. Missed days are neutral here. The owner asked for gamification (Nov 2026), so it is **loss-free only**: XP and levels come from lifetime counts and only go up, badges are counts ("on 7 days", never "7 in a row") and stay earned, the weekly goal resets each Monday with no carry-over, and every point shows its source (`src/engine/level.ts`). |
 | Social feed, sharing, leaderboards | Single user. There is no audience. |
 | Fixed-interval reminder spam | The most common complaint in every water app's reviews. Reminders are debt-based and silent when he's ahead. See `docs/06-NOTIFICATIONS.md`. |
 | Automatic exercise rotation / "AI picks your workout" | The single most-cited complaint about Fitbod. Stable exercise selection is better for hypertrophy and for tracking progression. |

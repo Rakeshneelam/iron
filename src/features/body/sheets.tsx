@@ -51,25 +51,24 @@ export function WeighInSheet({ entry, onClose }: { entry: WeighEntry | null; onC
 
 function WeighInForm({ entry, onClose }: { entry: WeighEntry; onClose: () => void }) {
   const [date, setDate] = useState(entry.date);
-  const [draft, setDraft] = useState<WeightDraft>(() => weightDraftFor(entry.date));
+  // Opening this sheet is the intent to log, so the number shown is the answer.
+  const [draft, setDraft] = useState<WeightDraft>(() => ({ ...weightDraftFor(entry.date), given: true }));
   const [from, setFrom] = useState(entry.date);
 
   /** Another day is another reading, not the same number under a new date. */
   const goTo = (iso: string) => {
     setDate(iso);
     setFrom(iso);
-    setDraft(weightDraftFor(iso));
+    setDraft({ ...weightDraftFor(iso), given: true });
   };
 
   return (
     <View style={styles.stack}>
       <DateStepper value={date} onChange={goTo} />
-      <WeightField key={date} date={date} draft={draft} onChange={setDraft} pendingLabel="Will save when you tap Save" size="hero" />
-      <Text style={styles.hint}>{"Same time each morning, before food. One reading per day — saving replaces that day's."}</Text>
+      <WeightField key={date} date={date} draft={draft} onChange={setDraft} size="hero" optional={false} />
       <PrimaryButton
         label="Save"
         size="gym"
-        disabled={!draft.given}
         onPress={() => {
           if (draft.existing && from !== date) moveWeighIn(from, date, draft.kg);
           else upsertWeighIn(date, draft.kg);

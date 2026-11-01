@@ -1,17 +1,16 @@
 /**
- * The five parts of Settings: Profile · Training · Workout · Alerts · Data.
+ * The parts of settings. Body · Training · Workout are tabs of Settings (the
+ * sliders on Today); Reminders and Backup are pages of You (the avatar).
  *
- * They used to be five pages behind a menu of six rows; they are tabs of one
- * screen now, so the part you came for is one tap away and the others stay in
- * view. Every control here writes straight to settings — there is no Save.
- * Only settings that exist are drawn: a switch that changes nothing is a lie.
+ * Every control writes straight to settings — there is no Save. Only settings that
+ * exist are drawn: a switch that changes nothing is a lie.
  */
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, ChipRow, IconButton, ListCard, ListRow, PrimaryButton, SectionHeader, Sheet, ToggleChips, ToggleRow } from '@/components';
+import { Card, ChipRow, IconButton, ListCard, ListRow, PrimaryButton, SectionHeader, Sheet, ToggleChips, ToggleRow, WeekdayPicker } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { recoveryPhrase } from '@/db/client';
 import { useLive } from '@/db/live';
@@ -32,16 +31,16 @@ import { backupNow, lastBackupAt } from '@/services/backup';
 import { connect, currentAccount, disconnect, isConfigured } from '@/services/drive';
 import { exportAll } from '@/services/export';
 import { hydrationTarget } from '@/services/hydration';
-import { notificationsAllowed, openBatteryOptimisationSettings, requestPermissions, rescheduleAll } from '@/services/notifications';
+import { notificationsAllowed, requestPermissions, rescheduleAll } from '@/services/notifications';
 import { color, font, radius, space } from '@/theme/tokens';
 
-import { Field, ProfileFields } from './ProfileFields';
+import { Field, GoalField } from './ProfileFields';
 import { TimeAdjuster } from './Row';
 import { fmtClockOfDay } from './time';
 
-/* ================================ Profile ================================= */
+/* ================================== Body ================================== */
 
-export function ProfileTab() {
+export function BodyTab() {
   const t = useLive(() => computeTargets(todayISO()), ['meal_log', 'food', 'recipe', 'recipe_item', 'weigh_in', 'setting', 'session']);
   const water = useLive(() => hydrationTarget(), ['setting', 'weigh_in', 'session']);
   const s = useSettings();
@@ -49,8 +48,8 @@ export function ProfileTab() {
 
   return (
     <>
-      <ProfileFields />
-      <SectionHeader title="Daily targets" hint="Automatic targets show their working. Tap one to set your own." />
+      <GoalField />
+      <SectionHeader title="Daily targets" />
       <ListCard>
         <ListRow title="Calories" sub={s.manualKcal !== null ? 'Your own number' : t.auto.note} right={<Text style={styles.value}>{kcal(t.kcal)}</Text>} onPress={() => setSheet('food')} />
         <ListRow divider title="Protein" sub={s.manualProteinG !== null ? 'Your own number' : 'Worked out from your body weight and goal'} right={<Text style={styles.value}>{t.proteinG} g</Text>} onPress={() => setSheet('food')} />
@@ -78,7 +77,7 @@ export function TrainingTab() {
           onPress={() => router.push('/program')}
         />
       </ListCard>
-      <Field label="Main goal" hint="What new plans and exercise swaps are built for.">
+      <Field label="Main goal">
         <ChipRow options={GOAL_OPTIONS} value={s.goalFocus} onChange={(v) => setSetting('goalFocus', v)} columns={3} />
       </Field>
       <Field label="Lifting experience">
@@ -95,12 +94,12 @@ export function TrainingTab() {
           onPress={() => router.push('/settings/equipment')}
         />
       </ListCard>
-      <Field label="Go easy on" hint="Skips exercises that load these areas in swaps and new plans. Not medical advice.">
+      <Field label="Go easy on">
         <ToggleChips options={LIMITATION_OPTIONS} values={s.limitations} onToggle={(v) => setSetting('limitations', toggle(s.limitations, v))} columns={3} />
       </Field>
       <Field label="Exercises you’d rather not do">
         {s.disliked.length === 0 ? (
-          <Text style={styles.hint}>None. Mark one from its guide in the exercise library.</Text>
+          <Text style={styles.hint}>None yet.</Text>
         ) : (
           <ListCard style={styles.flush}>
             {s.disliked.map((id, i) => (
@@ -124,24 +123,11 @@ export function WorkoutTab() {
   const s = useSettings();
   return (
     <>
-      <SectionHeader title="Rest timer" />
       <ListCard>
-        <ToggleRow title="Start rest after each set" sub="The timer starts the moment you log a set, in the row above Log set." value={s.restTimerAutoStart} onChange={(v) => setSetting('restTimerAutoStart', v)} />
-        <ToggleRow divider title="Haptics" sub="A buzz when a set logs, a number steps or rest ends." value={s.hapticsEnabled} onChange={(v) => setSetting('hapticsEnabled', v)} />
+        <ToggleRow title="Start rest after each set" value={s.restTimerAutoStart} onChange={(v) => setSetting('restTimerAutoStart', v)} />
       </ListCard>
-      <SectionHeader title="Warm-up" hint="What a workout offers before the first set. You can change it there too." />
+      <SectionHeader title="Warm-up" />
       <ChipRow options={MODE_OPTIONS} value={s.warmupMode} onChange={(v) => setSetting('warmupMode', v)} />
-      <SectionHeader title="Screen" />
-      <ListCard>
-        {/* Not a switch: the screen always stays on in a workout (AGENTS §7). */}
-        <ListRow title="Screen stays on while lifting" sub="Always, during a workout — and only then." chevron={false} />
-        <ListRow
-          divider
-          title="Battery optimisation"
-          sub="The rest timer and reminders need Iron exempt to fire with the screen off."
-          onPress={() => void openBatteryOptimisationSettings()}
-        />
-      </ListCard>
     </>
   );
 }
@@ -189,7 +175,6 @@ export function AlertsTab() {
 
   return (
     <>
-      <Text style={styles.lead}>Reminders are scheduled on this phone. Nothing is sent from a server, none fires in quiet hours, and at most three a day.</Text>
       {denied ? (
         <Card tone="warning">
           <Text style={styles.warn}>Iron cannot post notifications yet, so these switches have nothing to send.</Text>
@@ -231,8 +216,8 @@ export function AlertsTab() {
       <ListCard>
         <ToggleRow title="Measurements" sub="Only when a check-in is due." value={r.measurements.on} onChange={on('measurements')} />
         {r.measurements.on ? (
-          <View style={[styles.sub, styles.divider]}>
-            <ChipRow options={WEEKDAYS} value={r.measurements.weekday} onChange={(v) => update('measurements', { weekday: v })} columns={7} />
+          <View style={[styles.subStack, styles.divider]}>
+            <WeekdayPicker single values={[r.measurements.weekday]} onToggle={(v) => update('measurements', { weekday: v })} />
             <ChipRow options={EVERY} value={r.measurements.everyWeeks} onChange={(v) => update('measurements', { everyWeeks: v })} />
           </View>
         ) : null}
@@ -353,7 +338,6 @@ export function DataTab() {
         <PrimaryButton label="Restore from a file" tone="neutral" onPress={() => router.push('/settings/restore')} />
       )}
       {message ? <Text style={styles.hint}>{message}</Text> : null}
-      <Text style={styles.footnote}>Backups happen when you tap Back up now. Nothing is uploaded on its own, and only Iron can read the Drive folder.</Text>
 
       <SectionHeader title="Recovery phrase" hint="The only thing that can open a backup on another phone. Write it down." />
       <Card>
@@ -447,14 +431,13 @@ const styles = StyleSheet.create({
   flush: { marginBottom: 0 },
   pair: { flexDirection: 'row', gap: space.md - 2, marginBottom: space.sm },
   gapTop: { marginTop: space.md },
-  lead: { ...font.caption, color: color.textMuted, marginBottom: space.md },
   body: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted },
   hint: { ...font.caption, fontSize: 12, color: color.textFaint },
-  footnote: { ...font.caption, fontSize: 12, color: color.textFaint, marginBottom: space.sm },
   warn: { ...font.label, color: color.warning, marginBottom: space.xs },
   value: { ...font.label, fontSize: 16, fontWeight: '700', ...font.numeric, color: color.text },
   link: { ...font.caption, fontSize: 14, fontWeight: '800', color: color.accent },
   sub: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.sm, paddingVertical: space.md },
+  subStack: { gap: space.md, paddingVertical: space.md },
   subLabel: { ...font.caption, fontWeight: '600', color: color.textMuted, flex: 1 },
   divider: { borderTopWidth: 1, borderTopColor: color.border },
   rowTitle: { ...font.label, fontWeight: '600', color: color.text },

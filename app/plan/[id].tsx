@@ -75,7 +75,7 @@ export default function PlanScreen() {
 
       <Card style={styles.gapTop}>
         <Stepper label="Workouts per week" value={routine.daysPerWeek} step={1} min={1} max={7} onChange={(v) => setDaysPerWeek(id, v)} />
-        <Text style={styles.hint}>Days run in order, one after another — a missed day waits for you instead of being skipped.</Text>
+        <Text style={styles.hint}>Days run in order. A missed day waits for you.</Text>
       </Card>
 
       <SectionHeader title={`Days, ${detail.days.length}`} />
@@ -110,7 +110,7 @@ export default function PlanScreen() {
       </Press>
       {showVolume ? (
         <>
-          <Text style={styles.hint}>The outline is the productive range for most people. Short of it is below the minimum; past its end is more than most recover from.</Text>
+          <Text style={styles.hint}>The lighter stretch is the productive range.</Text>
           <VolumeList weekly={detail.weekly} />
         </>
       ) : null}
@@ -170,6 +170,5 @@ const styles = StyleSheet.create({
   gapTop: { marginTop: space.lg },
   hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
   dayRow: { flexDirection: 'row', alignItems: 'center' },
-  muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   toggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 });

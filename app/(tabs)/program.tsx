@@ -244,7 +244,7 @@ export default function PlansScreen() {
       ) : null}
 
       <Sheet visible={creating && !preview} onClose={() => setCreating(false)} title="New plan">
-        <Text style={styles.muted}>Ranked for your goal, days, time and equipment. Templates are copied — edit anything afterwards.</Text>
+        <Text style={styles.muted}>Best matches for you first.</Text>
         {ranked.map((m, i) => (
           <Press key={m.template.id} feedback="highlight" style={[styles.option, !m.fits && styles.dim]} pressedStyle={styles.pressed} onPress={() => setPreview(m.template)} accessibilityRole="button">
             <View style={styles.flex1}>

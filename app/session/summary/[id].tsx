@@ -1,21 +1,22 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Card, ChipRow, confirm, EmptyState, Icon, IconButton, ListCard, MiniBars, Pill, Press, PrimaryButton, Screen, SectionHeader, TextField, toast } from '@/components';
 import { CATALOG_BY_ID } from '@/data/catalog';
 import { useLive } from '@/db/live';
-import { countFinishedWorkouts, recentWorkouts, sessionRecords } from '@/db/repositories/progress';
+import { sessionRecords } from '@/db/repositories/progress';
 import { deleteSession, getSessionSummary, isNoTraining, reopenSession, setSessionFeedback, type SetRow } from '@/db/repositories/sessions';
-import { workoutMilestone } from '@/engine/records';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { fmtSet } from '@/features/session/prescription';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
-import { BatteryCard } from '@/features/settings/BatteryCard';
+import { RewardCard } from '@/features/level/LevelParts';
+import { sessionReward } from '@/features/level/level';
 import { minutesLabel } from '@/features/warmup/labels';
 import { fmtDayLabel } from '@/lib/date';
 import { signed } from '@/lib/format';
-import { color, font, gap, hit, radius, space } from '@/theme/tokens';
+import { success } from '@/lib/haptics';
+import { color, font, hit, radius, space } from '@/theme/tokens';
 
 /** Session RPE, in words — easier than a 1–10 scale after a hard session. */
 const EFFORT = [
@@ -45,11 +46,11 @@ export default function SummaryScreen() {
   const justFinished = params.just === '1';
   const summary = useLive(() => getSessionSummary(id), ['session', 'session_exercise', 'set_log', 'exercise', 'exercise_session_stat'], [id]);
   const records = useLive(() => sessionRecords(id), ['set_log', 'session', 'exercise'], [id]);
-  const milestone = useLive(
-    () => (justFinished && recentWorkouts(1)[0]?.session.id === id ? workoutMilestone(countFinishedWorkouts()) : null),
-    ['session'],
-    [id, justFinished],
-  );
+  /** What this workout earned, read once as it opens: a snapshot, so it does not shift as you log water. */
+  const [reward] = useState(() => (justFinished ? sessionReward(id) : null));
+  useEffect(() => {
+    if (reward && reward.gained > 0) success();
+  }, [reward]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editing, setEditing] = useState<SetRow | null>(null);
 
@@ -151,7 +152,6 @@ export default function SummaryScreen() {
           );
         })}
       </ListCard>
-      <Text style={styles.legend}>Change is in estimated 1-rep max vs last time.</Text>
     </>
   );
 
@@ -188,7 +188,6 @@ export default function SummaryScreen() {
                 <View style={styles.kickerDot} />
                 <Text style={styles.kickerText}>{STATUS_LABEL[s.status]}</Text>
               </View>
-              {milestone ? <Text style={styles.heroNote}>{milestone}</Text> : null}
             </View>
             <Text style={styles.heroValue} numberOfLines={1}>
               {summary.totalTonnage > 0 ? lifted : String(summary.hardSets)}
@@ -200,6 +199,7 @@ export default function SummaryScreen() {
               {records.length ? <HeroChip text={`${records.length} new ${records.length === 1 ? 'best' : 'bests'}`} /> : null}
             </View>
           </Card>
+          {reward && reward.gained > 0 ? <RewardCard reward={reward} /> : null}
           {/* Seconds held are not reps: timed work gets its own sentence, never a sum with reps (UX-09). */}
           {totalSeconds > 0 ? (
             <Text style={styles.note}>
@@ -255,11 +255,6 @@ export default function SummaryScreen() {
             multiline
             style={styles.input}
           />
-          {justFinished ? (
-            <View style={styles.aside}>
-              <BatteryCard />
-            </View>
-          ) : null}
         </>
       )}
 
@@ -268,9 +263,6 @@ export default function SummaryScreen() {
         {/* Permanent deletion, kept in the corner it belongs in. */}
         <IconButton icon="trash" label="Delete" accessibilityLabel="Delete this workout permanently" onPress={remove} />
       </View>
-      <Text style={styles.legend}>
-        {justFinished ? 'Finished by mistake? Reopen puts you back in the workout.' : 'Correcting a set here leaves this workout’s date and status exactly as they are.'}
-      </Text>
 
       {/* The same editor the session screen uses. Corrections rebuild this
           session's aggregates and touch nothing else. */}
@@ -298,7 +290,6 @@ const styles = StyleSheet.create({
   kicker: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.onTile },
   kickerDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: color.accent },
   kickerText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.accent },
-  heroNote: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.onTileMuted, flexShrink: 1 },
   heroValue: { ...font.display, fontSize: 56, lineHeight: 60, color: color.onTile, marginTop: space.md, paddingRight: space.xs },
   heroUnit: { ...font.measure, fontSize: 20, color: color.onTile, letterSpacing: 0 },
   heroChips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.sm },
@@ -329,7 +320,5 @@ const styles = StyleSheet.create({
   divider: { borderTopWidth: 1, borderTopColor: color.border },
   name: { ...font.label, color: color.text },
   muted: { ...font.caption, ...font.numeric, color: color.textMuted, marginTop: 2 },
-  legend: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  aside: { marginTop: gap.section },
   secondary: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.sm },
 });

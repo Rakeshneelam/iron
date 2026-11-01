@@ -97,13 +97,6 @@ export default function WaterScreen() {
   const pace = !isToday ? null : reached ? 'Target reached' : plan.ahead ? `${ml(gapMl)} ahead of pace` : `${ml(gapMl)} under pace`;
   const remindersOn = settings.reminders.water.on;
   const reminderTitle = !remindersOn ? 'Reminders are off' : reached || plan.ahead ? 'Reminders are quiet' : next ? `Next reminder ${fmtClockOfDay(next.atMinutes)}` : 'No more reminders today';
-  const reminderText = !remindersOn
-    ? 'Turn them on in Settings → Reminders. They only ever nudge when you fall behind.'
-    : reached
-      ? 'Target reached — nothing more will buzz today.'
-      : plan.ahead
-        ? `You are ${ml(gapMl)} ahead of where the day expects you to be, so nothing will buzz until you fall behind.`
-        : `You are ${ml(gapMl)} behind where the day expects you to be. One reminder at a time, never on a timer.`;
 
   return (
     <Screen
@@ -112,7 +105,7 @@ export default function WaterScreen() {
       right={
         <View style={styles.headerBtns}>
           <IconButton icon="target" accessibilityLabel={`Daily target ${ml(target)}. Change it.`} onPress={() => setTargetSheet(true)} />
-          <IconButton icon="bell" accessibilityLabel="Reminder settings" onPress={() => router.push('/settings/reminders')} />
+          <IconButton icon="bell" accessibilityLabel="Reminder settings" onPress={() => router.push('/you/reminders')} />
         </View>
       }
     >
@@ -167,10 +160,7 @@ export default function WaterScreen() {
           <View style={styles.bell}>
             <Icon name="bell" size={18} color={remindersOn ? color.cold : color.textFaint} />
           </View>
-          <View style={styles.flex1}>
-            <Text style={styles.cardTitle}>{reminderTitle}</Text>
-            <Text style={styles.hint}>{reminderText}</Text>
-          </View>
+          <Text style={[styles.cardTitle, styles.flex1]}>{reminderTitle}</Text>
         </View>
       ) : null}
 
@@ -193,7 +183,7 @@ export default function WaterScreen() {
         );
       })}
 
-      <SectionHeader title="Last 14 days" hint={plan.breakdown} />
+      <SectionHeader title="Last 14 days" />
       <View style={styles.history}>
         <MiniBars
           data={history.map((d) => ({ label: WEEKDAY[parseISODate(d.date).getDay()] ?? '', value: d.ml }))}
@@ -203,7 +193,7 @@ export default function WaterScreen() {
           bubble={ml(history[history.length - 1]?.ml ?? 0)}
         />
         <Text style={styles.hint}>
-          {daysHit} of 14 days at or above the current target{logged.length ? `. On the days you logged, ${ml(avg)} on average.` : '.'}
+          {daysHit} of 14 days on target{logged.length ? `, ${ml(avg)} a day on average` : ''}
         </Text>
       </View>
 
@@ -238,7 +228,6 @@ function AmountForm({ sheet, onClose, onAdd, date }: AmountProps & { sheet: Amou
       {/* min 10, not 50: a custom amount means any amount, and the reminder's own
           "Other amount" field accepts the same range (see `parseAmountMl`). */}
       <Stepper suffix="ml" size="gym" value={amount} step={50} min={10} max={3000} onChange={setAmount} />
-      <Text style={styles.hint}>Long-press the number to type an exact amount in ml.</Text>
       <PrimaryButton
         label={sheet.mode === 'edit' ? 'Save' : `Add ${ml(amount)}${isToday ? '' : ` to ${fmtDayLabel(day)}`}`}
         size="gym"

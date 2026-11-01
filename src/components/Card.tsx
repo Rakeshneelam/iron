@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
-import type { StyleProp } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import type { AnimatedViewStyle } from '@/theme/curves';
@@ -22,6 +22,12 @@ export interface CardProps {
   onLongPress?: () => void;
   tone?: CardTone;
   accessibilityLabel?: string;
+  /**
+   * Layout for the touch target of a pressable card — `flex: 1` in a row. The box
+   * itself sits inside it, so a row's flex has to land here or the card shrinks to
+   * its content.
+   */
+  touchStyle?: StyleProp<ViewStyle>;
 }
 
 const FILL: Partial<Record<CardTone, string>> = { volt: color.accent, sky: color.cold, peach: color.peach, lav: color.lav };
@@ -30,7 +36,7 @@ const OUTLINE: Partial<Record<CardTone, string>> = { accent: color.accent, posit
 /** True when a card is a filled tile, so whatever sits on it should use `onTile` ink. */
 export const isTile = (tone: CardTone | undefined) => tone !== undefined && FILL[tone] !== undefined;
 
-export function Card({ children, style, onPress, onLongPress, tone = 'default', accessibilityLabel }: CardProps) {
+export function Card({ children, style, onPress, onLongPress, tone = 'default', accessibilityLabel, touchStyle }: CardProps) {
   const base = [
     styles.card,
     FILL[tone] ? { backgroundColor: FILL[tone] } : null,
@@ -39,7 +45,7 @@ export function Card({ children, style, onPress, onLongPress, tone = 'default', 
   ];
   if (!onPress && !onLongPress) return <Animated.View style={base}>{children}</Animated.View>;
   return (
-    <Press onPress={onPress} onLongPress={onLongPress} style={base} pressedStyle={FILL[tone] ? styles.pressedTile : styles.pressed} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
+    <Press onPress={onPress} onLongPress={onLongPress} style={base} touchStyle={touchStyle} pressedStyle={FILL[tone] ? styles.pressedTile : styles.pressed} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
       {children}
     </Press>
   );

@@ -23,7 +23,7 @@ const CORE = ['waist', 'hips', 'chest'];
  * any reading can be fixed or deleted with Undo. Log measurements in the dock is
  * the full set of sites, for the first time or a new one.
  */
-export function MeasurementsSection({ frame, tail }: BodySectionProps) {
+export function MeasurementsSection({ frame }: BodySectionProps) {
   const settings = useSettings();
   const today = todayISO();
   const measurements = useLive(() => listMeasurements(), ['measurement']);
@@ -58,9 +58,7 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
       tab
       dock={<PrimaryButton label="Log measurements" size="gym" icon={<Icon name="ruler" size={20} color={color.onAccent} />} onPress={() => setMeasuring(true)} />}
     >
-      <Text style={styles.lead}>
-        Tap − or + to log today’s number. It saves as you go.{lastDate ? ` Last measured ${fmtDayLabel(lastDate).toLowerCase()}.` : ''}
-      </Text>
+      {lastDate ? <Text style={styles.lead}>Last measured {fmtDayLabel(lastDate).toLowerCase()}</Text> : null}
       <ListCard>
         {rows.map((s, i) => {
           const history = bySite.get(s.key) ?? [];
@@ -99,7 +97,6 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
           );
         })}
       </ListCard>
-      <Text style={styles.footnote}>Tap a name for its history. Other sites are in Log measurements.</Text>
 
       {whtr !== null ? (
         <Card tone="lav" style={styles.gapTop}>
@@ -107,11 +104,10 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
             <Text style={styles.body}>Waist-to-height</Text>
             <Text style={styles.value}>{whtr.toFixed(2)}</Text>
           </View>
-          <Text style={styles.hint}>Below 0.50 is the healthy range for most adults.</Text>
+          <Text style={styles.hint}>Healthy below 0.50</Text>
         </Card>
       ) : null}
 
-      <View style={styles.gapTop}>{tail}</View>
       <MeasureSheet visible={measuring} latest={latestBySite} onClose={() => setMeasuring(false)} />
       <SiteSheet site={site} rows={site ? (bySite.get(site) ?? []) : []} onClose={() => setSite(null)} />
     </Screen>
@@ -128,7 +124,6 @@ const styles = StyleSheet.create({
   title: { ...font.label, fontWeight: '600', color: color.text },
   sub: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint },
   field: { width: 176 },
-  footnote: { ...font.caption, fontSize: 12, color: color.textFaint },
   gapTop: { marginTop: space.lg },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
   hint: { ...font.caption, color: color.onTileMuted, marginTop: space.sm },

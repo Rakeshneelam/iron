@@ -595,7 +595,6 @@ const styles = StyleSheet.create({
   plus: { width: 42, height: 42, borderRadius: radius.pill, backgroundColor: color.peach, alignItems: 'center', justifyContent: 'center' },
   plusPressed: { opacity: 0.85 },
   name: { ...font.label, color: color.text },
-  strong: { color: color.text, fontWeight: '600' },
   label: { ...font.label, color: color.text, fontWeight: '600', marginBottom: space.sm },
   muted: { ...font.caption, color: color.textMuted, marginTop: space.xs },
   macro: { ...font.label, ...font.numeric, color: color.textMuted, marginVertical: space.lg },

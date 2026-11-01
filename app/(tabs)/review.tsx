@@ -20,12 +20,11 @@ import { getRaw, setRaw, setSetting, useSettings } from '@/db/repositories/setti
 import { buildDeloadInput, weeklySetsPerMuscle } from '@/db/repositories/stats';
 import { shouldDeload } from '@/engine/progression';
 import type { Recommendation } from '@/engine/recommend';
-import { siteDef } from '@/features/body/sites';
 import { computeTargets } from '@/features/food/targets';
 import { VolumeList } from '@/features/program/VolumeList';
 import { STATUS_LABEL, STATUS_TONE } from '@/features/session/status';
 import { addDays, daysBetweenISO, fmtDayLabel, parseISODate, todayISO, weekStartISO } from '@/lib/date';
-import { kgNum, ml, signed } from '@/lib/format';
+import { kgNum, signed } from '@/lib/format';
 import { hydrationTarget } from '@/services/hydration';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
@@ -108,16 +107,9 @@ export default function ProgressScreen() {
   const [allRecs, setAllRecs] = useState(false);
   const [allLifts, setAllLifts] = useState(false);
   const [showMuscles, setShowMuscles] = useState(false);
-  const [showBody, setShowBody] = useState(false);
   const { week, prev } = data;
 
   const done = week.completed + week.partial;
-  // One weigh-in makes start === end, and "+0.0 kg" reads as a measured result
-  // rather than as "not enough readings to say".
-  const bw =
-    week.bodyweight.start !== null && week.bodyweight.end !== null && week.bodyweight.start !== week.bodyweight.end
-      ? week.bodyweight.end - week.bodyweight.start
-      : null;
   const empty = done + week.cancelled + week.skipped + week.rest === 0;
   /** In kilograms, not a percentage: the tonnage itself is the fact (brief §6). */
   const volumeDelta = prev.tonnage > 0 && week.tonnage > 0 ? week.tonnage - prev.tonnage : null;
@@ -316,7 +308,6 @@ export default function ProgressScreen() {
         <>
           <SectionHeader
             title="Lifts"
-            hint="Each lift’s top sets, newest on the right. Tap one for its whole record."
             action={week.lifts.length > SHOWN_LIFTS ? { label: allLifts ? 'Show fewer' : `View all ${week.lifts.length}`, onPress: () => setAllLifts(!allLifts) } : undefined}
           />
           {(allLifts ? week.lifts : week.lifts.slice(0, SHOWN_LIFTS)).map((l) => (
@@ -325,19 +316,6 @@ export default function ProgressScreen() {
         </>
       ) : null}
 
-      {/* Detail, collapsed. Open it when you want it; it is not the headline. */}
-      <SectionHeader title="Body & water" action={{ label: showBody ? 'Hide' : 'Show', onPress: () => setShowBody(!showBody), accessibilityLabel: `${showBody ? 'Hide' : 'Show'} body and water` }} />
-      {showBody ? (
-        <View style={styles.kvCard}>
-          <Row divider={false} label="Bodyweight trend" value={bw === null ? '—' : `${signed(bw, 1)} kg`} />
-          {week.measurements.map((m) => {
-            const def = siteDef(m.site);
-            return <Row key={m.site} label={def.label} value={`${kgNum(m.value)} ${def.unit}${m.prev !== null ? `  (${signed(m.value - m.prev)})` : ''}`} />;
-          })}
-          <Row label="Water target reached" value={week.water.days ? `${week.water.daysHit} of ${week.water.days} days` : '—'} />
-          {week.water.daysLogged ? <Row label="Average water" value={ml(week.water.avgMl)} /> : null}
-        </View>
-      ) : null}
 
       <SectionHeader title="Sets per muscle" action={{ label: showMuscles ? 'Hide' : 'Show', onPress: () => setShowMuscles(!showMuscles), accessibilityLabel: `${showMuscles ? 'Hide' : 'Show'} sets per muscle` }} />
       {showMuscles ? <VolumeList weekly={data.muscles} /> : null}
@@ -404,15 +382,6 @@ function LiftRow({ lift, tops }: { lift: LiftChange; tops: { date: string; topWe
   );
 }
 
-function Row({ label, value, divider = true }: { label: string; value: string; divider?: boolean }) {
-  return (
-    <View style={[styles.kv, divider && styles.kvDivider]}>
-      <Text style={styles.body}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
   gapTop: { marginTop: space.md },
@@ -452,8 +421,4 @@ const styles = StyleSheet.create({
   liftName: { ...font.label, fontWeight: '800', color: color.text },
   liftSub: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '600', fontVariant: ['tabular-nums'], color: color.textFaint },
 
-  kvCard: { paddingHorizontal: space.lg, borderRadius: radius.lg, backgroundColor: color.surface },
-  value: { ...font.label, fontSize: 14, fontVariant: ['tabular-nums'], color: color.text, fontWeight: '700' },
-  kv: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: hit.default + 4, gap: space.md },
-  kvDivider: { borderTopWidth: 1, borderTopColor: color.border },
 });

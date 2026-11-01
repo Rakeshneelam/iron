@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChipRow, Icon, Press, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, type IconName } from '@/components';
+import { ChipRow, Icon, Press, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, WeekdayPicker, type IconName } from '@/components';
 import { CATALOG_BY_ID, type Level, type Stress } from '@/data/catalog';
 import { PLAN_TEMPLATES, type EquipmentPreset, type Goal } from '@/data/templates';
 import { getLatestWeight, upsertWeighIn } from '@/db/repositories/body';
@@ -11,59 +11,46 @@ import { createPlan } from '@/db/repositories/program';
 import { getSettings, setSetting } from '@/db/repositories/settings';
 import type { Phase, Sex } from '@/engine/metabolic';
 import { adaptTemplate, PRESET_TOOLS, recommendTemplates, type TrainingProfile } from '@/engine/planner';
-import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle, WEEKDAYS } from '@/features/profile';
+import { WeightField, type WeightDraft } from '@/features/body/WeightField';
+import { GOAL_OPTIONS, LEVEL_OPTIONS, LIMITATION_OPTIONS, PRESET_OPTIONS, toggle } from '@/features/profile';
 import { GOALS } from '@/features/settings/goals';
 import { Field } from '@/features/settings/ProfileFields';
 import { todayISO } from '@/lib/date';
-import { kg } from '@/lib/format';
 import { rescheduleAll } from '@/services/notifications';
 import { color, font, hit, radius, space } from '@/theme/tokens';
 
 const OWN = 'own';
 const MINUTES = [20, 30, 45, 60, 75].map((m) => ({ label: `${m}`, value: m }));
-const TABS = [
+const STEPS = [
   { label: 'You', value: 'you' as const },
   { label: 'Training', value: 'training' as const },
   { label: 'Plan', value: 'plan' as const },
 ];
-type Tab = (typeof TABS)[number]['value'];
-/** Only used to place the stepper somewhere sensible — never recorded on its own. */
+type Step = (typeof STEPS)[number]['value'];
+/** Only where the weight stepper starts once asked for — never recorded on its own. */
 const WEIGHT_ANCHOR_KG = 75;
 
 /**
- * First run on a fresh install. One screen, no account, no network.
+ * First run on a fresh install. No account, no network.
  *
- * It used to be four stages with a welcome screen wired to Firebase sign-in, which
- * contradicted the two hard rules this app is built on: no backend, and ONE setup
- * screen (AGENTS.md §1.1, §1.2). A single page of fourteen questions is where
- * people put the phone down, so the screen is split into You · Training · Plan
- * tabs — sections of one screen, not steps. Finish is in the dock on every tab,
- * and only the name is required; everything else has a default.
+ * Before it, once, the welcome: what Iron is and the way in from another phone. It
+ * is this route's first state, not a route of its own, so it only ever appears on
+ * a fresh install.
  *
- * Before it, once, the welcome: what Iron is, three promises it keeps, and the
- * way in for someone arriving from another phone. It is this route's first state,
- * not a route of its own, so it can only ever appear on a fresh install.
- *
- * Google is not here at all. Drive authorisation is a backup permission, asked for
- * in Backup by someone who wants a backup; it was never an Iron account.
+ * Then one screen in three steps — You, Training, Plan — walked with Next and
+ * closed with Finish, so nobody skips two-thirds of it by tapping Finish on the
+ * first page. The steps stay tappable for going back. Only the name is required.
  */
 export default function Setup() {
   const insets = useSafeAreaInsets();
   const [started, setStarted] = useState(false);
-  const [tab, setTab] = useState<Tab>('you');
+  const [step, setStep] = useState<Step>('you');
   const [initial] = useState(getSettings);
   const [name, setName] = useState(initial.name);
   const [sex, setSex] = useState<Sex>(initial.sex);
   const [age, setAge] = useState(initial.age);
   const [height, setHeight] = useState(initial.heightCm);
-  const [weight, setWeight] = useState(() => getLatestWeight() ?? WEIGHT_ANCHOR_KG);
-  /**
-   * Whether the number above is a reading or just where the stepper happens to sit.
-   * Setup used to default to 70 kg and write a weigh-in unconditionally, so every
-   * install began its weight history with a measurement nobody took, and the trend
-   * line started from a fiction (UX-12).
-   */
-  const [weightGiven, setWeightGiven] = useState(false);
+  const [weight, setWeight] = useState<WeightDraft>(() => ({ kg: getLatestWeight() ?? WEIGHT_ANCHOR_KG, given: false, existing: false }));
   const [phase, setPhase] = useState<Phase>(initial.phase);
   const [goal, setGoal] = useState<Goal>(initial.goalFocus);
   const [level, setLevel] = useState<Level>('beginner');
@@ -85,45 +72,54 @@ export default function Setup() {
 
   if (!started) {
     return (
-      <View style={[styles.welcome, { paddingTop: insets.top + space.xxxl, paddingBottom: insets.bottom + space.lg }]}>
-        {/* The number you came here to log, as texture. Decoration only. */}
-        <Text style={styles.ghost} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-          72.5
-        </Text>
+      <View style={[styles.welcome, { paddingTop: insets.top + space.xl, paddingBottom: insets.bottom + space.lg }]}>
         <View style={styles.brandRow}>
           <Image source={require('../assets/icon.png')} style={styles.brandLogo} accessibilityLabel="Iron" />
           <Text style={styles.wordmark}>IRON</Text>
         </View>
+        <WelcomeArt />
         <Text style={styles.hello} accessibilityRole="header">
           Log the set.{'\n'}
           <Text style={styles.helloVolt}>Skip the noise.</Text>
         </Text>
-        <Text style={styles.pitch}>A private training log that lives on your phone. Open it, lift, log.</Text>
-        <View style={styles.flex1} />
-        <Pledge icon="phone" title="Stays on this phone" sub="No account, no server, no tracking." />
-        <Pledge icon="spark" title="Advice that shows its reasoning" sub="Every suggested weight comes with a plain why." />
-        <Pledge icon="bell" title="Quiet by default" sub="Reminders only nudge when there is something to do. A missed day is just a day." />
+        <Text style={styles.pitch}>Training, food, water and body in one place.</Text>
         <View style={styles.welcomeActions}>
-          <PrimaryButton label="Get started" size="gym" icon={<Icon name="chevronRight" size={20} color={color.onAccent} />} onPress={() => setStarted(true)} />
-          <PrimaryButton label="Restore a backup from another phone" tone="neutral" onPress={() => router.push('/settings/restore')} />
-          <Text style={styles.gate}>Takes about a minute. Only your name is required.</Text>
+          <PrimaryButton label="Get started" size="gym" icon={<Icon name="chevronRight" size={22} color={color.onAccent} />} onPress={() => setStarted(true)} />
+          {/* For a new phone, not part of starting: a quiet line, not a second pill. */}
+          <Press onPress={() => router.push('/settings/restore')} accessibilityRole="button" accessibilityLabel="Restore a backup from another phone" hitSlop={10} style={styles.restore}>
+            <Text style={styles.restoreText}>
+              Have a backup? <Text style={styles.restoreLink}>Restore it</Text>
+            </Text>
+          </Press>
         </View>
       </View>
     );
   }
 
-  /** What still needs an answer, and which tab it is on. Never a dead control. */
-  const blocker: { text: string; tab: Tab } | null = !name.trim()
-    ? { text: 'Enter your name to finish.', tab: 'you' }
-    : days.length === 0
-      ? { text: 'Pick the days you can train.', tab: 'training' }
-      : null;
+  const index = STEPS.findIndex((s) => s.value === step);
+  const last = index === STEPS.length - 1;
+
+  /** What still needs an answer before moving on. Never a dead button. */
+  const blocker = (s: Step): string | null => (s === 'you' && !name.trim() ? 'Enter your name first.' : s === 'training' && days.length === 0 ? 'Pick at least one day.' : null);
+
+  const next = () => {
+    const why = blocker(step);
+    if (why) {
+      toast(why);
+      return;
+    }
+    const to = STEPS[index + 1];
+    if (to) setStep(to.value);
+  };
 
   const finish = () => {
-    if (blocker) {
-      setTab(blocker.tab);
-      toast(blocker.text);
-      return;
+    for (const s of STEPS) {
+      const why = blocker(s.value);
+      if (why) {
+        setStep(s.value);
+        toast(why);
+        return;
+      }
     }
     setSetting('name', name.trim());
     setSetting('sex', sex);
@@ -138,9 +134,8 @@ export default function Setup() {
     setSetting('tools', []);
     setSetting('limitations', limits);
     setSetting('warmupMode', minutes <= 30 ? 'quick' : 'standard');
-    // Only an explicitly confirmed number becomes a weigh-in. Skipped, the targets
-    // fall back to a calculation — which is never dressed up as a measurement.
-    if (weightGiven) upsertWeighIn(todayISO(), weight);
+    // Only a weight actually given becomes a weigh-in; skipped, the targets use a calculation.
+    if (weight.given) upsertWeighIn(todayISO(), weight.kg);
     const t = PLAN_TEMPLATES.find((x) => x.id === choice);
     if (t) {
       const adapted = adaptTemplate(t, profile, CATALOG_BY_ID);
@@ -150,30 +145,28 @@ export default function Setup() {
     setSetting('setupDone', true);
     // Reminders are off until asked for; this only lays down the channels.
     void rescheduleAll();
-    // Always Today, template or not (AGENTS §1.2). "Build my own" used to land on
-    // Plans, which taught the one wrong lesson on the first screen after setup:
-    // that a plan has to exist before anything can be logged. It does not — Today
-    // offers "Log a workout" with no plan at all, and Choose a plan is right there.
+    // Always Today, plan or not (AGENTS §1.2): Today logs a workout with no plan at all.
     router.replace('/');
   };
 
   return (
     <Screen
-      title="Set up Iron"
-      subtitle="One screen. Stays on this phone."
-      back={() => setStarted(false)}
-      right={<Image source={require('../assets/icon.png')} style={styles.logo} accessibilityLabel="Iron" />}
-      strip={<SegmentTabs options={TABS} value={tab} onChange={setTab} />}
+      // Keyed by step, so each step opens at its top rather than where the last one was scrolled.
+      key={step}
+      title="Set up"
+      subtitle={`Step ${index + 1} of ${STEPS.length}`}
+      back={() => (index > 0 ? setStep(STEPS[index - 1]?.value ?? 'you') : setStarted(false))}
+      strip={<SegmentTabs options={STEPS} value={step} onChange={setStep} />}
       dock={
-        <>
-          <Text style={[styles.gate, blocker && styles.gateOn]}>{blocker ? blocker.text : 'Only your name is required. Everything else has a sensible default.'}</Text>
-          <PrimaryButton label="Finish setup" size="gym" onPress={finish} />
-        </>
+        last ? (
+          <PrimaryButton label="Finish setup" size="gym" icon={<Icon name="check" size={22} color={color.onAccent} />} onPress={finish} />
+        ) : (
+          <PrimaryButton label="Next" size="gym" icon={<Icon name="chevronRight" size={22} color={color.onAccent} />} onPress={next} />
+        )
       }
     >
-      {tab === 'you' ? (
+      {step === 'you' ? (
         <View style={styles.stack}>
-          <Text style={styles.lead}>Used only to work out your calorie and water targets, and nothing leaves this phone. No account, no sign-in.</Text>
           <Field label="Your name">
             <TextField value={name} onCommit={setName} onType={setName} placeholder="Your name" autoCapitalize="words" accessibilityLabel="Your name, required" style={styles.input} />
           </Field>
@@ -200,41 +193,16 @@ export default function Setup() {
               </Field>
             </View>
           </View>
-          <Field
-            label={weightGiven ? 'Weight today' : 'Weight today (optional)'}
-            hint={weightGiven ? "Saved as today's weigh-in when you finish." : 'Skip it and no weigh-in is created. Targets use a calculation until you weigh in.'}
-          >
-            <View style={styles.weight}>
-              <View style={styles.flex1}>
-                <Stepper
-                  accessibilityLabel="Weight today"
-                  size="gym"
-                  suffix="kg"
-                  value={weight}
-                  step={0.5}
-                  min={30}
-                  max={250}
-                  onChange={(v) => {
-                    setWeight(v);
-                    setWeightGiven(true);
-                  }}
-                />
-              </View>
-              {/* Explicit, because the number happening to equal the default is not an answer. */}
-              {weightGiven ? (
-                <PrimaryButton label="Don’t record" tone="neutral" size="gym" onPress={() => setWeightGiven(false)} />
-              ) : (
-                <PrimaryButton label={`Use ${kg(weight)}`} tone="neutral" size="gym" onPress={() => setWeightGiven(true)} />
-              )}
-            </View>
+          <Field label="Weight today (optional)">
+            <WeightField draft={weight} onChange={setWeight} size="gym" addLabel="Add today's weight" />
           </Field>
-          <Field label="Body-weight goal" hint="Sets your calorie and water targets.">
+          <Field label="Body-weight goal">
             <ChipRow options={GOALS} value={phase} onChange={setPhase} columns={4} />
           </Field>
         </View>
       ) : null}
 
-      {tab === 'training' ? (
+      {step === 'training' ? (
         <View style={styles.stack}>
           <Field label="Main goal">
             <ChipRow options={GOAL_OPTIONS} value={goal} onChange={setGoal} columns={3} />
@@ -242,8 +210,8 @@ export default function Setup() {
           <Field label="Lifting experience">
             <ChipRow options={LEVEL_OPTIONS} value={level} onChange={setLevel} columns={3} />
           </Field>
-          <Field label="Days you can train" hint="Your plan runs in order whatever the day. These only set reminders.">
-            <ToggleChips options={WEEKDAYS} values={days} onToggle={(d) => setDays(toggle(days, d))} columns={7} />
+          <Field label="Training days">
+            <WeekdayPicker values={days} onToggle={(d) => setDays(toggle(days, d))} />
           </Field>
           <Field label="Minutes per session">
             <ChipRow options={MINUTES} value={minutes} onChange={setMinutes} columns={5} />
@@ -254,44 +222,48 @@ export default function Setup() {
         </View>
       ) : null}
 
-      {tab === 'plan' ? (
+      {step === 'plan' ? (
         <View style={styles.stack}>
-          <Field label="Go easy on" hint="Optional. Used only to skip exercises that load these areas, and it never leaves this phone.">
-            <ToggleChips options={LIMITATION_OPTIONS} values={limits} onToggle={(v) => setLimits(toggle(limits, v))} columns={3} />
-          </Field>
           <View>
             <SectionHeader title="Your plan" action={!showAll && ranked.length > 3 ? { label: `See all ${ranked.length}`, onPress: () => setShowAll(true) } : undefined} />
             {shown.map((m, i) => (
               <Choice
                 key={m.template.id}
                 title={m.template.name}
-                subtitle={`${m.template.daysPerWeek} days, about ${m.template.minutes} min, ${m.reasons.slice(0, 2).join(', ')}`}
+                subtitle={`${m.template.daysPerWeek} days, about ${m.template.minutes} min`}
                 badge={i === 0 ? 'Best match' : undefined}
                 selected={choice === m.template.id}
                 onPress={() => setPicked(m.template.id)}
               />
             ))}
-            <Choice title="Build my own" subtitle="Start empty and add your own days and exercises" selected={choice === OWN} onPress={() => setPicked(OWN)} />
-            <Text style={styles.hint}>Fully editable, and you can switch plans any time.</Text>
+            <Choice title="Build my own" subtitle="Start empty" selected={choice === OWN} onPress={() => setPicked(OWN)} />
           </View>
+          <Field label="Go easy on (optional)">
+            <ToggleChips options={LIMITATION_OPTIONS} values={limits} onToggle={(v) => setLimits(toggle(limits, v))} columns={3} />
+          </Field>
         </View>
       ) : null}
-
-      {/* Secondary, and clearly not part of setting up: this is for a new phone. */}
-      <PrimaryButton label="Restore a backup from another phone" tone="neutral" style={styles.restore} onPress={() => router.push('/settings/restore')} />
     </Screen>
   );
 }
 
-function Pledge({ icon, title, sub }: { icon: IconName; title: string; sub: string }) {
+const ART: readonly { icon: IconName; tint: string; size: number; x: number; y: number; turn: string }[] = [
+  { icon: 'dumbbell', tint: color.accent, size: 132, x: 4, y: 18, turn: '-8deg' },
+  { icon: 'water', tint: color.cold, size: 96, x: 150, y: 0, turn: '9deg' },
+  { icon: 'food', tint: color.peach, size: 88, x: 132, y: 116, turn: '-5deg' },
+  { icon: 'body', tint: color.lav, size: 78, x: 236, y: 92, turn: '12deg' },
+];
+
+/** The four things Iron tracks, as tiles in their own colours. Decoration only. */
+function WelcomeArt() {
   return (
-    <View style={styles.promise} accessible accessibilityLabel={`${title}. ${sub}`}>
-      <View style={styles.promiseIcon}>
-        <Icon name={icon} size={20} color={color.onAccent} strokeWidth={2.2} />
-      </View>
-      <View style={styles.flex1}>
-        <Text style={styles.promiseTitle}>{title}</Text>
-        <Text style={styles.promiseSub}>{sub}</Text>
+    <View style={styles.art} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={styles.artInner}>
+        {ART.map((a) => (
+          <View key={a.icon} style={[styles.artTile, { width: a.size, height: a.size, left: a.x, top: a.y, backgroundColor: a.tint, transform: [{ rotate: a.turn }] }]}>
+            <Icon name={a.icon} size={a.size * 0.38} color={color.onTile} strokeWidth={2.2} />
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -317,31 +289,24 @@ function Choice({ title, subtitle, selected, badge, onPress }: { title: string; 
 }
 
 const styles = StyleSheet.create({
-  welcome: { flex: 1, backgroundColor: color.bg, paddingHorizontal: space.xl, overflow: 'hidden' },
-  /** A measurement, so the measuring face — as texture, at a size nothing else in the app reaches. */
-  ghost: { position: 'absolute', top: '30%', left: space.lg, ...font.hero, fontSize: 240, lineHeight: 250, letterSpacing: -6, color: color.surface },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, marginBottom: space.xl },
-  brandLogo: { width: 44, height: 44, borderRadius: radius.md },
+  welcome: { flex: 1, backgroundColor: color.bg, paddingHorizontal: space.xl },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  brandLogo: { width: 40, height: 40, borderRadius: radius.md },
   wordmark: { ...font.heading, fontWeight: '800', letterSpacing: 2, color: color.text },
+  art: { flex: 1, minHeight: 230, marginVertical: space.lg, alignItems: 'center', justifyContent: 'center' },
+  artInner: { width: 314, height: 216 },
+  artTile: { position: 'absolute', borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center' },
   hello: { ...font.title, fontSize: 52, lineHeight: 54, letterSpacing: -1, color: color.text, paddingRight: space.xs },
   helloVolt: { color: color.accent },
   pitch: { ...font.body, color: color.textMuted, marginTop: space.md },
-  promise: { flexDirection: 'row', alignItems: 'center', gap: space.md + 2, minHeight: 60 },
-  promiseIcon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center' },
-  promiseTitle: { ...font.label, color: color.text },
-  promiseSub: { ...font.caption, color: color.textMuted },
-  welcomeActions: { gap: space.md - 2, marginTop: space.xl },
-  logo: { width: 36, height: 36, borderRadius: radius.md, marginTop: space.xs },
-  stack: { gap: space.md + 2 },
+  welcomeActions: { gap: space.lg, marginTop: space.xl },
+  restore: { alignSelf: 'center', paddingVertical: space.xs },
+  restoreText: { ...font.label, fontWeight: '600', color: color.textMuted },
+  restoreLink: { color: color.accent, fontWeight: '800' },
+  stack: { gap: space.lg },
   flex1: { flex: 1 },
-  lead: { ...font.caption, color: color.textMuted },
   input: { minHeight: hit.gym },
   pair: { flexDirection: 'row', gap: space.md - 2 },
-  weight: { flexDirection: 'row', gap: space.sm, alignItems: 'center' },
-  gate: { ...font.caption, fontSize: 12, color: color.textFaint, textAlign: 'center' },
-  gateOn: { color: color.warning },
-  hint: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.xs },
-  restore: { marginTop: space.xxl },
   choice: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 72, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.lg, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: color.surface, marginBottom: space.sm },
   choiceOn: { borderColor: color.accent },
   pressed: { backgroundColor: color.surfaceHigh },

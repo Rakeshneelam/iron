@@ -67,10 +67,10 @@ export function FoodTargetSheet({ visible, onClose }: { visible: boolean; onClos
         <PrimaryButton
           label="Edit"
           tone="ghost"
-          accessibilityLabel="Edit your body-weight goal in Profile and goals"
+          accessibilityLabel="Edit your body-weight goal in Settings, Body"
           onPress={() => {
             onClose();
-            router.push('/settings/profile');
+            router.push({ pathname: '/settings', params: { tab: 'body' } });
           }}
         />
       </View>

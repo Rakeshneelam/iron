@@ -1,14 +1,13 @@
 import { router } from 'expo-router';
-import { type ReactNode, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { Card, ChipRow, EmptyState, EntryRow, Icon, ListCard, ListRow, Press, PrimaryButton, Screen, SectionHeader, TrendChart, useReducedMotion, type ScreenProps } from '@/components';
+import { Card, ChipRow, EmptyState, EntryRow, Icon, Press, PrimaryButton, Screen, SectionHeader, TrendChart, useReducedMotion, type ScreenProps } from '@/components';
 import { useLive } from '@/db/live';
-import { countWeighIns, listMeasurements, listWeighIns } from '@/db/repositories/body';
-import { PHASES, useSettings } from '@/db/repositories/settings';
+import { countWeighIns, listWeighIns } from '@/db/repositories/body';
+import { useSettings } from '@/db/repositories/settings';
 import { phaseCheck, weeklyRateKg, weightTrend } from '@/engine/metabolic';
-import { GOALS } from '@/features/settings/goals';
 import { addDays, daysBetweenISO, fmtDayLabel, todayISO } from '@/lib/date';
 import { kg, kgNum, signed } from '@/lib/format';
 import { color, font, hit, radius, space } from '@/theme/tokens';
@@ -25,24 +24,18 @@ const RECENT = 5;
 
 export interface BodySectionProps {
   frame: Pick<ScreenProps, 'title' | 'subtitle' | 'strip'>;
-  /** The profile link every section ends with. */
-  tail?: ReactNode;
 }
 
 /**
  * Body → Weight. The smoothed trend leads; this morning's number is one quiet row
  * under it, because a single reading swings a kilo on water alone (AGENTS §6).
- * One primary action, in the dock: Log weight.
- *
- * The goal has one editor, in Profile & goals; here it is a row that links there,
- * sitting with the weight it governs (UX-03).
+ * One primary action, in the dock: Log weight. The goal lives in Settings → Body.
  */
-export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps & { onMeasurements: () => void }) {
+export function WeightSection({ frame }: BodySectionProps) {
   const settings = useSettings();
   const today = todayISO();
   const weighIns = useLive(() => listWeighIns(), ['weigh_in']);
   const total = useLive(() => countWeighIns(), ['weigh_in']);
-  const lastMeasured = useLive(() => listMeasurements()[0]?.date ?? null, ['measurement']);
   const [range, setRange] = useState(90);
   const [weigh, setWeigh] = useState<WeighEntry | null>(null);
   const reduced = useReducedMotion();
@@ -60,16 +53,6 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
   const change = shown.length >= 2 ? (shown[shown.length - 1]?.trend ?? 0) - (shown[0]?.trend ?? 0) : null;
   const weeks = Math.max(1, Math.round(daysBetweenISO(first, shown[shown.length - 1]?.date ?? today) / 7));
   const recent = [...weighIns].reverse().slice(0, RECENT);
-  const goal = GOALS.find((g) => g.value === settings.phase && PHASES.includes(g.value))?.label ?? '—';
-
-  const measuredAgo = lastMeasured ? daysBetweenISO(lastMeasured, today) : null;
-  const every = settings.reminders.measurements.on ? settings.reminders.measurements.everyWeeks * 7 : null;
-  const measureSub =
-    measuredAgo === null
-      ? 'Not measured yet — waist and arms show what the scale hides'
-      : `Last taken ${measuredAgo === 0 ? 'today' : measuredAgo === 1 ? 'yesterday' : `${measuredAgo} days ago`}${
-          every !== null ? (measuredAgo >= every ? ' — due now' : ` — due in ${every - measuredAgo}`) : ''
-        }`;
 
   return (
     <Screen
@@ -132,13 +115,6 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
             </View>
           ) : null}
           {check ? <Text style={[styles.check, check.onTrack ? styles.onTrack : styles.offTrack]}>{check.message}</Text> : null}
-          {trend.length >= 2 ? (
-            // The chart is not the only way to read this (UX-11).
-            <Text style={styles.hint}>
-              {`Latest reading ${kg(shown[shown.length - 1]?.raw ?? 0)} on ${fmtDayLabel(shown[shown.length - 1]?.date ?? today)}`}
-              {shown.length > 1 ? `, first in this range ${kg(shown[0]?.raw ?? 0)} on ${fmtDayLabel(first)}. Dots are readings; the line is the trend.` : '.'}
-            </Text>
-          ) : null}
         </>
       )}
 
@@ -159,17 +135,6 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
         </Press>
       </View>
 
-      <ListCard style={styles.gapTop}>
-        <ListRow left={<Icon name="ruler" size={20} color={color.lav} />} title="Measurements" sub={measureSub} onPress={onMeasurements} />
-        <ListRow
-          divider
-          left={<Icon name="target" size={20} color={color.lav} />}
-          title="Body-weight goal"
-          sub={`${goal}. Sets your calorie and water targets.`}
-          onPress={() => router.push('/settings/profile')}
-        />
-      </ListCard>
-
       {recent.length > 0 ? (
         <>
           <SectionHeader
@@ -186,7 +151,6 @@ export function WeightSection({ frame, tail, onMeasurements }: BodySectionProps 
         </>
       ) : null}
 
-      <View style={styles.gapTop}>{tail}</View>
       <WeighInSheet entry={weigh} onClose={() => setWeigh(null)} />
     </Screen>
   );
@@ -206,10 +170,8 @@ const styles = StyleSheet.create({
   check: { ...font.caption, marginTop: space.md },
   onTrack: { color: color.positive },
   offTrack: { color: color.warning },
-  hint: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm },
   morning: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym + 12, marginTop: space.lg, paddingLeft: space.lg, paddingRight: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   morningLabel: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.textFaint },
   morningValue: { ...font.label, fontSize: 17, lineHeight: 22, fontWeight: '800', color: color.text, fontVariant: ['tabular-nums'] },
   morningBtn: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: color.lav, alignItems: 'center', justifyContent: 'center' },
-  gapTop: { marginTop: space.md },
 });

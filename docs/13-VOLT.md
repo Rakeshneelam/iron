@@ -70,34 +70,60 @@ padding or Android clips the last glyph.
 | `Sparkline` / `TrendChart` | Lines. `TrendChart` takes `ink` so it can sit on a coloured tile |
 | `Ring` | A progress ring in any tracker's tone |
 | `EntryRow` | One logged entry (a drink, a weigh-in) as its own rounded row |
+| `WeekdayPicker` | Seven equal circles, one letter each — never "Mo / n" |
+| `LevelAvatar`, `LevelCard`, `BadgeGrid`, `RewardCard` | The level ring, the level, the badges, what a workout earned (`features/level`) |
 | `Stepper` (hero) | Dark slab, round − (dark) and + (volt), the number in italic, last/target chips under it |
 | Tab bar | A floating capsule of five round icons; the current one is a volt disc; a pink dot on Today while a workout is open |
 
 ## Screens
 
-- **Today** — initial, date and a greeting; the week as a `DayStrip`; the day's
-  workout on a volt card (state chip, name, facts as chips); Day and Length chips;
-  Rest day / Missed it / More; then tiles: Water (sky, + logs a glass), Food (peach,
-  + opens the food picker), Weight (lav, trend and sparkline), This week (dark).
+- **Today** — your initial in a level ring (→ You), the date, a greeting; the week
+  as a `DayStrip`; the day's workout on a volt card (state chip, name, facts as
+  chips) whose corner button changes the day or the length; the day's other
+  choices as icon tiles — Rest day, Missed it, Other workout, Mobility — never
+  behind a "More"; then tiles: Water (sky, + logs a glass), Food (peach, + opens the
+  picker), Weight (lav, + logs a weigh-in right there) and the weekly goal ring.
   Start, Resume or Log a workout sits in the dock under the thumb.
 - **Workout** — centred header with an `n/m` pill that opens the list; the exercise
-  name in italic; the verdict and facts as chips; today's sets as pills (logged,
-  now, to come; tap a logged one to fix it); the reason on a dark card with Why?;
-  the dock: weight and reps slabs, RIR pills and Pain, the rest pill with its ring,
-  and Log set.
+  name in italic with a "⋯" for its own tools (how-to, swap, skip, remove, plates,
+  warm-up sets); the verdict and facts as chips; today's sets as pills (a star on a
+  new best); the reason on a dark card with Why?; the dock: weight and reps slabs,
+  RIR and Pain, the rest strip (clock, −15 / +30 / Skip as text, a draining line —
+  never a second pill on Log set), and Log set. The list sheet is the list, a
+  warm-up row, Add exercise, and End workout / Cancel side by side.
+- **Warm-up and cool-down** — one drill at a time; the countdown is a dark track
+  with a volt arc and round controls; Done, then "Skip drill" for one or "Skip
+  warm-up" for all.
 - **Food** — the week strip; a peach ring of kcal left beside eaten and target;
-  protein, carbs and fat tiles; meal cards with a peach + and your usual foods as chips.
+  protein, carbs and fat tiles; meal cards with a peach + and usual foods as chips.
 - **Water** — a dark card that fills with water toward the target; sky quick-add tiles.
-- **Body** — Weight: the trend on a lavender card with its chart, range pills, this
-  morning's reading, recent weigh-ins. Measurements and Recovery keep their sections.
-- **Progress** — twelve weeks of volume as bars (tap one to read that week),
-  Workouts and Lifts up tiles, the week's notes, suggestions, lift rows with a
-  sparkline and a change chip.
+- **Body** — Weight: the trend on a lavender card, range pills, this morning, recent
+  weigh-ins. Measurements and Recovery. No settings here.
+- **Progress** — twelve weeks of volume as bars (tap one to read that week), Workouts
+  and Lifts up tiles, notes, suggestions, lift rows with a sparkline and a change chip.
 - **Plans** — the active plan as a volt card with its days inside.
-- **Summary** and **Exercise** — a volt hero card with the headline figure and chips.
+- **Summary** — a volt hero card, then the reward card: XP earned and where it came
+  from, the level bar, a level-up, any badge unlocked.
+- **You** (avatar) — level card, badges, profile, then Reminders, Backup & data,
+  Haptics, Battery, Privacy. **Settings** (sliders) — Body · Training · Workout.
+
+## Levels and badges
+
+Loss-free by construction (AGENTS §6): `src/engine/level.ts` turns lifetime counts
+into XP — 100 a workout, 3 a working set, 40 a personal best, 150 a weekly goal
+reached, 10 a water-target day, 10 a food-logged day, 5 a weigh-in — and XP into a
+level (250·L·(L−1) to reach level L) with a title. Badges are counts, never runs.
+Nothing is stored: `db/repositories/level.ts` derives the counts from what was
+logged, so a level cannot drift or be lost. "How XP works" on You lists every source.
 
 ## What was removed
 
 `DayScore`, `LongRecord`, `LoadLine`, `SessionRail`, `SessionScore`, `WaterLevel` and
 `IntakeBar` were the v0.7 instruments. The queries behind them are unchanged;
 `weeksRecord` gained `tonnage` for the Progress bars.
+
+After the first device test (0.8.0) these went too: the More sheet on Today, the
+battery prompt on the summary (the row lives in You), the workout milestone tag
+(badges cover it), Progress's Body & water section, the profile links in Body, the
+"Use 75 kg" confirmation (a weight is now a button until given), and most of the
+explanatory small print.

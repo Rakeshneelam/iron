@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 
+import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { Stepper } from '@/components/Stepper';
 import type { RuleMark } from '@/components/Rule';
 import { getLatestWeight, getWeighIn, listWeighIns } from '@/db/repositories/body';
 import { weightTrend } from '@/engine/metabolic';
 import { fmtDayLabel } from '@/lib/date';
-import { kg, kgNum } from '@/lib/format';
+import { kgNum } from '@/lib/format';
 import { DEFAULT_WEIGHT_KG } from '@/services/hydration';
-import { color, font, space } from '@/theme/tokens';
+import { color } from '@/theme/tokens';
 
 export interface WeightDraft {
   /** What the stepper shows. Meaningless on its own — see `given`. */
@@ -57,26 +58,27 @@ export interface WeightFieldProps {
   draft: WeightDraft;
   onChange: (next: WeightDraft) => void;
   /**
-   * How a confirmed-but-not-yet-written value is described. The check-in sheet
-   * saves on its own Save, so its selection is "Will save with check-in"; the
-   * weigh-in sheet says the same until its Save runs. Nothing here ever claims
-   * "Saved" — only a committed row earns that word.
-   */
-  pendingLabel?: string;
-  /**
-   * `hero` puts the number over a rule with the previous reading (solid) and the
-   * trend (a line) marked on it — the weigh-in sheet, where the number is the
-   * whole task. The check-in sheet keeps the compact field.
+   * `hero` puts the number over the previous reading and the trend, as chips — the
+   * weigh-in sheet, where the number is the whole task. Elsewhere it is compact.
    */
   size?: 'hero' | 'gym' | 'default';
+  /** What the button says before a weight is given. */
+  addLabel?: string;
+  /** Offer "Don't log a weight" once one is given. Off where logging is the point. */
+  optional?: boolean;
 }
 
 /**
- * The one weight input. CheckInSheet and WeighInSheet both mount it, so a weight
- * typed in either place has the same step, bounds, confirmation rule and meaning,
- * and lands on the same date's single reading.
+ * The one weight input. CheckInSheet, WeighInSheet and setup all mount it, so a
+ * weight given in any of them has the same step, bounds and meaning, and lands on
+ * the same date's single reading.
+ *
+ * Until a weight is given it is a button, not a number: a stepper showing last
+ * week's weight looked like an answer, so people moved on believing it was logged
+ * when nothing was (device test, 0.8.0). One tap shows the stepper, starting from
+ * the last reading, and that number is what saves.
  */
-export function WeightField({ date, draft, onChange, pendingLabel = 'Will save with check-in', size = 'default' }: WeightFieldProps) {
+export function WeightField({ date, draft, onChange, size = 'default', addLabel = 'Log weight', optional = true }: WeightFieldProps) {
   const [anchor] = useState(draft.kg);
   const [near] = useState(() => (size === 'hero' && date ? neighboursOf(date) : {}));
   const set = (v: number) => onChange({ ...draft, kg: Math.round(v * 10) / 10, given: true });
@@ -87,10 +89,23 @@ export function WeightField({ date, draft, onChange, pendingLabel = 'Will save w
     marks.push({ value: t, kind: 'trend', label: `trend ${kgNum(t)}` });
   }
 
+  if (!draft.given) {
+    return (
+      <PrimaryButton
+        label={addLabel}
+        tone="neutral"
+        size={size === 'default' ? 'default' : 'gym'}
+        icon={<Icon name="plus" size={18} color={color.text} />}
+        onPress={() => onChange({ ...draft, given: true })}
+      />
+    );
+  }
+
   return (
     <View>
       <Stepper
         label={size === 'hero' ? 'Weight' : undefined}
+        accessibilityLabel="Weight"
         suffix="kg"
         size={size}
         value={draft.kg}
@@ -101,31 +116,9 @@ export function WeightField({ date, draft, onChange, pendingLabel = 'Will save w
         context={[near.last ? `Previous reading ${kgNum(near.last.kg)}` : '', near.trend !== undefined ? `trend ${kgNum(Math.round(near.trend * 10) / 10)}` : ''].filter(Boolean).join(', ')}
         onChange={set}
       />
-      {draft.given ? (
-        <View style={styles.row}>
-          <Text style={[styles.note, styles.flex]}>{draft.existing ? `${pendingLabel}, replacing this day's reading.` : pendingLabel}</Text>
-          {!draft.existing ? (
-            <PrimaryButton
-              label="Clear"
-              tone="ghost"
-              accessibilityLabel="Do not record a weight for this day"
-              onPress={() => onChange({ ...draft, kg: anchor, given: false })}
-            />
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.row}>
-          <Text style={[styles.note, styles.flex]}>Not recorded. Move the stepper, or say this is right.</Text>
-          {/* Explicit, because a number equal to the default is not an answer. */}
-          <PrimaryButton label={`Use ${kg(draft.kg)}`} tone="neutral" onPress={() => onChange({ ...draft, given: true })} />
-        </View>
-      )}
+      {optional && !draft.existing ? (
+        <PrimaryButton label="Don't log a weight" tone="ghost" accessibilityLabel="Do not record a weight for this day" onPress={() => onChange({ ...draft, kg: anchor, given: false })} />
+      ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs },
-  note: { ...font.caption, color: color.textMuted },
-});

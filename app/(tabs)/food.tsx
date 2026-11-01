@@ -24,7 +24,7 @@ import {
 import { getDayTotal } from '@/db/repositories/water';
 import { AddFoodSheet } from '@/features/food/AddFoodSheet';
 import { FoodTargetSheet } from '@/features/food/TargetSheet';
-import { computeTargets, confidenceLabel } from '@/features/food/targets';
+import { computeTargets } from '@/features/food/targets';
 import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
 import { ml } from '@/lib/format';
 import { hydrationTarget } from '@/services/hydration';
@@ -109,9 +109,6 @@ export default function FoodScreen() {
         <Macro label="Carbs" value={day.totals.carb} target={t.carbG} ink={color.cold} />
         <Macro label="Fat" value={day.totals.fat} target={t.fatG} ink={color.pink} />
       </View>
-      <Text style={styles.note}>
-        {t.manual ? 'Targets you set.' : t.basis === 'estimated' ? `Targets are Iron's estimate — ${confidenceLabel(t).toLowerCase()}.` : `Targets measured from your own logging — ${confidenceLabel(t).toLowerCase()}.`}
-      </Text>
 
       {/* A link to the Water screen, on the day being browsed — not a second copy of it. */}
       <Press
@@ -310,7 +307,6 @@ const styles = StyleSheet.create({
   macroOf: { fontSize: 12, fontWeight: '600', color: color.textFaint },
   macroTrack: { height: 6, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, marginTop: space.sm, overflow: 'hidden' },
   macroFill: { height: '100%', borderRadius: radius.pill },
-  note: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm },
 
   waterRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym + 8, marginTop: space.lg, paddingHorizontal: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
   waterIcon: { width: 36, height: 36, borderRadius: radius.pill, backgroundColor: color.cold, alignItems: 'center', justifyContent: 'center' },
