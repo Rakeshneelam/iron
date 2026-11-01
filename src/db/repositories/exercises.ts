@@ -62,10 +62,6 @@ export function updateExercise(id: string, patch: Partial<Omit<Exercise, 'id'>>)
   db.update(schema.exercise).set(patch).where(eq(schema.exercise.id, id)).run();
 }
 
-export function archiveExercise(id: string): void {
-  db.update(schema.exercise).set({ archivedAt: nowISO() }).where(eq(schema.exercise.id, id)).run();
-}
-
 /**
  * The bridge to the engine. The slot supplies rep range, sets and RIR; without one
  * (an ad-hoc exercise) a conservative hypertrophy default is used.

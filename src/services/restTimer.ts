@@ -32,10 +32,6 @@ export function getTimer(): TimerRow | undefined {
   return db.select().from(schema.timerState).where(eq(schema.timerState.id, ROW_ID)).get();
 }
 
-export function getPersistedEndsAt(): string | null {
-  return getTimer()?.endsAt ?? null;
-}
-
 /**
  * Arming is async, so a cancel can land in the middle of one. Two guards:
  * `epoch` marks a start as stale the moment anything else happens, and `serial`

@@ -19,23 +19,6 @@ export function isGoogleConfigured(): boolean {
   return Boolean(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID);
 }
 
-/**
- * DEVELOPER_ERROR means Google Play Services would not issue a token, and it says
- * nothing about why. It is not the JS config and not google-services.json (the plugin
- * is a no-op without `android.googleServicesFile`, and webClientId is passed here).
- * It is server-side: the project behind the web client has no Android OAuth client
- * whose package and SHA-1 match the APK. Adding the fingerprint to the Firebase
- * Android app creates that client, and no rebuild is needed.
- *
- * The old report printed the last 14 characters of the ID — always
- * "sercontent.com" — so it named nothing. The project number is the useful part.
- */
-export function googleConfigReport(): string {
-  const id = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-  if (!id) return 'This build has no Google client ID: it was never injected at build time.';
-  return `Project ${id.split('-')[0]} has no Android OAuth client for this app's signing key. Add the APK's SHA-1 to the Android app in Firebase (Project settings, Your apps).`;
-}
-
 let currentScopes = '';
 
 /**
