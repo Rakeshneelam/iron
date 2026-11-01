@@ -2,7 +2,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { Keyframe } from 'react-native-reanimated';
+import Animated, { Keyframe, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, EmptyState, Icon, IconButton, ListCard, ListRow, Pill, type PillTone, Press, PrimaryButton, setToastObstruction, Sheet, toast, useReducedMotion, type IconName } from '@/components';
@@ -88,6 +88,12 @@ const ARRIVE_PREV = new Keyframe({
   0: { opacity: 0, transform: [{ translateX: -16 }] },
   100: { opacity: 1, transform: [{ translateX: 0 }] },
 }).duration(200);
+
+/**
+ * A just-logged set springs into its pill. An entering animation of one element —
+ * transform and opacity, never layout — so the list itself never moves (docs/05).
+ */
+const POP = ZoomIn.springify().damping(12);
 
 export default function SessionScreen() {
   useKeepAwake();
@@ -1202,8 +1208,8 @@ function SetPills({
               const hot = set.id === fresh;
               const star = best !== null && set.e1rm > best + 0.5;
               return (
+                <Animated.View key={set.id} entering={hot ? POP : undefined} style={styles.flex1}>
                 <Press
-                  key={set.id}
                   onPress={() => onEdit(set)}
                   accessibilityRole="button"
                   accessibilityLabel={`Set ${i + 1}: ${label(set)}${star ? ', a new best' : ''}. Tap to edit.`}
@@ -1218,6 +1224,7 @@ function SetPills({
                     <Text style={[styles.setLabel, hot && styles.setLabelHot]}>Set {i + 1}</Text>
                   </View>
                 </Press>
+                </Animated.View>
               );
             }
             const now = open && i === sets.length;

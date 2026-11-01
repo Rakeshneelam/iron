@@ -67,7 +67,9 @@ export async function backupNow(): Promise<string> {
 
   // Pruning failures are not backup failures: the new copy is already safe.
   try {
-    const old = (await listBackups()).slice(KEEP);
+    // Copies from before sign-in carry no phrase and can only come back by hand, so
+    // they are never pruned; only the automatic ones roll over.
+    const old = (await listBackups()).filter((f) => f.phrase).slice(KEEP);
     for (const f of old) await deleteBackup(f.id);
   } catch {
     /* try again next time */

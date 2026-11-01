@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import type { StyleProp, ViewStyle } from 'react-native';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withTiming, ZoomIn } from 'react-native-reanimated';
 
 import { Breathe } from '@/components/Breathe';
 import { Card } from '@/components/Card';
@@ -11,6 +12,7 @@ import { Ring } from '@/components/Ring';
 import { useReducedMotion } from '@/components/Screen';
 import { Sheet } from '@/components/Sheet';
 import type { BadgeState, Level, XpPart } from '@/engine/level';
+import { EASE_OUT } from '@/theme/curves';
 import { color, font, radius, space } from '@/theme/tokens';
 
 import { BADGE_LOOK, fmtXp, type Reward } from './level';
@@ -46,6 +48,49 @@ export function LevelAvatar({ name, level, size = 54, live = false, onPress }: {
 }
 
 /** The level on a volt card: the number, its title, and how far to the next one. */
+/** A bar that grows from `from` to `to` once it is on screen, instead of appearing full. */
+function GrowBar({ from, to, delay = 450, track, fill }: { from: number; to: number; delay?: number; track: StyleProp<ViewStyle>; fill: StyleProp<ViewStyle> }) {
+  const reduced = useReducedMotion();
+  const w = useSharedValue(from);
+  useEffect(() => {
+    w.set(reduced ? to : withDelay(delay, withTiming(to, { duration: 900, easing: EASE_OUT })));
+  }, [delay, reduced, to, w]);
+  const grow = useAnimatedStyle(() => ({ width: `${Math.max(0, Math.min(1, w.get())) * 100}%` }));
+  return (
+    <View style={track}>
+      <Animated.View style={[fill, grow]} />
+    </View>
+  );
+}
+
+/**
+ * A number that counts up to `to` once — the moment XP lands. A one-off on a calm
+ * screen, so a frame-paced state update is enough; reduced motion shows the total.
+ */
+function useCountUp(to: number, delay = 300, duration = 900): number {
+  const reduced = useReducedMotion();
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    let frame = 0;
+    let start: number | null = null;
+    const step = (t: number) => {
+      if (start === null) start = t;
+      const k = Math.min(1, (t - start) / duration);
+      // Fast at first, settling onto the number.
+      setShown(Math.round(to * (1 - (1 - k) ** 3)));
+      if (k < 1) frame = requestAnimationFrame(step);
+    };
+    const timer = setTimeout(() => {
+      frame = requestAnimationFrame(step);
+    }, delay);
+    return () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(frame);
+    };
+  }, [to, delay, duration]);
+  return reduced ? to : shown;
+}
+
 export function LevelCard({ level, onExplain }: { level: Level; onExplain: () => void }) {
   return (
     <Card tone="volt" style={styles.levelCard}>
@@ -59,9 +104,7 @@ export function LevelCard({ level, onExplain }: { level: Level; onExplain: () =>
           <Text style={styles.explainText}>How XP works</Text>
         </Press>
       </View>
-      <View style={styles.track}>
-        <View style={[styles.fill, { width: `${Math.round(level.progress * 100)}%` }]} />
-      </View>
+      <GrowBar from={0} to={level.progress} delay={200} track={styles.track} fill={styles.fill} />
       <View style={styles.levelFoot}>
         <Text style={styles.levelFootText}>{fmtXp(level.xp)} XP</Text>
         <Text style={styles.levelFootText}>
@@ -143,12 +186,15 @@ const partLabel = (p: XpPart) =>
 export function RewardCard({ reward }: { reward: Reward }) {
   const reduced = useReducedMotion();
   const levelled = reward.after.level > reward.before.level;
+  const gained = useCountUp(reward.gained);
   return (
     <Animated.View entering={reduced ? undefined : FadeInDown.duration(420)} style={styles.reward}>
       <View style={styles.rewardHead}>
         <View style={styles.flex1}>
           <Text style={styles.rewardEyebrow}>Earned</Text>
-          <Text style={styles.rewardXp}>+{fmtXp(reward.gained)} XP</Text>
+          <Text style={styles.rewardXp} accessibilityLabel={`${fmtXp(reward.gained)} XP earned`}>
+            +{fmtXp(gained)} XP
+          </Text>
         </View>
         <Icon name="bolt" size={30} color={color.accent} strokeWidth={2.2} />
       </View>
@@ -179,9 +225,7 @@ export function RewardCard({ reward }: { reward: Reward }) {
           {fmtXp(reward.after.xp)} / {fmtXp(reward.after.next)}
         </Text>
       </View>
-      <View style={styles.darkTrack}>
-        <View style={[styles.voltFill, { width: `${Math.round(reward.after.progress * 100)}%` }]} />
-      </View>
+      <GrowBar from={levelled ? 0 : reward.before.progress} to={reward.after.progress} track={styles.darkTrack} fill={styles.voltFill} />
       {reward.badges.length ? (
         <View style={styles.unlocked}>
           {reward.badges.map((b, i) => (

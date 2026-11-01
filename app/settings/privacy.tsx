@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { Screen, SectionHeader } from '@/components';
-import { color, font, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
 function P({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   return <Text style={[styles.body, style]}>{children}</Text>;
@@ -22,7 +22,7 @@ export default function PrivacyScreen() {
       subtitle="Last updated 1 November 2026"
       back
     >
-      {/* A document, so it is set as one: a lede, then ruled sections, no boxes. */}
+      {/* A document: a lede, then each section on its own card. */}
       <P style={styles.lede}>Iron is a personal training log. It works on your phone, with an optional copy in your own Google account.</P>
 
       <SectionHeader title="What Iron stores" />
@@ -82,6 +82,6 @@ export default function PrivacyScreen() {
 const styles = StyleSheet.create({
   body: { ...font.body, color: color.text },
   lede: { ...font.heading, fontSize: 22, lineHeight: 30, fontWeight: '600', marginTop: space.sm },
-  section: { paddingLeft: space.md, borderLeftWidth: 2, borderLeftColor: color.border },
+  section: { padding: space.lg, borderRadius: radius.lg, backgroundColor: color.surface },
   gap: { marginTop: space.md },
 });

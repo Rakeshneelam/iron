@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
+import { Card, confirm, EntryRow, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
 import { inspectBackup, restoreBackup, type BackupSummary } from '@/db/repositories/restore';
 import { PHRASE_CHARS, formatPhrase, normalisePhrase } from '@/lib/recoveryPhrase';
 import { inspectDriveBackup, listBackups, type DriveFile } from '@/services/backup';
@@ -192,23 +192,26 @@ export default function RestoreScreen() {
 
           {cloud !== null ? (
             <>
-              <SectionHeader title="Backups in Drive" hint={cloud.length ? 'Newest first.' : undefined} />
-              <Card>
-                {cloud.length === 0 ? <Text style={styles.body}>No backups in Drive yet.</Text> : null}
-                {cloud.map((f) => (
-                  <PrimaryButton
+              {/* Rows, newest first — not a stack of pills. Several syncs a day share a date, so each shows its time. */}
+              <SectionHeader title="Backups in Drive" />
+              {cloud.length === 0 ? <Text style={styles.body}>No backups in Drive yet.</Text> : null}
+              {cloud.map((f) => {
+                const when = `${fmtDayLabel(f.createdTime.slice(0, 10))}, ${new Date(f.createdTime).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+                return (
+                  <EntryRow
                     key={f.id}
-                    label={`${fmtDayLabel(f.createdTime.slice(0, 10))}, ${Math.max(1, Math.round(f.size / 1024))} KB`}
-                    tone={picked?.id === f.id ? 'neutral' : 'ghost'}
-                    accessibilityLabel={`${picked?.id === f.id ? 'Chosen: ' : 'Choose '}the backup from ${fmtDayLabel(f.createdTime.slice(0, 10))}`}
+                    label={when}
+                    value={f.phrase ? `${Math.max(1, Math.round(f.size / 1024))} KB` : 'older, needs phrase'}
+                    fresh={picked?.id === f.id ? color.accent : undefined}
+                    accessibilityLabel={`${picked?.id === f.id ? 'Chosen: ' : 'Choose '}the backup from ${when}`}
                     onPress={() => {
                       setPicked(f);
                       setProblem(null);
                       if (f.phrase) check(f);
                     }}
                   />
-                ))}
-              </Card>
+                );
+              })}
             </>
           ) : null}
 

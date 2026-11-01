@@ -8,8 +8,7 @@ import { Icon } from '@/components/Icon';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
-import { countWeighIns } from '@/db/repositories/body';
-import { countFinishedWorkouts } from '@/db/repositories/progress';
+import { hasOwnData } from '@/db/repositories/restore';
 import { fmtAgo, fmtDayLabel } from '@/lib/date';
 import { lastBackupAt, type DriveFile } from '@/services/backup';
 import { cloudAccount, cloudAvailable, cloudError, restoreLatest, signIn, signOut, syncNow } from '@/services/cloud';
@@ -26,11 +25,11 @@ export function CloudCard() {
   const [busy, setBusy] = useState<'in' | 'sync' | null>(null);
   if (!cloudAvailable()) return null;
 
-  const sync = () => {
+  const sync = (note?: string) => {
     setBusy('sync');
     void syncNow().then((r) => {
       setBusy(null);
-      toast(r.ok ? 'Synced to your Google account' : r.reason);
+      toast(r.ok ? (note ?? 'Synced to your Google account') : r.reason);
     });
   };
 
@@ -39,10 +38,11 @@ export function CloudCard() {
 
   /**
    * Signing in when a copy is already up there. An empty phone takes it without a
-   * question; a phone with its own data asks, because replacing it has no undo.
+   * question; a phone with any data of its own — even only meals or water — asks,
+   * because replacing it has no undo.
    */
   const choose = (backup: DriveFile) => {
-    if (countFinishedWorkouts() === 0 && countWeighIns() === 0) {
+    if (!hasOwnData()) {
       restore(backup);
       return;
     }
@@ -52,7 +52,7 @@ export function CloudCard() {
       confirmLabel: 'Use cloud copy',
       destructive: true,
       keepLabel: 'Decide later',
-      alternative: { label: 'Keep this phone', onPress: sync },
+      alternative: { label: 'Keep this phone', onPress: () => sync() },
       onConfirm: () => restore(backup),
     });
   };
@@ -64,7 +64,9 @@ export function CloudCard() {
       if (r.kind === 'failed') toast(r.reason);
       if (r.kind !== 'signed-in') return;
       if (r.backup?.phrase) choose(r.backup);
-      else sync();
+      // A copy from before sign-in existed carries no phrase, so it cannot come back
+      // on its own — but it is never pruned, and this says where to find it.
+      else sync(r.backup ? 'Synced. Your older backup stays in Drive: restore it from Backup & data.' : undefined);
     });
   };
 
@@ -102,7 +104,7 @@ export function CloudCard() {
       </View>
       {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
       <View style={styles.row}>
-        <PrimaryButton label="Sync now" tone="neutral" disabled={busy !== null} style={styles.flex1} onPress={sync} />
+        <PrimaryButton label="Sync now" tone="neutral" disabled={busy !== null} style={styles.flex1} onPress={() => sync()} />
         <PrimaryButton
           label="Sign out"
           tone="ghost"

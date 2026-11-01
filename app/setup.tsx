@@ -97,6 +97,8 @@ export default function Setup() {
           return;
         }
         toast(restored.reason);
+      } else if (r.backup) {
+        toast('Your older backup is in Drive: after setup, restore it from You → Backup & data.');
       }
       const first = r.account.givenName ?? r.account.name ?? '';
       if (first && !name.trim()) setName(first);
