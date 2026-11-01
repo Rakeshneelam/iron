@@ -90,6 +90,10 @@ export default function SummaryScreen() {
   const totalReps = repsOnly.reduce((t, e) => t + e.rows.filter((r) => r.isWarmup === 0).reduce((a, r) => a + r.reps, 0), 0);
   const totalSeconds = timed.reduce((t, e) => t + e.rows.filter((r) => r.isWarmup === 0).reduce((a, r) => a + r.reps, 0), 0);
 
+  const volumes = summary.perExercise.map((e) => e.rows.filter((r) => r.isWarmup === 0).reduce((t, r) => t + r.weight * r.reps, 0));
+  const opened = summary.perExercise.findIndex((e) => e.exerciseId === expanded);
+  /** The lit bar: the exercise you opened, or else the one most of the work went into. */
+  const lit = opened >= 0 ? opened : volumes.indexOf(Math.max(...volumes));
   const lifted = summary.totalTonnage >= 10000 ? `${(summary.totalTonnage / 1000).toFixed(1)}k` : String(Math.round(summary.totalTonnage));
   const title = justFinished ? (isNoTraining(s.status) ? STATUS_LABEL[s.status] : 'Workout saved') : (summary.session.routineDayId ? undefined : 'Workout');
 
@@ -214,11 +218,8 @@ export default function SummaryScreen() {
             <Card style={styles.bars}>
               <Text style={styles.barsTitle}>Volume by exercise</Text>
               <MiniBars
-                data={summary.perExercise.map((e) => {
-                  const kg = e.rows.filter((r) => r.isWarmup === 0).reduce((t, r) => t + r.weight * r.reps, 0);
-                  return { label: '', value: kg, a11y: `${e.name}: ${Math.round(kg)} kg. Shows its sets.` };
-                })}
-                highlight={Math.max(0, summary.perExercise.findIndex((e) => e.exerciseId === expanded))}
+                data={summary.perExercise.map((e, i) => ({ label: '', value: volumes[i] ?? 0, a11y: `${e.name}: ${Math.round(volumes[i] ?? 0)} kg. Shows its sets.` }))}
+                highlight={lit}
                 height={110}
                 onSelect={(i) => setExpanded(summary.perExercise[i]?.exerciseId ?? null)}
               />
