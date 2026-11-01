@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { Breathe } from '@/components/Breathe';
 import { Icon } from '@/components/Icon';
 import { Press } from '@/components/Press';
 import { fmtClock } from '@/lib/date';
@@ -48,7 +49,9 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onStart }: RestTime
       // under it is the glance from across the rack.
       <View style={styles.strip} accessibilityLiveRegion="none">
         <View style={styles.stripRow}>
-          <Icon name="timer" size={18} color={color.accent} strokeWidth={2.4} />
+          <Breathe on amount={0.12}>
+            <Icon name="timer" size={18} color={color.accent} strokeWidth={2.4} />
+          </Breathe>
           <View style={styles.clockBox} accessible accessibilityLabel={`Rest, ${fmtClock(left)} left`}>
             <Text style={clockStyle.bar}>{fmtClock(left)}</Text>
           </View>

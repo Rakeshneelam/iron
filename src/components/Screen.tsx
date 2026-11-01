@@ -1,10 +1,10 @@
 import { router, useFocusEffect } from 'expo-router';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import Animated, { FadeInDown, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { color, font, layout, material, space } from '@/theme/tokens';
+import { color, font, layout, material, motion, space } from '@/theme/tokens';
 
 import { IconButton } from './IconButton';
 import { setToastObstruction } from './Toast';
@@ -65,6 +65,11 @@ export interface ScreenProps {
   dock?: ReactNode;
   /** Sits above the tab bar, which already owns the bottom inset. */
   tab?: boolean;
+  /**
+   * The body rises in as the screen opens. On by default; off where the screen
+   * sequences its own entrance (Today) or must be still (the logging screen).
+   */
+  enter?: boolean;
   children?: ReactNode;
 }
 
@@ -73,8 +78,10 @@ export interface ScreenProps {
  * block. No spinner, no skeleton — local SQLite reads are synchronous, so a
  * screen either has its data or the query is wrong (docs/05).
  */
-export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = true, padded = true, right, strip, dock, tab = false, children }: ScreenProps) {
+export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = true, padded = true, right, strip, dock, tab = false, enter = true, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  const reduced = useReducedMotion();
+  const rise = enter && !reduced ? FadeInDown.duration(motion.slow + 100) : undefined;
   const [dockHeight, setDockHeight] = useState(0);
   /**
    * How far the content has moved under the chrome.
@@ -145,10 +152,12 @@ export function Screen({ title, subtitle, back, backLabel = 'Back', scroll = tru
           onScroll={onScroll}
           scrollEventThrottle={16}
         >
-          {children}
+          <Animated.View entering={rise}>{children}</Animated.View>
         </Animated.ScrollView>
       ) : (
-        <View style={[styles.flex, body]}>{children}</View>
+        <Animated.View entering={rise} style={[styles.flex, body]}>
+          {children}
+        </Animated.View>
       )}
 
       {dock ? (

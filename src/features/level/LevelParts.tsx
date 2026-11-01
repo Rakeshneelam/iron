@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 
+import { Breathe } from '@/components/Breathe';
 import { Card } from '@/components/Card';
 import { Icon } from '@/components/Icon';
 import { ListCard, ListRow } from '@/components/List';
@@ -18,13 +19,16 @@ import { BADGE_LOOK, fmtXp, type Reward } from './level';
  * Your initial in a lavender disc, wrapped in a volt ring that fills toward the next
  * level, with the level number pinned to it. On Today it is the way into You.
  */
-export function LevelAvatar({ name, level, size = 54, onPress }: { name: string; level: Level; size?: number; onPress?: () => void }) {
+export function LevelAvatar({ name, level, size = 54, live = false, onPress }: { name: string; level: Level; size?: number; live?: boolean; onPress?: () => void }) {
   const inner = size - 12;
   const body = (
     <View style={{ width: size, height: size }}>
-      <Ring progress={level.progress} size={size} thickness={3}>
-        <View />
-      </Ring>
+      {/* The ring breathes while a workout is open: the live thing on the screen. */}
+      <Breathe on={live} amount={0.06}>
+        <Ring progress={live ? 1 : level.progress} size={size} thickness={3}>
+          <View />
+        </Ring>
+      </Breathe>
       <View style={[styles.avatar, { width: inner, height: inner, top: 6, left: 6 }]}>
         {name ? <Text style={[styles.initial, { fontSize: inner * 0.42, lineHeight: inner * 0.52 }]}>{name[0]?.toUpperCase()}</Text> : <Icon name="body" size={inner * 0.5} color={color.onTile} />}
       </View>

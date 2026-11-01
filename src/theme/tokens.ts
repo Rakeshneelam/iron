@@ -159,6 +159,13 @@ export const material = {
   edge: 'rgba(255,255,255,0.04)',
   edgeStrong: 'rgba(255,255,255,0.07)',
   heat: `0px 10px 28px -10px ${color.accent}88`,
+  /** A coloured tile casts a little of its own light onto the stage, so it reads as lit, not printed. */
+  glow: {
+    volt: `0px 18px 48px -18px ${color.accent}99`,
+    sky: `0px 18px 48px -18px ${color.cold}88`,
+    peach: `0px 18px 48px -18px ${color.peach}88`,
+    lav: `0px 18px 48px -18px ${color.lav}88`,
+  },
   /** What floats over the stage — the tab bar, a toast — casts this. */
   lift: '0px 12px 32px -10px rgba(0,0,0,0.7)',
   /** Content scrolling under a dock fades into the stage instead of meeting a rule. */

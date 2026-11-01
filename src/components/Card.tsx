@@ -4,7 +4,7 @@ import type { StyleProp, ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import type { AnimatedViewStyle } from '@/theme/curves';
-import { color, gap, radius, space } from '@/theme/tokens';
+import { color, gap, material, radius, space } from '@/theme/tokens';
 
 import { Press } from './Press';
 
@@ -31,6 +31,7 @@ export interface CardProps {
 }
 
 const FILL: Partial<Record<CardTone, string>> = { volt: color.accent, sky: color.cold, peach: color.peach, lav: color.lav };
+const GLOW: Partial<Record<CardTone, string>> = { volt: material.glow.volt, sky: material.glow.sky, peach: material.glow.peach, lav: material.glow.lav };
 const OUTLINE: Partial<Record<CardTone, string>> = { accent: color.accent, positive: color.positive, warning: color.warning, danger: color.danger };
 
 /** True when a card is a filled tile, so whatever sits on it should use `onTile` ink. */
@@ -39,7 +40,7 @@ export const isTile = (tone: CardTone | undefined) => tone !== undefined && FILL
 export function Card({ children, style, onPress, onLongPress, tone = 'default', accessibilityLabel, touchStyle }: CardProps) {
   const base = [
     styles.card,
-    FILL[tone] ? { backgroundColor: FILL[tone] } : null,
+    FILL[tone] ? { backgroundColor: FILL[tone], boxShadow: GLOW[tone] } : null,
     OUTLINE[tone] ? { borderWidth: 1.5, borderColor: OUTLINE[tone] } : null,
     style,
   ];
