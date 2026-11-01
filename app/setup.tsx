@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
+import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withTiming, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChipRow, GoogleButton, Icon, Press, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, WeekdayPicker, type IconName } from '@/components';
+import { ChipRow, GoogleButton, Icon, Press, PrimaryButton, Screen, SectionHeader, SegmentTabs, Stepper, TextField, toast, ToggleChips, useReducedMotion, WeekdayPicker, type IconName } from '@/components';
 import { CATALOG_BY_ID, type Level, type Stress } from '@/data/catalog';
 import { PLAN_TEMPLATES, type EquipmentPreset, type Goal } from '@/data/templates';
 import { getLatestWeight, upsertWeighIn } from '@/db/repositories/body';
@@ -48,6 +49,7 @@ export default function Setup() {
   const insets = useSafeAreaInsets();
   const [started, setStarted] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
+  const reduced = useReducedMotion();
   const [step, setStep] = useState<Step>('you');
   const [initial] = useState(getSettings);
   const [name, setName] = useState(initial.name);
@@ -111,12 +113,14 @@ export default function Setup() {
           <Text style={styles.wordmark}>IRON</Text>
         </View>
         <WelcomeArt />
-        <Text style={styles.hello} accessibilityRole="header">
-          Log the set.{'\n'}
-          <Text style={styles.helloVolt}>Skip the noise.</Text>
-        </Text>
-        <Text style={styles.pitch}>Training, food, water and body in one place.</Text>
-        <View style={styles.welcomeActions}>
+        <Animated.View entering={reduced ? undefined : FadeInDown.delay(500).duration(500)}>
+          <Text style={styles.hello} accessibilityRole="header">
+            Log the set.{'\n'}
+            <Text style={styles.helloVolt}>Skip the noise.</Text>
+          </Text>
+          <Text style={styles.pitch}>Training, food, water and body in one place.</Text>
+        </Animated.View>
+        <Animated.View entering={reduced ? undefined : FadeInDown.delay(700).duration(500)} style={styles.welcomeActions}>
           {cloudAvailable() ? (
             <>
               <GoogleButton busy={signingIn} onPress={google} />
@@ -130,7 +134,7 @@ export default function Setup() {
           ) : (
             <PrimaryButton label="Get started" size="gym" icon={<Icon name="chevronRight" size={22} color={color.onAccent} />} onPress={() => setStarted(true)} />
           )}
-        </View>
+        </Animated.View>
       </View>
     );
   }
@@ -295,18 +299,39 @@ const ART: readonly { icon: IconName; tint: string; size: number; x: number; y: 
   { icon: 'body', tint: color.lav, size: 78, x: 236, y: 92, turn: '12deg' },
 ];
 
-/** The four things Iron tracks, as tiles in their own colours. Decoration only. */
+/**
+ * The four things Iron tracks, as tiles in their own colours. Decoration only: each
+ * drops in with a spring, one after another, then floats a few points up and down
+ * so the first screen feels alive. All on the UI thread; still under reduced motion.
+ */
 function WelcomeArt() {
+  const reduced = useReducedMotion();
   return (
     <View style={styles.art} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <View style={styles.artInner}>
-        {ART.map((a) => (
-          <View key={a.icon} style={[styles.artTile, { width: a.size, height: a.size, left: a.x, top: a.y, backgroundColor: a.tint, transform: [{ rotate: a.turn }] }]}>
-            <Icon name={a.icon} size={a.size * 0.38} color={color.onTile} strokeWidth={2.2} />
-          </View>
+        {ART.map((a, i) => (
+          <FloatingTile key={a.icon} index={i} reduced={reduced} {...a} />
         ))}
       </View>
     </View>
+  );
+}
+
+function FloatingTile({ icon, tint, size, x, y, turn, index, reduced }: (typeof ART)[number] & { index: number; reduced: boolean }) {
+  const drift = useSharedValue(0);
+  useEffect(() => {
+    if (reduced) return;
+    // Each tile on its own period, so the cluster never moves as one block.
+    drift.set(withDelay(600 + index * 150, withRepeat(withTiming(1, { duration: 2600 + index * 400, easing: Easing.inOut(Easing.sin) }), -1, true)));
+  }, [drift, index, reduced]);
+  const float = useAnimatedStyle(() => ({ transform: [{ translateY: -6 * drift.get() }, { rotate: turn }] }));
+  return (
+    <Animated.View
+      entering={reduced ? undefined : ZoomIn.delay(120 + index * 110).springify().damping(14)}
+      style={[styles.artTile, { width: size, height: size, left: x, top: y, backgroundColor: tint }, float]}
+    >
+      <Icon name={icon} size={size * 0.38} color={color.onTile} strokeWidth={2.2} />
+    </Animated.View>
   );
 }
 

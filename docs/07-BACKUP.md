@@ -29,6 +29,18 @@ phone that already has data asks whether to use the cloud copy or keep the phone
 
 ## Auth
 
+Google has to know the APK's signing key before sign-in works on a build. The EAS
+preview and production profiles sign with one certificate (checked across every
+build since 0.1.0):
+
+    SHA-1   51:0E:B8:88:50:A1:D5:DA:AB:F4:E3:74:B9:6A:34:18:66:1A:48:CD
+    SHA-256 16:0C:0B:AC:2C:DD:F7:DE:5D:30:37:3E:B7:EA:5B:D6:40:D3:19:39:2A:A2:9A:F6:6A:3E:38:3D:25:41:42:7A
+
+In Google Cloud project `iron-508406`: an Android OAuth client for package
+`dev.rakesh.iron` with that SHA-1, the Google Drive API enabled, and the OAuth
+consent screen in Testing with the tester accounts listed (or published). Until
+then sign-in fails with DEVELOPER_ERROR, which the app reports as "not set up yet".
+
 `@react-native-google-signin/google-signin`, scope `drive.appdata` only. Google
 classifies `drive.appdata` as a non-sensitive scope, so no OAuth verification review
 is needed for personal use. **Do not request `drive.file` or full Drive scopes** —

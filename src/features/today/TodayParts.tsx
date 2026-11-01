@@ -1,12 +1,47 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { Card, isTile, type CardTone } from '@/components/Card';
 import { Icon, type IconName } from '@/components/Icon';
 import { Press } from '@/components/Press';
 import { Ring } from '@/components/Ring';
+import { useReducedMotion } from '@/components/Screen';
 import { XP } from '@/engine/level';
-import { color, font, radius, space } from '@/theme/tokens';
+import { EASE_OUT } from '@/theme/curves';
+import { color, font, motion, radius, space } from '@/theme/tokens';
+
+/**
+ * The order the screen builds itself in when it opens: hero, actions, then the
+ * tiles row by row. Short steps, so the whole screen is still within half a second.
+ */
+export const ENTER_STEP = 70;
+
+/** Wraps a block so it rises in at its place in the sequence. Still under reduced motion. */
+export function Rise({ order, children, style }: { order: number; children: ReactNode; style?: object }) {
+  const reduced = useReducedMotion();
+  return (
+    <Animated.View entering={reduced ? undefined : FadeInDown.delay(order * ENTER_STEP).duration(motion.slow + 100)} style={style}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/** A progress bar whose fill grows to its value rather than appearing full. */
+function Fill({ fraction, track, ink }: { fraction: number; track: string; ink: string }) {
+  const reduced = useReducedMotion();
+  const target = Math.min(1, Math.max(0, fraction));
+  const w = useSharedValue(reduced ? target : 0);
+  useEffect(() => {
+    w.set(reduced ? target : withDelay(250, withTiming(target, { duration: 700, easing: EASE_OUT })));
+  }, [reduced, target, w]);
+  const grow = useAnimatedStyle(() => ({ width: `${w.get() * 100}%` }));
+  return (
+    <View style={[styles.track, { backgroundColor: track }]}>
+      <Animated.View style={[styles.trackFill, { backgroundColor: ink }, grow]} />
+    </View>
+  );
+}
 
 /**
  * The day's work as a volt card: a small dark tag for its state, the name as large
@@ -161,11 +196,7 @@ export function Tile({
       <Text style={[styles.tileSub, { color: quiet }]} numberOfLines={1}>
         {sub}
       </Text>
-      {fill !== undefined ? (
-        <View style={[styles.track, { backgroundColor: tile ? color.onTileWash : color.border }]}>
-          <View style={[styles.trackFill, { width: `${Math.round(Math.min(1, Math.max(0, fill)) * 100)}%`, backgroundColor: tile ? color.onTile : color.accent }]} />
-        </View>
-      ) : null}
+      {fill !== undefined ? <Fill fraction={fill} track={tile ? color.onTileWash : color.border} ink={tile ? color.onTile : color.accent} /> : null}
       {children}
     </Card>
   );
