@@ -12,7 +12,11 @@
  *      the live schema before they reach any SQL, and every value is bound, never
  *      interpolated.
  */
-import { expoDb } from '@/db/client';
+import { sql } from 'drizzle-orm';
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
+
+import { db, expoDb } from '@/db/client';
+import * as schema from '@/db/schema';
 import { seedIfNeeded } from '@/db/seed';
 
 type Row = Record<string, unknown>;
@@ -170,6 +174,17 @@ function insert(table: string, row: Row, orIgnore: boolean): void {
  * Replaces everything with the backup. Returns the number of workouts restored.
  * Throws if anything goes wrong, having changed nothing.
  */
+/**
+ * True once this phone holds anything of the user's own: a workout or a marked day,
+ * a weigh-in, a meal, a drink, a measurement, a check-in. Replacing a phone like
+ * that with a cloud copy has no undo, so it must ask first (AGENTS §1.4). The
+ * seeded plan and catalogue are app data and do not count.
+ */
+export function hasOwnData(): boolean {
+  const any = (t: SQLiteTable) => db.select({ one: sql<number>`1` }).from(t).limit(1).get() !== undefined;
+  return [schema.session, schema.weighIn, schema.mealLog, schema.waterLog, schema.measurement, schema.checkIn].some(any);
+}
+
 export function restoreBackup(tables: Record<string, Row[]>): number {
   expoDb.withTransactionSync(() => {
     // Deferring means insert order cannot break a foreign key mid-restore; integrity

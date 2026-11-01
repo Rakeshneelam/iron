@@ -9,7 +9,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { Screen, SectionHeader } from '@/components';
-import { color, font, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
 function P({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
   return <Text style={[styles.body, style]}>{children}</Text>;
@@ -19,11 +19,11 @@ export default function PrivacyScreen() {
   return (
     <Screen
       title="Privacy"
-      subtitle="Last updated 12 September 2026"
+      subtitle="Last updated 1 November 2026"
       back
     >
-      {/* A document, so it is set as one: a lede, then ruled sections, no boxes. */}
-      <P style={styles.lede}>Iron is a personal training log. It runs entirely on your phone.</P>
+      {/* A document: a lede, then each section on its own card. */}
+      <P style={styles.lede}>Iron is a personal training log. It works on your phone, with an optional copy in your own Google account.</P>
 
       <SectionHeader title="What Iron stores" />
       <View style={styles.section}>
@@ -35,47 +35,38 @@ export default function PrivacyScreen() {
 
       <SectionHeader title="What Iron sends" />
       <View style={styles.section}>
-        <P>Nothing, unless you turn on Google Drive backup.</P>
+        <P>Nothing, unless you sign in with Google.</P>
         <P style={styles.gap}>
-          Iron has no account system, no server and no analytics. It contains no ads, uses no advertising identifier and
-          sends no crash reports. Nobody, including the developer, can see your data.
+          Iron has no server of its own and no analytics. It contains no ads, uses no advertising identifier and sends no
+          crash reports.
         </P>
       </View>
 
-      <SectionHeader title="If you turn on Drive backup" />
+      <SectionHeader title="If you sign in with Google" />
       <View style={styles.section}>
         <P>
-          Iron uploads an encrypted copy of its database to a private folder inside your own Google Drive, called the app
-          data folder. Only Iron can read that folder. It does not appear in your Drive and other apps cannot see it. The
-          developer has no access to it.
+          Your Google account becomes your Iron account. Iron keeps an encrypted copy of its database in a private folder
+          inside your own Google Drive, called the app data folder, and refreshes it after a workout, when you put the app
+          away with new data, and when you open it after a long gap. Only Iron can read that folder; it does not appear in
+          your Drive and other apps cannot see it. The developer has no access to it.
         </P>
         <P style={styles.gap}>
-          The file is encrypted with a key derived from your recovery phrase, and that phrase never leaves this device —
-          so without it the backup cannot be read by anyone, including Google.
+          The key that opens the copy is stored with it, so that signing in on a new phone brings everything back without
+          a phrase to type. That means the copy is protected by your Google account: anyone who can sign in as you could
+          restore it, so keep that account secure.
         </P>
         <P style={styles.gap}>
-          Authorising Drive tells Iron the name and email address on your Google account. Both stay on this device and
-          are used only to show you which account is connected. It is a Drive permission, not an Iron account, and
-          nothing is uploaded until you tap Back up now.
-        </P>
-      </View>
-
-      <SectionHeader title="Accounts" />
-      <View style={styles.section}>
-        <P>There are none. Iron has no sign-in, no profile on any server, and no marketing email to opt into.</P>
-        <P style={styles.gap}>
-          Earlier versions offered an optional account holding a name, email address, age and sex. That is gone from the
-          app. If you made one, its details still exist on the old service until it is retired — ask the developer to
-          remove yours.
+          Signing in tells Iron the name and email address on your Google account. Both stay on this phone and are used
+          only to show you which account is signed in.
         </P>
       </View>
 
       <SectionHeader title="Deleting your data" />
       <View style={styles.section}>
         <P>
-          Delete all my data, in Settings, erases everything on this phone. Disconnect removes Iron&apos;s access to
-          Drive; backups already there can be deleted from your Google account at any time. Uninstalling Iron removes
-          everything local.
+          Delete all data, in You → Backup & data, erases everything on this phone and, if you are signed in, the copy in
+          your Google account. Signing out stops syncing and leaves this phone as it is. Uninstalling Iron removes
+          everything local; copies in your Drive can also be removed from your Google account&apos;s settings.
         </P>
       </View>
 
@@ -91,6 +82,6 @@ export default function PrivacyScreen() {
 const styles = StyleSheet.create({
   body: { ...font.body, color: color.text },
   lede: { ...font.heading, fontSize: 22, lineHeight: 30, fontWeight: '600', marginTop: space.sm },
-  section: { paddingLeft: space.md, borderLeftWidth: 2, borderLeftColor: color.border },
+  section: { padding: space.lg, borderRadius: radius.lg, backgroundColor: color.surface },
   gap: { marginTop: space.md },
 });

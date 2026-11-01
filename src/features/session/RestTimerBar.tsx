@@ -1,28 +1,20 @@
 import { StyleSheet, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { Breathe } from '@/components/Breathe';
 import { Icon } from '@/components/Icon';
 import { Press } from '@/components/Press';
 import { fmtClock } from '@/lib/date';
 import type { RestTimerView } from '@/services/restTimer';
 import { CSS_LINEAR, type AnimatedViewStyle } from '@/theme/curves';
-import { color, font, material, radius, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
 import { clockStyle, TimerNudge } from './Countdown';
 
 /**
- * The bar drains smoothly between the timer's own once-a-second updates.
- *
- * The remaining time is still the only source of truth — `endsAt - now`,
- * recomputed on render — and this does not touch it. It just interpolates the
- * width across the gap between two of those values, so a countdown reads as
- * draining rather than ticking down in steps.
- *
- * Animating `width` is normally the one thing to avoid, because it re-runs layout
- * for the node and its siblings every frame. This element is the exception the
- * rule is written around: absolutely positioned, with no children and no
- * siblings in flow, so nothing re-lays-out — and a `scaleX` would smear its
- * corners and have to be anchored by hand.
+ * The line drains smoothly between the timer's once-a-second updates. The number is
+ * still `endsAt - now`, recomputed on render; this only interpolates the width.
+ * Animating `width` is safe here: the line has no children and nothing beside it.
  */
 const DRAIN: AnimatedViewStyle = {
   transitionProperty: ['width'],
@@ -52,19 +44,25 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onStart }: RestTime
     const left = Math.ceil(t.remainingMs / 1000);
     const total = t.totalMs || t.remainingMs;
     return (
-      // Running is the one live thing on this screen, so it is the one thing that
-      // glows. See `material.heat`.
-      <View style={[styles.row, styles.live]} accessibilityLiveRegion="none">
-        <View style={styles.clockBox} accessible accessibilityLabel={`Rest, ${fmtClock(left)} left`}>
-          <Text style={styles.eyebrow}>Rest</Text>
-          {/* The same face the drill countdown wears, at dock size — see Countdown. */}
-          <Text style={clockStyle.bar}>{fmtClock(left)}</Text>
+      // A strip, not a card: a second big pill directly over Log set read as two
+      // buttons fighting for the thumb (device test, 0.8.0). The draining line
+      // under it is the glance from across the rack.
+      <View style={styles.strip} accessibilityLiveRegion="none">
+        <View style={styles.stripRow}>
+          <Breathe on amount={0.12}>
+            <Icon name="timer" size={18} color={color.accent} strokeWidth={2.4} />
+          </Breathe>
+          <View style={styles.clockBox} accessible accessibilityLabel={`Rest, ${fmtClock(left)} left`}>
+            <Text style={clockStyle.bar}>{fmtClock(left)}</Text>
+          </View>
+          <View style={styles.flex} />
+          <TimerNudge plain label="−15" a11y="Fifteen seconds less rest" onPress={() => t.add(-15)} />
+          <TimerNudge plain label="+30" a11y="Thirty seconds more rest" onPress={() => t.add(30)} />
+          <TimerNudge plain quiet label="Skip" a11y="Skip rest" onPress={t.cancel} />
         </View>
-        <View style={styles.flex} />
-        <TimerNudge label="−15" a11y="Fifteen seconds less rest" onPress={() => t.add(-15)} />
-        <TimerNudge label="+30" a11y="Thirty seconds more rest" onPress={() => t.add(30)} />
-        <TimerNudge label="Skip" a11y="Skip rest" quiet onPress={t.cancel} />
-        <Animated.View style={[styles.progress, DRAIN, { width: `${Math.max(0, Math.min(1, t.remainingMs / total)) * 100}%` }]} />
+        <View style={styles.track}>
+          <Animated.View style={[styles.drain, DRAIN, { width: `${Math.max(0, Math.min(1, t.remainingMs / total)) * 100}%` }]} />
+        </View>
       </View>
     );
   }
@@ -91,7 +89,7 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onStart }: RestTime
       <Icon name="timer" size={16} color={color.textFaint} />
       <Text style={styles.idleText} numberOfLines={1}>
         Rest {fmtClock(seconds)}
-        <Text style={styles.idleHint}>{autoStart ? '. Starts when you log a set' : '. Tap to start it now'}</Text>
+        {autoStart ? null : <Text style={styles.idleHint}> · tap to start</Text>}
       </Text>
     </Press>
   );
@@ -99,26 +97,13 @@ export function RestTimerBar({ timer: t, seconds, autoStart, onStart }: RestTime
 
 const styles = StyleSheet.create({
   idleHeld: { backgroundColor: color.surfaceHigh },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    minHeight: 76,
-    paddingLeft: space.lg,
-    paddingRight: space.md,
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border,
-    overflow: 'hidden',
-  },
-  live: { borderColor: color.accent, boxShadow: material.heat },
+  strip: { paddingTop: space.xs },
+  stripRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: 44, paddingHorizontal: space.xs },
   flex: { flex: 1, minWidth: 0 },
-  idleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, minHeight: 36 },
-  idleText: { ...font.caption, fontSize: 13, ...font.numeric, color: color.textMuted },
-  idleHint: { color: color.textFaint },
-  clockBox: { minWidth: 96 },
-  eyebrow: { ...font.eyebrow, fontSize: 10, color: color.textFaint },
-  /** 4px, not 3: the drain is the only thing on screen reporting the timer's state at a glance. */
-  progress: { position: 'absolute', left: 0, bottom: 0, height: 4, backgroundColor: color.accent },
+  clockBox: { minWidth: 64 },
+  track: { height: 3, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, overflow: 'hidden', marginTop: space.xs },
+  drain: { height: '100%', borderRadius: radius.pill, backgroundColor: color.accent },
+  idleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, minHeight: 36, borderRadius: radius.pill },
+  idleText: { ...font.caption, fontSize: 13, ...font.numeric, fontWeight: '700', color: color.textMuted },
+  idleHint: { fontWeight: '500', color: color.textFaint },
 });

@@ -375,10 +375,6 @@ export function demoViews(ex: { id: string; primaryMuscles: readonly string[] })
   return list.map((pattern) => ({ label: pattern.view === 'front' ? 'Front' : 'Side', pattern }));
 }
 
-export function demoFor(ex: { id: string; primaryMuscles: readonly string[] }): DemoPattern {
-  return demoViews(ex)[0]?.pattern ?? PATTERNS.squat;
-}
-
 /** A drill's demo, if it has one. */
 export function drillDemo(spec: string | undefined): DemoPattern | null {
   return spec ? resolve(spec) : null;

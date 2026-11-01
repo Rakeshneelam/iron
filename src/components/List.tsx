@@ -95,7 +95,7 @@ export function ToggleRow({ title, sub, value, onChange, divider }: { title: str
           selection();
           onChange(v);
         }}
-        trackColor={{ false: color.border, true: color.text }}
+        trackColor={{ false: color.border, true: color.accent }}
         thumbColor={value ? color.onAccent : color.textMuted}
         importantForAccessibility="no-hide-descendants"
       />
@@ -107,8 +107,6 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: color.surface,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border,
     paddingHorizontal: space.lg,
     marginBottom: space.md,
   },
@@ -124,8 +122,8 @@ const styles = StyleSheet.create({
    */
   pressed: { backgroundColor: color.surfaceHigh, borderRadius: radius.md },
   text: { flex: 1, minWidth: 0 },
-  title: { ...font.label, fontWeight: '600', color: color.text },
+  title: { ...font.label, color: color.text },
   muted: { color: color.textMuted },
   accent: { color: color.accent },
-  sub: { ...font.caption, color: color.textFaint, marginTop: 2 },
+  sub: { ...font.caption, color: color.textMuted, marginTop: 2 },
 });

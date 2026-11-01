@@ -1,21 +1,23 @@
-import type { ReactNode } from 'react';
+import { cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { impact } from '@/lib/haptics';
 import type { AnimatedViewStyle } from '@/theme/curves';
-import { color, family, font, hit, material, radius, space } from '@/theme/tokens';
+import { color, family, hit, material, radius, space } from '@/theme/tokens';
 
 import { Press } from './Press';
 
 /**
- * Three weights, and they have to look like three weights.
+ * Every button is a pill.
  *
- *   accent  — the one thing to do here. Filled.
- *   neutral — a real alternative. An outline in full-strength text.
- *   ghost   — dismiss, go back, show more. Muted text, no frame.
+ *   accent        — the one thing to do here. Volt, near-black ink.
+ *   neutral       — a real alternative. A raised dark pill.
+ *   ghost         — dismiss, go back, show more. Text only.
+ *   danger        — the final, irreversible step. Filled red.
+ *   dangerOutline — the way to that step: a red outline.
  *
- * `danger` fills for the final, irreversible step; `dangerOutline` is the way to
- * that step ("Delete day"), which should read as serious without shouting.
+ * A big accent button carries its icon in a dark circle at the right end — the
+ * "go" the whole pill points at.
  */
 export type ButtonTone = 'accent' | 'neutral' | 'danger' | 'dangerOutline' | 'ghost';
 
@@ -29,15 +31,13 @@ export interface PrimaryButtonProps {
   icon?: ReactNode;
   /** Light haptic on press. Commits (log set) fire their own, stronger one. */
   haptic?: boolean;
-  /** Overrides the label for screen readers when the label alone is ambiguous. */
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }
 
 const BG: Record<ButtonTone, string> = {
-  // Graphite on heat, 8.9 : 1 — see `color.onAccent`.
   accent: color.accentFill,
-  neutral: 'transparent',
+  neutral: color.surfaceHigh,
   danger: color.dangerFill,
   dangerOutline: 'transparent',
   ghost: 'transparent',
@@ -51,36 +51,19 @@ const FG: Record<ButtonTone, string> = {
   ghost: color.textMuted,
 };
 
-/**
- * Held. The scale comes from `Press`; this is only the colour under it.
- *
- * Every tone used to share `opacity: 0.8`, which on a filled button reads as the
- * button becoming unavailable rather than as it being pressed — the same signal
- * `disabled` uses, two steps along. A filled tone darkens; an outline or a ghost,
- * which has no fill to darken, gains one.
- */
 const HELD: Record<ButtonTone, AnimatedViewStyle> = {
   accent: { backgroundColor: color.accentFillPressed },
   danger: { backgroundColor: color.dangerPressed },
-  neutral: { backgroundColor: color.surfaceHigh },
+  neutral: { backgroundColor: color.border },
   dangerOutline: { backgroundColor: color.surfaceHigh },
-  ghost: { backgroundColor: color.surfaceHigh },
+  ghost: { backgroundColor: color.surface },
 };
 
-export function PrimaryButton({
-  label,
-  onPress,
-  onLongPress,
-  tone = 'accent',
-  size = 'default',
-  disabled = false,
-  icon,
-  haptic = false,
-  style,
-  accessibilityLabel,
-}: PrimaryButtonProps) {
+export function PrimaryButton({ label, onPress, onLongPress, tone = 'accent', size = 'default', disabled = false, icon, haptic = false, style, accessibilityLabel }: PrimaryButtonProps) {
   const fg = FG[tone];
-  const filled = tone === 'accent' || tone === 'danger';
+  const big = size === 'gym';
+  // The big accent pill: label at the left, the icon in a dark "go" circle at the right.
+  const go = big && tone === 'accent' && icon !== undefined;
   return (
     <Press
       accessibilityRole="button"
@@ -92,56 +75,47 @@ export function PrimaryButton({
         onPress();
       }}
       onLongPress={onLongPress}
-      // Whatever the caller sent is layout — `flex: 1` in a pair, a margin above —
-      // and layout belongs on the target the parent's flexbox measures.
       touchStyle={style}
       style={[
         styles.base,
-        { minHeight: hit[size], backgroundColor: BG[tone] },
-        tone === 'ghost' && styles.ghost,
-        tone === 'neutral' && styles.neutral,
+        { minHeight: big ? hit.gym + 8 : hit.default, backgroundColor: BG[tone] },
+        go && styles.goBase,
         tone === 'dangerOutline' && styles.dangerOutline,
-        // The one dominant action carries heat. Nothing else does — a screen where
-        // two things glow has no primary action (see `material.heat`).
+        tone === 'ghost' && styles.ghost,
         tone === 'accent' && !disabled && styles.hot,
         disabled && styles.disabled,
       ]}
       pressedStyle={HELD[tone]}
     >
-      <View style={styles.row}>
-        {icon}
-        {/*
-          Two lines rather than an ellipsis. numberOfLines={1} turned "Replace
-          everything with this backup" into "Replace everything with th…" at large
-          text sizes — a destructive button whose label you cannot read (UX-11).
-        */}
-        <Text style={[size === 'gym' ? styles.labelGym : styles.label, filled ? styles.filledFace : styles.textFace, { color: fg }]} numberOfLines={2}>
-          {label}
-        </Text>
-      </View>
+      {go ? (
+        <>
+          <Text style={[styles.label, styles.labelGym, { color: fg }]} numberOfLines={2}>
+            {label}
+          </Text>
+          {/* Callers draw the icon for a volt ground; on the dark circle it has to be volt itself. */}
+          <View style={styles.goCircle}>{isValidElement(icon) ? cloneElement(icon as ReactElement<{ color?: string }>, { color: color.accent }) : icon}</View>
+        </>
+      ) : (
+        <View style={styles.row}>
+          {icon}
+          <Text style={[styles.label, big && styles.labelGym, { color: fg }]} numberOfLines={2}>
+            {label}
+          </Text>
+        </View>
+      )}
     </Press>
   );
 }
 
 const styles = StyleSheet.create({
-  base: {
-    borderRadius: radius.button,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.xs,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ghost: { paddingHorizontal: space.sm },
-  // A hairline, not a frame: enough to read as tappable, not enough to compete.
-  neutral: { borderWidth: 1, borderColor: color.border },
-  dangerOutline: { borderWidth: 1, borderColor: color.danger },
+  base: { borderRadius: radius.button, paddingHorizontal: space.xl, paddingVertical: space.xs, alignItems: 'center', justifyContent: 'center' },
+  goBase: { flexDirection: 'row', justifyContent: 'space-between', paddingLeft: space.xl + 2, paddingRight: 6 },
+  goCircle: { width: 52, height: 52, borderRadius: radius.pill, backgroundColor: color.onAccent, alignItems: 'center', justifyContent: 'center' },
+  ghost: { paddingHorizontal: space.md },
+  dangerOutline: { borderWidth: 1.5, borderColor: color.danger },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, flexShrink: 1 },
-  // 16px, not 15: an action label has to survive being read at arm's length.
-  label: { ...font.body, fontWeight: '600' },
-  labelGym: { ...font.heading },
-  // The one thing to do here is set in the display face, as on the boards; the alternatives read as text.
-  filledFace: { fontFamily: family.display, fontWeight: '700' },
-  textFace: { fontFamily: family.text },
+  label: { fontFamily: family.text, fontSize: 15, lineHeight: 20, fontWeight: '800', letterSpacing: -0.1 },
+  labelGym: { fontSize: 17, lineHeight: 22, flexShrink: 1 },
   hot: { boxShadow: material.heat },
   disabled: { opacity: 0.4 },
 });

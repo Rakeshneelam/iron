@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 
-/** Now the Profile tab of Settings. Kept so Body, Food and old links still land. */
+/** Profile now lives in You (the avatar on Today). Kept so old links still land. */
 export default function ProfileRedirect() {
-  return <Redirect href={{ pathname: '/settings', params: { tab: 'profile' } }} />;
+  return <Redirect href="/you" />;
 }

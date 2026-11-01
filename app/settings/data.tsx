@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 
-/** Now the Data tab of Settings. Kept so old links still land. */
+/** Now a page of You. Kept so old links still land. */
 export default function DataRedirect() {
-  return <Redirect href={{ pathname: '/settings', params: { tab: 'data' } }} />;
+  return <Redirect href="/you/backup" />;
 }

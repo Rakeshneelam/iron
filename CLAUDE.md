@@ -11,14 +11,20 @@ If you read only one file, read this one. Everything else is detail in `/docs`.
 
 ## 1. Hard rules — never violate these
 
-1. **No backend. Ever.** SQLite on the device is the only source of truth. The only
-   network call the app is allowed to make is an optional, user-initiated encrypted
-   backup to the user's own Google Drive `appDataFolder`. No analytics, no crash
-   reporting SaaS, no remote config, no ads, no telemetry.
-2. **No accounts, no login.** A fresh install shows one welcome (what Iron is, and
-   Restore for a new phone) and then ONE setup screen (profile + pick a plan, as
-   tabs of one screen, never a wizard); after that the app opens straight into
-   today's workout. An upgrade of an existing install never shows either.
+1. **No server of our own. Ever.** SQLite on the device is the source of truth. The
+   only network use is the user's own Google account: Google sign-in, and an
+   encrypted copy of the database in their Drive's hidden `appDataFolder`, synced
+   automatically once they sign in (after a workout, when the app is put away with
+   new data, on opening after a long gap — `src/services/cloud.ts`). One phone at a
+   time: the newest copy wins, nothing merges. No analytics, no crash reporting SaaS,
+   no remote config, no ads, no telemetry.
+2. **Accounts are optional Google sign-in, never a gate.** (Owner's decision, Nov
+   2026 — it replaced "no accounts".) A fresh install shows one welcome with
+   Continue with Google — which restores a cloud copy straight into Today on a new
+   phone — or continue without an account. Then ONE setup screen in three steps —
+   You, Training, Plan — walked with Next and closed with Finish (the steps stay
+   tappable); after that the app opens straight into today's workout. Signing in or
+   out is in You. An upgrade of an existing install never shows the welcome.
 3. **Writes are immediate.** Every logged set hits SQLite the moment the user taps.
    Never hold a workout in React state and save "on finish" — the app will be killed
    in the background and the session must survive it.
@@ -44,7 +50,7 @@ screens off them, not tabs.
 
 | # | Surface | Purpose |
 |---|---|---|
-| 1 | **Today** | What today is — the day's workout as a headline over a title block (lifts, sets, estimate, usual time) — then the day score: train, food, water and body on one clock. Start workout under a thumb. No exercise list here (the workout shows it) and no check-in row (Start does) |
+| 1 | **Today** | What today is — your level on the avatar (→ You: level, badges, profile, reminders, backup), the week as a strip of days, the day's workout on a volt card (its corner button changes day or length), the day's other choices as always-visible tiles (never a "More"), then water, food and weight tiles that log with their + and the weekly goal ring. Start workout under a thumb. The sliders open Settings: body and training only |
 | 2 | **Food** | Calories/macros with one-tap repeats of his real meals, plus a compact Water row for the day on screen |
 | 3 | **Body** | Three sections in one tab: **Weight** (smoothed trend, not raw dots), **Recovery** (check-in, sleep, correctable history), **Measurements**. Each has exactly one primary action |
 | 4 | **Plans** | Any number of plans (templates or custom), one active; days → exercises. Owns the training schedule |
@@ -105,8 +111,9 @@ docs/          Specs. Read the one matching your ticket before writing code.
 src/engine/    Pure TypeScript. No I/O, no React, no imports from the app. Tested.
 src/db/        Drizzle schema + seed data (exercise catalogue, his routine, foods)
 src/theme/     Design tokens. Never hardcode a colour or a spacing value in a screen.
-               The language they encode — solid logged, hollow planned, line derived,
-               heat live — is docs/13-THE-RECORD.md. Read it before drawing anything.
+               The language they encode — volt for training and action, a colour per
+               tracker, near-black ink on tiles, pills and rounded slabs — is
+               docs/13-VOLT.md. Read it before drawing anything.
 tests/         node:test suites for the engine. Must stay green.
 ```
 
@@ -138,13 +145,13 @@ Each one is excluded because of documented user harm, not taste.
 
 | Excluded | Why |
 |---|---|
-| Streaks, badges, XP, "don't break the chain" | All-or-nothing framing is the top driver of tracking abandonment; one missed day makes people quit entirely. Missed days are neutral here. |
+| Streaks, "don't break the chain", anything that can be lost | All-or-nothing framing is the top driver of tracking abandonment; one missed day makes people quit entirely. Missed days are neutral here. The owner asked for gamification (Nov 2026), so it is **loss-free only**: XP and levels come from lifetime counts and only go up, badges are counts ("on 7 days", never "7 in a row") and stay earned, the weekly goal resets each Monday with no carry-over, and every point shows its source (`src/engine/level.ts`). |
 | Social feed, sharing, leaderboards | Single user. There is no audience. |
 | Fixed-interval reminder spam | The most common complaint in every water app's reviews. Reminders are debt-based and silent when he's ahead. See `docs/06-NOTIFICATIONS.md`. |
 | Automatic exercise rotation / "AI picks your workout" | The single most-cited complaint about Fitbod. Stable exercise selection is better for hypertrophy and for tracking progression. |
 | Opaque suggestions | Every number shows its reasoning. |
 | Nagging about accuracy ("you didn't weigh this!") | Precision perfectionism kills the logging habit. "Good enough" logging that continues beats perfect logging that stops. |
-| Paywalls, tiers, upsells, ads, accounts | Non-problems in a single-user local app. Do not build defences for them either — no sync-conflict resolution, no multi-device merge. |
+| Paywalls, tiers, upsells, ads | Non-problems in a single-user app. Do not build defences for them either — sync is newest-copy-wins, with no conflict resolution and no multi-device merge. |
 | Daily raw-weight celebration/alarm | Daily scale weight swings 1–2 kg on water alone. Only the trend is shown prominently. |
 
 ---

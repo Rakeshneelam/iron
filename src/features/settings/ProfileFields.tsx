@@ -13,13 +13,8 @@ const SEX = [
 ];
 
 /**
- * Profile: the facts about you the maths needs, and the body-weight goal that
- * steers calories and water. One implementation — Body and Food targets link to
- * Settings → Profile rather than each growing their own copy (UX-03).
- *
- * The training goal lives in Settings → Training: it decides what plans are built
- * out of, which is a training question, while `phase` decides which way the scale
- * is meant to move. Different settings, not two names for one.
+ * Profile: the facts about you the maths needs. Lives in You (the avatar on Today);
+ * the body-weight goal is a body setting and lives in Settings → Body (`GoalField`).
  *
  * Writes land immediately, as everything else does; there is nothing to save.
  */
@@ -45,10 +40,17 @@ export function ProfileFields() {
           </Field>
         </View>
       </View>
-      <Field label="Body-weight goal" hint="Sets your calorie and water targets.">
-        <ChipRow options={GOALS.filter((g) => PHASES.includes(g.value))} value={s.phase} onChange={(v) => setSetting('phase', v)} columns={4} />
-      </Field>
     </View>
+  );
+}
+
+/** Which way the scale is meant to move. Sets the calorie and water targets. */
+export function GoalField() {
+  const s = useSettings();
+  return (
+    <Field label="Body-weight goal">
+      <ChipRow options={GOALS.filter((g) => PHASES.includes(g.value))} value={s.phase} onChange={(v) => setSetting('phase', v)} columns={4} />
+    </Field>
   );
 }
 
@@ -67,7 +69,7 @@ const styles = StyleSheet.create({
   stack: { gap: space.md + 2 },
   flex1: { flex: 1 },
   pair: { flexDirection: 'row', gap: space.md - 2 },
-  input: { minHeight: hit.gym, borderWidth: 1, borderColor: color.border },
+  input: { minHeight: hit.gym },
   label: { ...font.caption, fontWeight: '600', color: color.textMuted, marginBottom: space.sm - 2 },
   hint: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: space.sm - 2 },
 });

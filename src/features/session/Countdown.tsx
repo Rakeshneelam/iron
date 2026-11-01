@@ -130,18 +130,16 @@ export interface CountdownProps {
  */
 export function Countdown({ timer, total, caption, note, size = 208, nudges = true }: CountdownProps) {
   const t = timer;
-  // Finished draws a FULL ring, not an empty one: an empty ring is what "not
-  // started" looks like, and the two states must not share a picture. Heat only
-  // while it runs — a stopped dial is not live — and finished is chalk, because
-  // finishing a hold is the normal case and green is kept for a best.
-  const progress = t.finished ? 1 : total > 0 ? t.remaining / total : 0;
-  const tone = t.running ? 'accent' : 'chalk';
+  // Not started is the bare dark track; running drains a volt arc; finished is the
+  // full ring. Three states, three pictures, and no white ring at rest.
+  const started = t.running || t.finished || t.remaining < total;
+  const progress = t.finished ? 1 : started && total > 0 ? t.remaining / total : 0;
 
   return (
     <View style={styles.wrap}>
       {/* Running is live, so it glows; stopped, it is just a dial (see material.heat). */}
       <View style={[styles.dial, t.running && styles.dialLive]}>
-        <Ring progress={progress} size={size} thickness={10} tone={tone} graduations={60}>
+        <Ring progress={progress} size={size} thickness={14}>
           {caption ? <Text style={styles.caption}>{caption}</Text> : null}
           <FitText style={styles.clock} numberOfLines={1} minimumFontScale={0.6}>
             {fmtClock(t.remaining)}
@@ -165,13 +163,7 @@ export function Countdown({ timer, total, caption, note, size = 208, nudges = tr
           style={[styles.play, t.running ? styles.playOn : styles.playHot]}
           pressedStyle={styles.playHeld}
         >
-          <Icon
-            name={t.running ? 'pause' : t.finished ? 'undo' : 'play'}
-            size={22}
-            color={t.running ? color.text : color.onAccent}
-            strokeWidth={2.4}
-          />
-          <Text style={[styles.playText, t.running && styles.playTextOn]}>{t.running ? 'Pause' : t.finished ? 'Again' : 'Start'}</Text>
+          <Icon name={t.running ? 'pause' : t.finished ? 'replay' : 'play'} size={30} color={t.running ? color.text : color.onAccent} strokeWidth={2.4} />
         </Press>
         {nudges ? <TimerNudge label="+30" a11y="Thirty seconds more" onPress={() => t.add(30)} /> : null}
       </View>
@@ -179,18 +171,24 @@ export function Countdown({ timer, total, caption, note, size = 208, nudges = tr
   );
 }
 
-/** A square ± control. Shared with the rest-timer bar so both clocks nudge alike. */
-export function TimerNudge({ label, a11y, quiet, onPress }: { label: string; a11y: string; quiet?: boolean; onPress: () => void }) {
+/**
+ * A ± control, shared by both clocks so they nudge alike: a round pill beside the
+ * drill countdown, plain text in the rest strip, where another pill would stack
+ * on top of Log set.
+ */
+export function TimerNudge({ label, a11y, quiet, plain, onPress }: { label: string; a11y: string; quiet?: boolean; plain?: boolean; onPress: () => void }) {
   return (
     <Press
+      // Smaller to the eye than to the thumb.
+      hitSlop={plain ? 10 : 6}
       onPress={() => {
         selection();
         onPress();
       }}
       accessibilityRole="button"
       accessibilityLabel={a11y}
-      style={[styles.nudge, quiet && styles.nudgeQuiet]}
-      pressedStyle={styles.nudgeHeld}
+      style={plain ? styles.plain : [styles.nudge, quiet && styles.nudgeQuiet]}
+      pressedStyle={plain ? styles.plainHeld : styles.nudgeHeld}
     >
       <Text style={[styles.nudgeText, quiet && styles.nudgeTextQuiet]}>{label}</Text>
     </Press>
@@ -207,46 +205,26 @@ export function TimerNudge({ label, a11y, quiet, onPress }: { label: string; a11
  * top on Android.
  */
 export const clockStyle = StyleSheet.create({
-  bar: { ...font.measure, fontSize: 38, lineHeight: 42, fontWeight: '800', letterSpacing: -0.6, color: color.text },
+  bar: { ...font.measure, fontWeight: '900', fontSize: 26, lineHeight: 30, letterSpacing: -0.4, color: color.text, paddingRight: 2 },
 });
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: space.lg },
   dial: { borderRadius: radius.pill },
   dialLive: { boxShadow: material.heat },
-  caption: { ...font.eyebrow, color: color.textFaint },
-  clock: { ...font.measure, fontSize: 64, lineHeight: 68, fontWeight: '800', letterSpacing: -1, color: color.text },
-  note: { ...font.caption, fontSize: 12, color: color.textMuted },
-  controls: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  play: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.sm,
-    minWidth: 132,
-    minHeight: hit.gym,
-    paddingHorizontal: space.lg,
-    borderRadius: radius.button,
-    backgroundColor: color.accentFill,
-  },
+  caption: { ...font.eyebrow, color: color.textMuted },
+  clock: { ...font.measure, fontSize: 64, lineHeight: 68, fontWeight: '900', letterSpacing: -1, color: color.text, paddingRight: 2 },
+  note: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.textMuted },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: space.xl },
+  play: { width: 80, height: 80, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: color.accentFill },
   playHot: { boxShadow: material.heat },
-  playOn: { backgroundColor: color.surfaceHigh, borderWidth: 1, borderColor: color.border },
+  playOn: { backgroundColor: color.surfaceHigh },
   playHeld: { backgroundColor: color.accentFillPressed },
-  playText: { ...font.heading, fontSize: 18, color: color.onAccent },
-  playTextOn: { color: color.text },
-  nudge: {
-    minWidth: hit.gym,
-    height: hit.gym,
-    paddingHorizontal: space.sm,
-    borderRadius: radius.md,
-    backgroundColor: color.surfaceHigh,
-    borderWidth: 1,
-    borderColor: color.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  nudge: { width: hit.gym, height: hit.gym, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
   nudgeQuiet: { backgroundColor: 'transparent' },
+  plain: { minWidth: 44, height: 40, paddingHorizontal: space.sm, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  plainHeld: { backgroundColor: color.surfaceHigh },
   nudgeHeld: { backgroundColor: color.border },
-  nudgeText: { ...font.measure, fontSize: 18, lineHeight: 22, color: color.text },
-  nudgeTextQuiet: { fontWeight: '600', color: color.textMuted },
+  nudgeText: { ...font.label, fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'], color: color.text },
+  nudgeTextQuiet: { color: color.textMuted },
 });

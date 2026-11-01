@@ -87,9 +87,9 @@ const styles = StyleSheet.create({
   field: {
     ...font.body,
     color: color.text,
-    backgroundColor: color.surfaceHigh,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
-    minHeight: hit.default,
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    minHeight: hit.default + 4,
   },
 });

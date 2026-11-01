@@ -17,10 +17,11 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Card, confirm, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
+import { Card, confirm, EntryRow, PrimaryButton, Screen, SectionHeader, TextField, TitleBlock, toast } from '@/components';
 import { inspectBackup, restoreBackup, type BackupSummary } from '@/db/repositories/restore';
 import { PHRASE_CHARS, formatPhrase, normalisePhrase } from '@/lib/recoveryPhrase';
 import { inspectDriveBackup, listBackups, type DriveFile } from '@/services/backup';
+import { keepingSignIn } from '@/services/cloud';
 import { connect, currentAccount, isConfigured } from '@/services/drive';
 import { fmtDayLabel } from '@/lib/date';
 import { color, font, space } from '@/theme/tokens';
@@ -75,7 +76,8 @@ export default function RestoreScreen() {
   const check = (f: DriveFile) => {
     setBusy(true);
     setProblem(null);
-    void inspectDriveBackup(f, phrase)
+    // A copy made since sign-in carries its own phrase; an older one needs it typed.
+    void inspectDriveBackup(f, f.phrase ?? phrase)
       .then((found) => {
         if (found.ok) {
           setLoaded({ summary: found.summary, tables: found.tables, from: `${fmtDayLabel(f.createdTime.slice(0, 10))}, Google Drive` });
@@ -120,7 +122,7 @@ export default function RestoreScreen() {
       destructive: true,
       onConfirm: () => {
         try {
-          const n = restoreBackup(l.tables);
+          const n = keepingSignIn(() => restoreBackup(l.tables));
           toast(`Restored ${plural(n, 'workout')}.`);
           router.replace('/');
         } catch {
@@ -190,26 +192,30 @@ export default function RestoreScreen() {
 
           {cloud !== null ? (
             <>
-              <SectionHeader title="Backups in Drive" hint={cloud.length ? 'Newest first.' : undefined} />
-              <Card>
-                {cloud.length === 0 ? <Text style={styles.body}>No backups in Drive yet.</Text> : null}
-                {cloud.map((f) => (
-                  <PrimaryButton
+              {/* Rows, newest first — not a stack of pills. Several syncs a day share a date, so each shows its time. */}
+              <SectionHeader title="Backups in Drive" />
+              {cloud.length === 0 ? <Text style={styles.body}>No backups in Drive yet.</Text> : null}
+              {cloud.map((f) => {
+                const when = `${fmtDayLabel(f.createdTime.slice(0, 10))}, ${new Date(f.createdTime).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+                return (
+                  <EntryRow
                     key={f.id}
-                    label={`${fmtDayLabel(f.createdTime.slice(0, 10))}, ${Math.max(1, Math.round(f.size / 1024))} KB`}
-                    tone={picked?.id === f.id ? 'neutral' : 'ghost'}
-                    accessibilityLabel={`${picked?.id === f.id ? 'Chosen: ' : 'Choose '}the backup from ${fmtDayLabel(f.createdTime.slice(0, 10))}`}
+                    label={when}
+                    value={f.phrase ? `${Math.max(1, Math.round(f.size / 1024))} KB` : 'older, needs phrase'}
+                    fresh={picked?.id === f.id ? color.accent : undefined}
+                    accessibilityLabel={`${picked?.id === f.id ? 'Chosen: ' : 'Choose '}the backup from ${when}`}
                     onPress={() => {
                       setPicked(f);
                       setProblem(null);
+                      if (f.phrase) check(f);
                     }}
                   />
-                ))}
-              </Card>
+                );
+              })}
             </>
           ) : null}
 
-          {picked ? (
+          {picked && !picked.phrase ? (
             <>
               <SectionHeader title="Recovery phrase" hint="From the phone that made this backup." />
               <Card>

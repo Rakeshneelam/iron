@@ -1,9 +1,8 @@
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { router } from 'expo-router';
-
-import { Icon, IconButton, ListCard, ListRow, Press, PrimaryButton, Screen, Sheet, Stepper } from '@/components';
+import { Card, Icon, IconButton, ListCard, ListRow, Press, PrimaryButton, Ring, Screen, SectionHeader, Sheet, Stepper } from '@/components';
 import { DateStepper, useSelectedDate } from '@/components/DateStepper';
 import { toast } from '@/components/Toast';
 import { useLive } from '@/db/live';
@@ -22,18 +21,16 @@ import {
   type MealSlot,
   type UsualMeal,
 } from '@/db/repositories/food';
-import { AddFoodSheet } from '@/features/food/AddFoodSheet';
-import { IntakeBar } from '@/features/food/IntakeBar';
-import { FoodTargetSheet } from '@/features/food/TargetSheet';
-import { computeTargets, confidenceLabel } from '@/features/food/targets';
 import { getDayTotal } from '@/db/repositories/water';
+import { AddFoodSheet } from '@/features/food/AddFoodSheet';
+import { FoodTargetSheet } from '@/features/food/TargetSheet';
+import { computeTargets } from '@/features/food/targets';
 import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
 import { ml } from '@/lib/format';
 import { hydrationTarget } from '@/services/hydration';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { color, font, gap, hit, radius, space } from '@/theme/tokens';
 
 const cap = (s: string) => (s ? s[0]?.toUpperCase() + s.slice(1) : s);
-const SHORT: Record<MealSlot, string> = { breakfast: 'B', lunch: 'L', snack: 'S', dinner: 'D' };
 const fmtServings = (n: number) => (Math.round(n * 2) / 2).toString();
 const unit = (label: string | null) => (label ?? 'serving').replace(/^1\s+/, '');
 
@@ -69,52 +66,48 @@ export default function FoodScreen() {
   const [editing, setEditing] = useState<DayEntry | null>(null);
   const [servings, setServings] = useState(1);
 
-  const soFar = `${Math.round(day.totals.kcal).toLocaleString()} / ${t.kcal.toLocaleString()} kcal`;
+  // Today's food tile opens this screen with `?add=<nonce>`: open the picker once per
+  // tap. Adjusted during render rather than in an effect, so it never flashes closed.
+  const { add } = useLocalSearchParams<{ add?: string }>();
+  const [seenAdd, setSeenAdd] = useState<string | undefined>(undefined);
+  if (typeof add === 'string' && add !== seenAdd) {
+    setSeenAdd(add);
+    setAdding({ slot: null });
+  }
+
+  const eaten = Math.round(day.totals.kcal);
+  const over = eaten > t.kcal;
+  const soFar = `${eaten} / ${t.kcal} kcal`;
   /** A target is an estimate until your own logging measures it, or you set it. */
   const estimated = !t.manual && t.basis === 'estimated';
+  const isToday = date === todayISO();
+  const prevName = isToday ? 'yesterday' : fmtDayLabel(yesterday);
 
   return (
-    <Screen
-      title="Food"
-      subtitle={fmtDayLabel(date)}
-      tab
-      right={<IconButton icon="target" accessibilityLabel="Change your calorie and protein targets" onPress={() => setTargetSheet(true)} />}
-    >
-      {/* Labelled controls, and a way back to today — the bare ‹ › said nothing to
-          a screen reader and left no exit from three days ago. */}
+    <Screen title="Food" tab right={<IconButton icon="target" accessibilityLabel="Change your calorie and protein targets" onPress={() => setTargetSheet(true)} />}>
       <DateStepper value={date} onChange={setDate} />
-      {/*
-        The day's intake as composition: one segment per meal inside the target's
-        outline, dashed while that target is still an estimate (features/food/IntakeBar).
-        Protein leads because it is the number this app plans training around.
-      */}
-      <View style={styles.intake}>
-        <IntakeBar
-          label="Calories"
-          unit="kcal"
-          target={t.kcal}
-          estimated={estimated}
-          segments={MEAL_SLOTS.map((m) => ({ key: m, short: SHORT[m], name: cap(m), value: day.bySlot[m].reduce((a, e) => a + e.macros.kcal, 0) }))}
-        />
-        <IntakeBar
-          label="Protein"
-          unit="g"
-          target={t.proteinG}
-          estimated={estimated}
-          segments={MEAL_SLOTS.map((m) => ({ key: m, short: SHORT[m], name: cap(m), value: day.bySlot[m].reduce((a, e) => a + e.macros.protein, 0) }))}
-        />
-        {/* Carbs and fat follow from the two above; they are a line, not two more bars. */}
-        <View style={styles.minor}>
-          <Text style={styles.secondary}>
-            Carbs <Text style={styles.secondaryStrong}>{Math.round(day.totals.carb)}</Text> of {t.carbG} g
+
+      {/* The day's calories as one ring: what is left, with the two numbers it comes from beside it. */}
+      <Card style={styles.kcalCard}>
+        <Ring progress={t.kcal > 0 ? eaten / t.kcal : 0} size={148} thickness={16} tone="peach">
+          <Text style={styles.ringValue} numberOfLines={1} adjustsFontSizeToFit>
+            {Math.abs(t.kcal - eaten)}
           </Text>
-          <Text style={styles.secondary}>
-            Fat <Text style={styles.secondaryStrong}>{Math.round(day.totals.fat)}</Text> of {t.fatG} g
-          </Text>
+          <Text style={styles.ringLabel}>{over ? 'kcal over' : 'kcal left'}</Text>
+        </Ring>
+        <View style={styles.kcalSide}>
+          <Text style={styles.sideLabel}>Eaten</Text>
+          <Text style={styles.sideValue}>{eaten}</Text>
+          <Text style={[styles.sideLabel, styles.sideGap]}>{estimated ? 'Target, estimated' : 'Target'}</Text>
+          <Text style={styles.sideValue}>{t.kcal}</Text>
         </View>
-        <Text style={styles.note}>
-          {t.manual ? 'Targets you set.' : t.basis === 'estimated' ? `Targets are Iron's estimate (dashed) — ${confidenceLabel(t).toLowerCase()}.` : `Targets measured from your own logging — ${confidenceLabel(t).toLowerCase()}.`}
-        </Text>
+      </Card>
+
+      {/* Protein leads because it is the number this app plans training around. */}
+      <View style={styles.macros}>
+        <Macro label="Protein" value={day.totals.protein} target={t.proteinG} ink={color.accent} />
+        <Macro label="Carbs" value={day.totals.carb} target={t.carbG} ink={color.cold} />
+        <Macro label="Fat" value={day.totals.fat} target={t.fatG} ink={color.pink} />
       </View>
 
       {/* A link to the Water screen, on the day being browsed — not a second copy of it. */}
@@ -122,12 +115,13 @@ export default function FoodScreen() {
         onPress={() => router.push(`/water?date=${date}`)}
         accessibilityRole="button"
         accessibilityLabel={`Water: ${ml(water.ml)} of ${ml(water.target)} on ${fmtDayLabel(date)}. Opens the water screen.`}
-        feedback="highlight"
         style={styles.waterRow}
         pressedStyle={styles.pressed}
       >
-        <Icon name="water" size={18} color={color.cold} />
-        <Text style={[styles.body, styles.flex1]}>Water</Text>
+        <View style={styles.waterIcon}>
+          <Icon name="water" size={18} color={color.onTile} />
+        </View>
+        <Text style={[styles.waterTitle, styles.flex1]}>Water</Text>
         <Text style={styles.waterValue}>
           {ml(water.ml)} <Text style={styles.waterOf}>of {ml(water.target)}</Text>
         </Text>
@@ -136,9 +130,10 @@ export default function FoodScreen() {
 
       {prev.entries.length > 0 && day.entries.length === 0 ? (
         <PrimaryButton
-          label={`Repeat ${date === todayISO() ? 'yesterday' : fmtDayLabel(yesterday)} (${prev.entries.length} items)`}
+          label={`Repeat ${prevName}, ${prev.entries.length} ${prev.entries.length === 1 ? 'item' : 'items'}`}
           size="gym"
-          style={styles.gap}
+          icon={<Icon name="copy" size={20} color={color.onAccent} />}
+          style={styles.repeatDay}
           onPress={() => {
             const ids = repeatDay(yesterday, date);
             toast(`Copied ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`, { label: 'Undo', onPress: () => deleteEntries(ids) });
@@ -146,110 +141,105 @@ export default function FoodScreen() {
         />
       ) : null}
 
+      <SectionHeader title="Meals" />
       {MEAL_SLOTS.map((slot) => {
         const entries = day.bySlot[slot];
-        const prevSlot = prev.bySlot[slot];
         const kcal = entries.reduce((a, e) => a + e.macros.kcal, 0);
-        const repeat = prevSlot.length > 0 && entries.length === 0;
+        const protein = entries.reduce((a, e) => a + e.macros.protein, 0);
+        const repeat = prev.bySlot[slot].length > 0 && entries.length === 0;
         return (
-          <View key={slot}>
+          <View key={slot} style={styles.meal}>
             <View style={styles.mealHead}>
-              <Text style={styles.mealTitle} accessibilityRole="header">
-                {cap(slot)}
-              </Text>
-              {entries.length ? <Text style={styles.mealKcal}>{Math.round(kcal)} kcal</Text> : null}
-              <View style={styles.flex1} />
-              {repeat ? (
-                <Press
-                  onPress={() => {
-                    const ids = repeatMeal(yesterday, slot, date);
-                    toast(`Copied ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`, { label: 'Undo', onPress: () => deleteEntries(ids) });
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Repeat ${date === todayISO() ? "yesterday's" : `${fmtDayLabel(yesterday)}'s`} ${slot}`}
-                  hitSlop={{ top: space.md, bottom: space.md, left: space.sm, right: space.sm }}
-                >
-                  <Text style={styles.link}>Repeat {date === todayISO() ? 'yesterday' : fmtDayLabel(yesterday)}</Text>
-                </Press>
-              ) : null}
+              <View style={styles.flex1}>
+                <Text style={styles.mealTitle} accessibilityRole="header">
+                  {cap(slot)}
+                </Text>
+                <Text style={styles.mealSub}>{entries.length ? `${Math.round(kcal)} kcal, ${Math.round(protein)} g protein` : 'Nothing yet'}</Text>
+              </View>
+              <Press onPress={() => setAdding({ slot })} accessibilityRole="button" accessibilityLabel={`Add food to ${slot}`} hitSlop={6} style={styles.add}>
+                <Icon name="plus" size={20} color={color.onTile} strokeWidth={2.6} />
+              </Press>
             </View>
-            <View style={styles.meal}>
-              {entries.map((e, i) => (
-                <Press
-                  key={e.id}
-                  feedback="highlight"
-                  style={[styles.entry, i > 0 && styles.divider]}
-                  pressedStyle={styles.entryHeld}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit ${e.label}`}
-                  onPress={() => {
-                    setServings(Math.max(0.5, Math.round(e.servings * 2) / 2));
-                    setEditing(e);
-                  }}
-                >
-                  <View style={styles.flex1}>
-                    <Text style={styles.entryName} numberOfLines={2}>
-                      {e.label}
-                    </Text>
-                    <Text style={styles.entryAmount}>
-                      {fmtServings(e.servings)} × {unit(e.servingLabel)}
-                    </Text>
-                  </View>
-                  <View style={styles.entryRight}>
-                    <Text style={styles.entryKcal}>{Math.round(e.macros.kcal)}</Text>
-                    <Text style={styles.entryMacro}>{Math.round(e.macros.protein)} g protein</Text>
-                  </View>
-                </Press>
-              ))}
-              {usual[slot].length > 0 ? (
-                <View style={[styles.usual, entries.length > 0 && styles.usualAfter]}>
-                  {usual[slot].map((u) => (
-                    <Press
-                      key={`${u.foodId ?? ''}:${u.recipeId ?? ''}`}
-                      onPress={() => addUsual(slot, u)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Add your usual ${u.label} to ${slot}`}
-                      hitSlop={{ top: space.xs, bottom: space.xs }}
-                      style={styles.pill}
-                      pressedStyle={styles.pressed}
-                    >
-                      <Icon name="plus" size={14} color={color.text} />
-                      <Text style={styles.pillText} numberOfLines={1}>
-                        {u.label}
-                      </Text>
-                    </Press>
-                  ))}
+
+            {entries.map((e, i) => (
+              <Press
+                key={e.id}
+                feedback="highlight"
+                style={[styles.entry, i > 0 && styles.divider]}
+                pressedStyle={styles.entryHeld}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${e.label}`}
+                onPress={() => {
+                  setServings(Math.max(0.5, Math.round(e.servings * 2) / 2));
+                  setEditing(e);
+                }}
+              >
+                <View style={styles.flex1}>
+                  <Text style={styles.entryName} numberOfLines={2}>
+                    {e.label}
+                  </Text>
+                  <Text style={styles.entryAmount}>
+                    {fmtServings(e.servings)} × {unit(e.servingLabel)}
+                  </Text>
                 </View>
-              ) : null}
-              <PrimaryButton label="Add food" tone="neutral" style={styles.addFood} onPress={() => setAdding({ slot })} />
-            </View>
+                <View style={styles.entryRight}>
+                  <Text style={styles.entryKcal}>{Math.round(e.macros.kcal)} kcal</Text>
+                  <Text style={styles.entryMacro}>{Math.round(e.macros.protein)} g protein</Text>
+                </View>
+              </Press>
+            ))}
+
+            {usual[slot].length > 0 || repeat ? (
+              <View style={styles.usual}>
+                {repeat ? (
+                  <Press
+                    onPress={() => {
+                      const ids = repeatMeal(yesterday, slot, date);
+                      toast(`Copied ${ids.length} ${ids.length === 1 ? 'item' : 'items'}`, { label: 'Undo', onPress: () => deleteEntries(ids) });
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Repeat ${isToday ? "yesterday's" : `${fmtDayLabel(yesterday)}'s`} ${slot}`}
+                    hitSlop={{ top: space.xs, bottom: space.xs }}
+                    style={[styles.chip, styles.chipRepeat]}
+                  >
+                    <Icon name="copy" size={14} color={color.peach} />
+                    <Text style={[styles.chipText, styles.chipRepeatText]} numberOfLines={1}>
+                      Repeat {prevName}
+                    </Text>
+                  </Press>
+                ) : null}
+                {usual[slot].map((u) => (
+                  <Press
+                    key={`${u.foodId ?? ''}:${u.recipeId ?? ''}`}
+                    onPress={() => addUsual(slot, u)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add your usual ${u.label} to ${slot}`}
+                    hitSlop={{ top: space.xs, bottom: space.xs }}
+                    style={styles.chip}
+                    pressedStyle={styles.pressed}
+                  >
+                    <Icon name="plus" size={14} color={color.text} />
+                    <Text style={styles.chipText} numberOfLines={1}>
+                      {u.label}
+                    </Text>
+                  </Press>
+                ))}
+              </View>
+            ) : null}
           </View>
         );
       })}
 
-      <ListCard style={styles.gap}>
+      <ListCard>
         <ListRow
-          left={<Icon name="book" size={20} color={color.textMuted} />}
+          left={<Icon name="book" size={20} color={color.peach} />}
           title="Saved meals & recipes"
           sub="Log something you cook often, or save a new one."
           onPress={() => setAdding({ slot: null, start: 'recipes' })}
         />
       </ListCard>
 
-      {/*
-        The big "New recipe" card that used to sit below the entire diary is gone.
-        It opened the sheet with breakfast as the meal, so creating a recipe at 9pm
-        offered to log it to breakfast; saved meals are a destination at the top
-        now, and creating one is a tab inside the one picker (UX-07).
-      */}
-      <AddFoodSheet
-        visible={adding !== null}
-        slot={adding?.slot ?? null}
-        start={adding?.start}
-        dateISO={date}
-        soFar={soFar}
-        onClose={() => setAdding(null)}
-      />
+      <AddFoodSheet visible={adding !== null} slot={adding?.slot ?? null} start={adding?.start} dateISO={date} soFar={soFar} onClose={() => setAdding(null)} />
 
       <Sheet visible={editing !== null} onClose={() => setEditing(null)} title={editing?.label}>
         {editing ? (
@@ -281,56 +271,67 @@ export default function FoodScreen() {
   );
 }
 
+/** One macro as a small dark tile: grams eaten of the target, and a bar in its colour. */
+function Macro({ label, value, target, ink }: { label: string; value: number; target: number; ink: string }) {
+  const v = Math.round(value);
+  return (
+    <View style={styles.macro} accessible accessibilityLabel={`${label}: ${v} of ${target} grams`}>
+      <Text style={styles.macroLabel}>{label}</Text>
+      <Text style={styles.macroValue} numberOfLines={1}>
+        {v}
+        <Text style={styles.macroOf}> / {target} g</Text>
+      </Text>
+      <View style={styles.macroTrack}>
+        <View style={[styles.macroFill, { width: `${Math.round(Math.min(1, target > 0 ? v / target : 0) * 100)}%`, backgroundColor: ink }]} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   flex1: { flex: 1 },
-  intake: { gap: space.lg, marginTop: space.lg },
-  minor: { flexDirection: 'row', gap: space.xl, marginTop: -space.xs },
-  secondary: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
-  secondaryStrong: { color: color.text, fontWeight: '600' },
-  note: { ...font.caption, fontSize: 12, color: color.textFaint, marginTop: -space.sm },
-  waterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md - 2,
-    minHeight: hit.gym,
-    marginTop: space.lg,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
   pressed: { backgroundColor: color.surfaceHigh },
-  body: { ...font.label, color: color.text, fontWeight: '500' },
-  waterValue: { ...font.label, fontWeight: '700', fontVariant: ['tabular-nums'], color: color.cold },
-  waterOf: { fontWeight: '400', color: color.textMuted },
-  gap: { marginTop: space.lg },
-  mealHead: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, marginTop: space.xl, marginBottom: space.sm, minHeight: 28 },
-  mealTitle: { ...font.heading, fontSize: 19, fontWeight: '700', color: color.text },
-  mealKcal: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
-  link: { ...font.caption, fontSize: 14, fontWeight: '600', color: color.text, textDecorationLine: 'underline' },
-  meal: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border, paddingBottom: space.sm },
-  entry: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym, paddingVertical: space.sm, paddingHorizontal: space.xs, borderRadius: radius.sm },
-  entryHeld: { backgroundColor: color.surface },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  entryName: { ...font.label, fontSize: 15, fontWeight: '500', color: color.text },
-  entryAmount: { ...font.caption, fontVariant: ['tabular-nums'], color: color.textMuted },
+
+  kcalCard: { flexDirection: 'row', alignItems: 'center', gap: space.lg + 2, marginTop: space.lg, marginBottom: 0, borderRadius: radius.xl },
+  ringValue: { ...font.measure, fontWeight: '900', fontSize: 34, lineHeight: 38, color: color.text, paddingRight: 2 },
+  ringLabel: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '700', color: color.textMuted },
+  kcalSide: { flex: 1, minWidth: 0 },
+  sideLabel: { ...font.eyebrow, color: color.textMuted },
+  sideGap: { marginTop: space.sm },
+  sideValue: { ...font.measure, fontWeight: '900', fontSize: 30, lineHeight: 34, color: color.text, paddingRight: 2 },
+
+  macros: { flexDirection: 'row', gap: space.sm + 2, marginTop: gap.between },
+  macro: { flex: 1, minWidth: 0, backgroundColor: color.surface, borderRadius: radius.md + 4, padding: space.md },
+  macroLabel: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '700', color: color.textMuted },
+  macroValue: { ...font.label, fontSize: 17, lineHeight: 22, fontWeight: '800', color: color.text, marginTop: 4, fontVariant: ['tabular-nums'] },
+  macroOf: { fontSize: 12, fontWeight: '600', color: color.textFaint },
+  macroTrack: { height: 6, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, marginTop: space.sm, overflow: 'hidden' },
+  macroFill: { height: '100%', borderRadius: radius.pill },
+
+  waterRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.gym + 8, marginTop: space.lg, paddingHorizontal: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
+  waterIcon: { width: 36, height: 36, borderRadius: radius.pill, backgroundColor: color.cold, alignItems: 'center', justifyContent: 'center' },
+  waterTitle: { ...font.label, color: color.text },
+  waterValue: { ...font.label, fontVariant: ['tabular-nums'], color: color.text },
+  waterOf: { fontWeight: '500', color: color.textMuted },
+  repeatDay: { marginTop: space.lg },
+
+  meal: { backgroundColor: color.surface, borderRadius: radius.lg, padding: space.lg, marginBottom: space.sm + 2 },
+  mealHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  mealTitle: { ...font.heading, fontSize: 16, lineHeight: 22, color: color.text },
+  mealSub: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '600', color: color.textFaint, fontVariant: ['tabular-nums'] },
+  add: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: color.peach, alignItems: 'center', justifyContent: 'center' },
+  entry: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default + 4, paddingVertical: space.sm },
+  entryHeld: { backgroundColor: color.surfaceHigh },
+  divider: { borderTopWidth: 1, borderTopColor: color.border },
+  entryName: { ...font.label, fontSize: 14, fontWeight: '600', color: color.text },
+  entryAmount: { ...font.caption, fontSize: 12, fontVariant: ['tabular-nums'], color: color.textMuted },
   entryRight: { alignItems: 'flex-end' },
-  entryKcal: { ...font.measure, fontSize: 20, lineHeight: 24, color: color.text },
-  entryMacro: { ...font.caption, fontSize: 12, fontVariant: ['tabular-nums'], color: color.textMuted },
-  usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2, paddingTop: space.md },
-  usualAfter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs + 2,
-    height: 40,
-    paddingHorizontal: space.md,
-    borderRadius: radius.button,
-    borderWidth: 1,
-    borderColor: color.border,
-    maxWidth: '100%',
-  },
-  pillText: { ...font.caption, fontWeight: '500', color: color.text, flexShrink: 1 },
-  addFood: { marginTop: space.md },
+  entryKcal: { ...font.label, fontSize: 14, fontVariant: ['tabular-nums'], color: color.textMuted },
+  entryMacro: { ...font.caption, fontSize: 12, fontVariant: ['tabular-nums'], color: color.textFaint },
+  usual: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2, marginTop: space.md },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: space.xs + 2, height: 38, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, maxWidth: '100%' },
+  chipRepeat: { backgroundColor: color.peachSoft },
+  chipText: { ...font.caption, fontWeight: '700', color: color.text, flexShrink: 1 },
+  chipRepeatText: { color: color.peach },
   stack: { gap: space.md, paddingBottom: space.lg },
 });

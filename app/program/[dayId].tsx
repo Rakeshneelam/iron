@@ -107,7 +107,7 @@ export default function DayEditor() {
           accessibilityLabel="Day name"
         />
       ) : null}
-      <Text style={styles.lead}>Tap an exercise to change its sets, reps and rest, reorder it, or swap it. Changes save as you go.</Text>
+      <Text style={styles.lead}>Tap an exercise to edit it. Changes save as you go.</Text>
 
       <ListCard>
         {slots.length === 0 ? <Text style={styles.empty}>No exercises yet. Add the first one below.</Text> : null}
@@ -267,7 +267,7 @@ function SlotEditor({
           onChange={(v) => updateSlot(slot.id, { startWeight: v > 0 ? v : null })}
         />
       </View>
-      <Text style={styles.hint}>Used only for your first session of it — after that, targets come from what you log.</Text>
+      <Text style={styles.hint}>Only for your first session of it.</Text>
       <Text style={styles.label}>Target reps left in the tank (RIR)</Text>
       <ChipRow options={RIR} value={slot.targetRir} onChange={(v) => updateSlot(slot.id, { targetRir: v })} />
       <Text style={styles.label}>Superset group</Text>
@@ -308,32 +308,18 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
     ...font.heading,
     color: color.text,
-    backgroundColor: color.surfaceHigh,
-    borderRadius: radius.md,
-    paddingHorizontal: space.md,
+    backgroundColor: color.surface,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
     minHeight: hit.gym,
   },
   renameInput: { ...font.body, minHeight: hit.default, marginTop: space.md },
   slotHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 64 },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  dim: { opacity: 0.6 },
+  divider: { borderTopWidth: 1, borderTopColor: color.border },
   lead: { ...font.caption, color: color.textMuted, marginBottom: space.md },
   empty: { ...font.caption, color: color.textMuted, paddingVertical: space.lg },
-  estimate: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    minHeight: 64,
-    paddingHorizontal: space.lg,
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
-  estimateLabel: { ...font.caption, color: color.textMuted },
-  estimateValue: { ...font.label, fontSize: 16, fontWeight: '700', ...font.numeric, color: color.text },
   gapTop: { marginTop: space.md },
-  name: { ...font.label, color: color.text, fontWeight: '600' },
+  name: { ...font.label, color: color.text },
   body: { ...font.body, color: color.text },
   muted: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint, marginTop: 2 },
   hint: { ...font.caption, color: color.textFaint },

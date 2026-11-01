@@ -81,24 +81,18 @@ export function VolumeList({ weekly }: { weekly: Record<string, number> }) {
 }
 
 const styles = StyleSheet.create({
-  card: { gap: space.md, paddingTop: space.xs },
-  row: { gap: space.xs },
+  card: { gap: space.lg, padding: space.lg, borderRadius: radius.lg, backgroundColor: color.surface },
+  row: { gap: space.sm },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: space.sm },
   name: { ...font.label, color: color.text },
-  count: { ...font.measure, fontSize: 18, lineHeight: 22, color: color.text },
-  meta: { ...font.caption, color: color.textMuted, fontWeight: '400' },
+  count: { ...font.measure, fontWeight: '900', fontSize: 20, lineHeight: 24, color: color.text },
+  meta: { ...font.caption, fontStyle: 'normal', fontWeight: '600', color: color.textMuted },
   group: { gap: space.sm },
-  groupLabel: { ...font.label, color: color.textMuted },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
-  chip: {
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
-  chipText: { ...font.caption, color: color.textMuted },
-  chipNum: { ...font.caption, ...font.numeric, color: color.text, fontWeight: '700' },
+  groupLabel: { ...font.eyebrow, color: color.textMuted },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2 },
+  chip: { height: 34, justifyContent: 'center', paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.surfaceHigh },
+  chipText: { ...font.caption, fontWeight: '700', color: color.textMuted },
+  chipNum: { ...font.caption, ...font.numeric, color: color.accent, fontWeight: '800' },
   untouched: { ...font.caption, color: color.textFaint },
   empty: { ...font.body, color: color.textMuted },
 });

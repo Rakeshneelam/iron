@@ -136,7 +136,7 @@ export function Stepper({
   const hero = size === 'hero';
   const markActions = (rule?.marks ?? []).filter((m) => m.onPress && Math.abs(m.value - value) > 1e-9);
   const valueStyle = hero ? styles.valueHero : size === 'gym' ? styles.valueGym : styles.value;
-  const box = hero ? HERO_BUTTON : hit[size];
+  const box = hero ? HERO_BUTTON : hit[size] - 8;
 
   const readout = editing ? (
     <TextInput
@@ -199,14 +199,14 @@ export function Stepper({
       onLongPress={() => startRepeat(dir)}
       onPressOut={stopRepeat}
       delayLongPress={300}
-      // Highlight, not scale: these are two halves of one card, and a scaling
-      // half pulls away from the border it shares with the number.
-      feedback="highlight"
+      // Round buttons, the minus dark and the plus volt — adding is the usual direction.
+      // A small one is drawn at 40dp; the slop makes its target the 48 every control gets.
+      hitSlop={hero ? undefined : 4}
       touchStyle={styles.btnTouch}
-      style={[styles.btn, { width: box }]}
-      pressedStyle={styles.btnPressed}
+      style={[styles.btn, { width: box, height: box }, dir > 0 ? styles.btnPlus : styles.btnMinus]}
+      pressedStyle={dir > 0 ? styles.btnPlusPressed : styles.btnPressed}
     >
-      <Icon name={dir > 0 ? 'plus' : 'minus'} size={hero ? 28 : 20} color={hero ? color.text : color.textMuted} strokeWidth={hero ? 2.4 : 2} />
+      <Icon name={dir > 0 ? 'plus' : 'minus'} size={hero ? 28 : 20} color={dir > 0 ? color.onAccent : color.text} strokeWidth={2.6} />
     </Press>
   );
 
@@ -243,39 +243,35 @@ export function Stepper({
 const MARK_ACTION: Record<RuleMark['kind'], string> = { target: 'Use the target', last: 'Use last time', trend: 'Use the trend' };
 
 /** Wider than a thumb, so a mid-set tap on − never lands on the number. */
-const HERO_BUTTON = 76;
+const HERO_BUTTON = 62;
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, minWidth: 0 },
-  label: { ...font.caption, color: color.textMuted, marginBottom: space.xs, textAlign: 'center' },
+  label: { ...font.caption, fontWeight: '700', color: color.textMuted, marginBottom: space.xs, textAlign: 'center' },
   field: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    backgroundColor: color.surfaceHigh,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: color.border,
-    overflow: 'hidden',
+    alignItems: 'center',
+    backgroundColor: color.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: 4,
   },
-  /**
-   * 114: the label (16), a 52pt condensed number in a 56dp line, and the rule (33).
-   * Condensed figures are why 52 fits where 44 used to: the same width, a taller
-   * number, read from a bench.
-   */
-  fieldHero: { backgroundColor: color.surface, borderRadius: radius.lg, minHeight: 114 },
-  /** The target stretches the full height of the field; the fill inside it follows. */
-  btnTouch: { alignSelf: 'stretch' },
-  btn: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  /** A rounded slab: a round button either side of a big italic number and its chips. */
+  fieldHero: { borderRadius: radius.xl, minHeight: 124, paddingHorizontal: space.md, paddingVertical: space.md },
+  btnTouch: { alignSelf: 'center' },
+  btn: { borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  btnMinus: { backgroundColor: color.surfaceHigh },
+  btnPlus: { backgroundColor: color.accent },
   btnPressed: { backgroundColor: color.border },
-  heroMid: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center', paddingTop: space.xs + 2, paddingBottom: 2 },
-  labelHero: { ...font.eyebrow, color: color.textFaint },
+  btnPlusPressed: { backgroundColor: color.accentPressed },
+  heroMid: { flex: 1, minWidth: 0, alignItems: 'center', justifyContent: 'center' },
+  labelHero: { ...font.eyebrow, fontSize: 12, color: color.textMuted },
   footer: { minHeight: 26, justifyContent: 'center' },
   valueBox: { flex: 1, alignItems: 'center', justifyContent: 'center', minWidth: 0, alignSelf: 'stretch' },
-  value: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text, textAlign: 'center' },
-  valueGym: { ...font.measure, fontSize: 26, lineHeight: 30, color: color.text, textAlign: 'center' },
+  value: { ...font.label, ...font.numeric, color: color.text, textAlign: 'center' },
+  valueGym: { ...font.measure, fontSize: 28, lineHeight: 32, color: color.text, textAlign: 'center' },
   valueHero: { ...font.hero, color: color.text, textAlign: 'center' },
-  suffix: { ...font.caption, fontSize: 12, fontWeight: '600', color: color.textFaint },
-  suffixHero: { ...font.measure, fontSize: 22, fontWeight: '600', letterSpacing: 0, color: color.textFaint },
+  suffix: { ...font.caption, fontSize: 12, fontWeight: '700', color: color.textMuted },
+  suffixHero: { fontFamily: font.label.fontFamily, fontSize: 16, fontWeight: '700', fontStyle: 'normal', letterSpacing: 0, color: color.textMuted },
   input: {
     flex: 1,
     minWidth: 0,

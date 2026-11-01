@@ -47,7 +47,7 @@ export function PlateSheet({ visible, weight, onClose }: { visible: boolean; wei
  * from heaviest outwards, each drawn to its weight and labelled under it.
  *
  * What to load is a calculation, not something you logged, so the plates are
- * outlines (docs/13). Size grows with weight so the order you load them in is the
+ * outlines. Size grows with weight so the order you load them in is the
  * order you see them in — the eye checks the bar against the drawing, not against
  * a sum.
  */

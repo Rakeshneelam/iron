@@ -81,10 +81,6 @@ export function createFood(input: Omit<Food, 'id' | 'timesUsed' | 'isCustom'>): 
   return row;
 }
 
-export function updateFood(id: string, patch: Partial<Omit<Food, 'id'>>): void {
-  db.update(schema.food).set(patch).where(eq(schema.food.id, id)).run();
-}
-
 /* ============================== recipes ================================= */
 
 export function listRecipes(): Recipe[] {

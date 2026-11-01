@@ -1,25 +1,45 @@
-# 07 — Backup and restore
+# 07 — Sign-in, cloud sync and restore
 
-The only network feature in the app. Ships last (phase 8) and stays optional: the
-app must be fully usable by someone who never signs in.
+The only network feature in the app, and optional: the app must be fully usable by
+someone who never signs in.
 
 ## Model
 
-The local SQLite file is the source of truth. Backup writes an encrypted copy of it
-to the user's own Google Drive `appDataFolder` — a hidden, per-application folder
-only this app can read. **Nothing is ever uploaded without an explicit tap.**
+The local SQLite file is the source of truth. Signing in with Google
+(`src/services/cloud.ts`) turns on sync: an encrypted copy of the database goes to
+the user's own Google Drive `appDataFolder` — a hidden, per-application folder only
+this app can read. There is no Iron server.
 
-That "back up weekly on Wi-Fi" toggle this document used to allow was built, and
-it was wrong twice over: connecting Drive switched it on by itself, so ticking a
-box to reach a *restore* also signed you up to background uploads, and the Wi-Fi
-in the label described a check nothing implemented. Both are gone, along with the
-`backupIfDue()` that ran on every cold start. AGENTS.md §1 permits exactly one
-network call and calls it *user-initiated*; backing up is `Back up now`.
+**When it syncs** (`src/lib/syncPolicy.ts`, tested): after a workout finishes; when
+the app is put away with new data (never mid-workout, at most every 15 minutes);
+and on opening if the newest copy is over 12 hours old. Plus Sync now in You. Each
+upload is the whole database; the last five are kept.
 
-Scheduled backups can come back, but they need a real design first: a
-constraint-aware job, a visible state, and words that match what it does.
+**Restoring on a new phone**: Continue with Google on the welcome finds the newest
+copy and restores it straight into Today. Each copy carries the phrase that opens it
+in the file's private `appProperties`, so nothing has to be typed — which means the
+copy is protected by the Google account, not by a secret that never leaves the
+phone. The privacy screen says so. Copies made before sign-in existed have no
+phrase attached and still go through Restore, which asks for it.
+
+**One phone at a time**: the newest copy wins and nothing merges. Signing in on a
+phone that already has data asks whether to use the cloud copy or keep the phone's.
+
+**Deleting**: Delete all data removes the cloud copies too, then signs out.
 
 ## Auth
+
+Google has to know the APK's signing key before sign-in works on a build. The EAS
+preview and production profiles sign with one certificate (checked across every
+build since 0.1.0):
+
+    SHA-1   51:0E:B8:88:50:A1:D5:DA:AB:F4:E3:74:B9:6A:34:18:66:1A:48:CD
+    SHA-256 16:0C:0B:AC:2C:DD:F7:DE:5D:30:37:3E:B7:EA:5B:D6:40:D3:19:39:2A:A2:9A:F6:6A:3E:38:3D:25:41:42:7A
+
+In Google Cloud project `iron-508406`: an Android OAuth client for package
+`dev.rakesh.iron` with that SHA-1, the Google Drive API enabled, and the OAuth
+consent screen in Testing with the tester accounts listed (or published). Until
+then sign-in fails with DEVELOPER_ERROR, which the app reports as "not set up yet".
 
 `@react-native-google-signin/google-signin`, scope `drive.appdata` only. Google
 classifies `drive.appdata` as a non-sensitive scope, so no OAuth verification review

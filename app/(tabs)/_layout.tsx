@@ -1,28 +1,20 @@
 import { Tabs } from 'expo-router/js-tabs';
+import type { ComponentProps } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Icon, type IconName } from '@/components/Icon';
+import { Press } from '@/components/Press';
 import { useLive } from '@/db/live';
 import { getActiveSession } from '@/db/repositories/sessions';
-import { color, font, radius } from '@/theme/tokens';
+import { selection } from '@/lib/haptics';
+import { color, material, radius, space } from '@/theme/tokens';
 
 /**
  * Five destinations, in the order the day runs: what am I doing now, what have I
- * eaten, how is my body, what will I train, how has it gone.
- *
- * There were six, and two of them overlapped: Daily owned the check-in, weight and
- * sleep, while Body owned measurements and profile and its own comment admitted it
- * changed every few weeks. A user had to learn the implementation to know where to
- * go. Daily's content moved into Body as its Weight and Recovery sections, and the
- * profile fields moved to Settings (UX-01).
- *
- * Route names are kept from v1 where they exist — deep links and notifications point
- * at them — so `index`, `program` and `review` carry the labels Today, Plans and
- * Progress. Water stays a detail screen off Today and Food, not a tab.
- *
- * Where you are is chalk; heat is not spent on navigation. The one exception is the
- * point of heat: while a workout is open, Today carries a small hot mark from every
- * other tab, because a live workout is the one thing in the app that is running.
+ * eaten, how is my body, what will I train, how has it gone. Route names are kept
+ * from v1 — deep links and notifications point at them — so `index`, `program` and
+ * `review` carry the labels Today, Plans and Progress. Water is a screen off Today
+ * and Food, not a tab; `daily` survives only as a redirect for old reminders.
  */
 const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: 'index', title: 'Today', icon: 'dumbbell' },
@@ -32,54 +24,82 @@ const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: 'review', title: 'Progress', icon: 'progress' },
 ];
 
+type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
+
 export default function TabsLayout() {
   const live = useLive(() => getActiveSession() !== undefined, ['session']);
   return (
     <Tabs
+      tabBar={(props) => <PillTabBar {...props} live={live} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: color.text,
-        tabBarInactiveTintColor: color.textFaint,
-        tabBarStyle: { backgroundColor: color.bg, borderTopColor: color.border, borderTopWidth: StyleSheet.hairlineWidth },
-        tabBarLabelStyle: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '600' },
         sceneStyle: { backgroundColor: color.bg },
         // Tabs are peers: switching between them never animates (docs/05).
         animation: 'none',
       }}
     >
       {TABS.map((t) => (
-        <Tabs.Screen
-          key={t.name}
-          name={t.name}
-          options={{
-            title: t.title,
-            tabBarAccessibilityLabel: t.name === 'index' && live ? 'Today, a workout is in progress' : t.title,
-            tabBarIcon: ({ color: tint, focused }) => (
-              <View style={styles.icon}>
-                {/* Where you are: a short chalk rule above the glyph, as a drawing marks the sheet it is on. */}
-                <View style={[styles.marker, focused && styles.markerOn]} />
-                <Icon name={t.icon} size={22} color={tint} strokeWidth={focused ? 2.2 : 1.8} />
-                {t.name === 'index' && live ? <View style={styles.live} /> : null}
-              </View>
-            ),
-          }}
-        />
+        <Tabs.Screen key={t.name} name={t.name} options={{ title: t.title }} />
       ))}
-      {/*
-        `daily` is still a route — reminders scheduled by earlier versions carry
-        /daily, and they have to land somewhere — but it is not a destination any
-        more. Declared explicitly with href: null so the router's automatic tab
-        discovery cannot put a sixth item back in the bar; the file itself redirects
-        to Body → Weight.
-      */}
+      {/* A route old reminders still carry, not a destination: never in the bar. */}
       <Tabs.Screen name="daily" options={{ href: null }} />
     </Tabs>
   );
 }
 
+/**
+ * A floating capsule of five round buttons, icons only, the current one a volt
+ * disc. While a workout is open, Today carries a small pink dot from every tab.
+ */
+function PillTabBar({ state, navigation, insets, live }: TabBarProps & { live: boolean }) {
+  const current = state.routes[state.index]?.name;
+  return (
+    <View style={[styles.wrap, { paddingBottom: insets.bottom + space.sm }]}>
+      <View style={styles.capsule} accessibilityRole="tablist">
+        {TABS.map((t) => {
+          const route = state.routes.find((r) => r.name === t.name);
+          if (!route) return null;
+          const focused = current === t.name;
+          return (
+            <Press
+              key={t.name}
+              onPress={() => {
+                const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+                if (!focused && !event.defaultPrevented) {
+                  selection();
+                  navigation.navigate(route.name, route.params);
+                }
+              }}
+              onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: focused }}
+              accessibilityLabel={t.name === 'index' && live ? `${t.title}, a workout is in progress` : t.title}
+              style={[styles.tab, focused && styles.tabOn]}
+            >
+              <Icon name={t.icon} size={22} color={focused ? color.onAccent : color.textMuted} strokeWidth={focused ? 2.4 : 2} />
+              {t.name === 'index' && live ? <View style={[styles.live, focused && styles.liveOn]} /> : null}
+            </Press>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  icon: { alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
-  marker: { position: 'absolute', top: -7, width: 18, height: 2, borderRadius: radius.pill, backgroundColor: 'transparent' },
-  markerOn: { backgroundColor: color.text },
-  live: { position: 'absolute', top: 2, right: -5, width: 7, height: 7, borderRadius: radius.pill, backgroundColor: color.accent },
+  wrap: { backgroundColor: color.bg, paddingHorizontal: space.lg + 2, paddingTop: space.xs },
+  capsule: {
+    height: 70,
+    borderRadius: radius.pill,
+    backgroundColor: color.surfaceHigh,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: space.sm,
+    boxShadow: material.lift,
+  },
+  tab: { width: 54, height: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  tabOn: { backgroundColor: color.accent },
+  live: { position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: radius.pill, backgroundColor: color.pink, borderWidth: 2, borderColor: color.surfaceHigh },
+  liveOn: { borderColor: color.accent },
 });

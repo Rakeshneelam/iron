@@ -232,9 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    borderTopWidth: 1,
-    borderColor: color.border,
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.lg + 2,
   },
   /** A sheet sits nearest the light, so its edge is the strong one. */
   edge: {
@@ -247,10 +245,10 @@ const styles = StyleSheet.create({
   },
   handleHit: { alignItems: 'center', paddingVertical: space.md },
   handle: {
-    width: space.xxxl,
-    height: space.xs,
+    width: 44,
+    height: 5,
     borderRadius: radius.pill,
-    backgroundColor: color.border,
+    backgroundColor: color.rule,
   },
   titleRow: {
     flexDirection: 'row',
@@ -259,7 +257,7 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   flex1: { flex: 1 },
-  title: { ...font.titleSm, color: color.text },
+  title: { fontFamily: font.title.fontFamily, fontStyle: 'italic', fontWeight: '900', fontSize: 28, lineHeight: 32, letterSpacing: -0.4, color: color.text },
   subtitle: {
     ...font.caption,
     ...font.numeric,

@@ -1,14 +1,14 @@
 /**
- * Google Drive appDataFolder (docs/07-BACKUP.md).
+ * Google sign-in and the Drive appDataFolder (docs/07-BACKUP.md).
  *
- * The only network feature in the app, and the only network call AGENTS.md §1
- * permits. Everything here is scoped to `drive.appdata`: a hidden per-application
- * folder that no other app can read, that does not appear in the user's Drive, and
- * that Google classifies as non-sensitive — so the project never needs OAuth
- * verification review.
+ * Signing in with Google is Iron's account, and the user's own Drive is its cloud:
+ * everything here is scoped to `drive.appdata`, a hidden per-application folder
+ * that no other app can read, that does not appear in the user's Drive, and that
+ * Google classifies as non-sensitive — so the project never needs OAuth
+ * verification review. There is no Iron server.
  *
  * Nothing in this file decrypts anything. What gets uploaded is the SQLCipher
- * database file, already ciphertext, readable only with the recovery phrase.
+ * database file, already ciphertext.
  */
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
@@ -23,6 +23,19 @@ export interface DriveFile {
   name: string;
   size: number;
   createdTime: string;
+  /**
+   * The phrase that opens this file, kept in the file's private app properties so a
+   * sign-in on a new phone can restore without typing it. Absent on backups made
+   * before sign-in existed; those still need the phrase typed.
+   */
+  phrase?: string;
+}
+
+/** Who is signed in, as Google reports it. */
+export interface GoogleAccount {
+  email: string;
+  name: string | null;
+  givenName: string | null;
 }
 
 /** Missing only if the build was made without the client ID in .env. */
@@ -33,30 +46,43 @@ export function isConfigured(): boolean {
 /** Drive needs its scope; the shared helper keeps the client ID in one place. */
 const configure = () => configureGoogleSignin([DRIVE_SCOPE]);
 
-/** The signed-in address, or null. Never triggers a sign-in prompt. */
-export async function currentAccount(): Promise<string | null> {
+type SignedIn = { user: { email: string; name: string | null; givenName: string | null } };
+const toAccount = (data: SignedIn): GoogleAccount => ({ email: data.user.email, name: data.user.name ?? null, givenName: data.user.givenName ?? null });
+
+/** The signed-in account, restored without any prompt — or null. */
+export async function silentAccount(): Promise<GoogleAccount | null> {
   if (!isConfigured()) return null;
   configure();
   try {
     const res = await GoogleSignin.signInSilently();
-    return res.type === 'success' ? (res.data.user.email ?? null) : null;
+    return res.type === 'success' ? toAccount(res.data) : null;
   } catch {
     return null;
   }
 }
 
 /** Shows the account picker. Returns null if the user backs out. */
-export async function connect(): Promise<string | null> {
+export async function signInAccount(): Promise<GoogleAccount | null> {
   configure();
   try {
     await GoogleSignin.hasPlayServices();
     const res = await GoogleSignin.signIn();
-    return res.type === 'success' ? (res.data.user.email ?? null) : null;
+    return res.type === 'success' ? toAccount(res.data) : null;
   } catch (e) {
     const code = (e as { code?: string }).code;
     if (code === statusCodes.SIGN_IN_CANCELLED) return null;
     throw e;
   }
+}
+
+/** The signed-in address, or null. Never triggers a sign-in prompt. */
+export async function currentAccount(): Promise<string | null> {
+  return (await silentAccount())?.email ?? null;
+}
+
+/** Shows the account picker. Returns the address, or null if the user backs out. */
+export async function connect(): Promise<string | null> {
+  return (await signInAccount())?.email ?? null;
 }
 
 export async function disconnect(): Promise<void> {
@@ -83,10 +109,16 @@ export async function listBackups(): Promise<DriveFile[]> {
   const auth = await authHeader();
   const url =
     `${API}/files?spaces=appDataFolder&orderBy=createdTime desc&pageSize=20` +
-    `&fields=${encodeURIComponent('files(id,name,size,createdTime)')}`;
+    `&fields=${encodeURIComponent('files(id,name,size,createdTime,appProperties)')}`;
   const res = await ok(await fetch(url, { headers: auth }), 'Listing backups');
-  const body = (await res.json()) as { files?: { id: string; name: string; size?: string; createdTime: string }[] };
-  return (body.files ?? []).map((f) => ({ id: f.id, name: f.name, size: Number(f.size ?? 0), createdTime: f.createdTime }));
+  const body = (await res.json()) as { files?: { id: string; name: string; size?: string; createdTime: string; appProperties?: Record<string, string> }[] };
+  return (body.files ?? []).map((f) => ({
+    id: f.id,
+    name: f.name,
+    size: Number(f.size ?? 0),
+    createdTime: f.createdTime,
+    ...(f.appProperties?.phrase ? { phrase: f.appProperties.phrase } : {}),
+  }));
 }
 
 /**
@@ -94,13 +126,13 @@ export async function listBackups(): Promise<DriveFile[]> {
  * training plus a food table will pass — and resumable is the only sane choice on
  * mobile data anyway.
  */
-export async function uploadBackup(name: string, bytes: Uint8Array): Promise<void> {
+export async function uploadBackup(name: string, bytes: Uint8Array, appProperties?: Record<string, string>): Promise<void> {
   const auth = await authHeader();
   const start = await ok(
     await fetch(`${UPLOAD}?uploadType=resumable`, {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json; charset=UTF-8' },
-      body: JSON.stringify({ name, parents: ['appDataFolder'] }),
+      body: JSON.stringify({ name, parents: ['appDataFolder'], ...(appProperties ? { appProperties } : {}) }),
     }),
     'Starting the upload',
   );

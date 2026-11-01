@@ -12,10 +12,18 @@ const FG: Record<PillTone, string> = {
   muted: color.textMuted,
 };
 
-/** A short status tag: "Active", "Skipped", "Add load". Colour carries meaning, never decoration. */
+const BG: Record<PillTone, string> = {
+  accent: color.accentWash,
+  positive: color.accentWash,
+  warning: color.warningWash,
+  danger: color.dangerWash,
+  muted: color.surfaceHigh,
+};
+
+/** A short status tag: "Active", "+2.5 kg". A tinted pill; colour carries meaning, never decoration. */
 export function Pill({ label, tone = 'muted' }: { label: string; tone?: PillTone }) {
   return (
-    <View style={[styles.pill, { borderColor: FG[tone] }]}>
+    <View style={[styles.pill, { backgroundColor: BG[tone] }]}>
       <Text style={[styles.text, { color: FG[tone] }]} numberOfLines={1}>
         {label}
       </Text>
@@ -24,6 +32,6 @@ export function Pill({ label, tone = 'muted' }: { label: string; tone?: PillTone
 }
 
 const styles = StyleSheet.create({
-  pill: { borderWidth: 1, borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2, alignSelf: 'flex-start' },
-  text: { ...font.caption, fontWeight: '600' },
+  pill: { borderRadius: radius.pill, paddingHorizontal: space.md - 2, paddingVertical: 5, alignSelf: 'flex-start' },
+  text: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '700' },
 });

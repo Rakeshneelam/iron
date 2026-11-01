@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 
-import { addDays, fmtDayLabel, todayISO } from '@/lib/date';
-import { color, font, hit, radius, space } from '@/theme/tokens';
+import { addDays, fmtDayLabel, todayISO, weekStartISO } from '@/lib/date';
+import { color, font, radius, space } from '@/theme/tokens';
 
+import { DayStrip } from './DayStrip';
 import { Icon } from './Icon';
 import { Press } from './Press';
-import { PrimaryButton } from './PrimaryButton';
 
 /**
  * The selected day on a date-based screen, and what happens to it at midnight.
@@ -41,25 +41,36 @@ export interface DateStepperProps {
 }
 
 /**
- * ‹ Yesterday › — the day every control on the screen reads and writes. Never goes
- * past today, and always offers the way back: browsing three days ago and then
- * tapping forward three times is not a way out of anything.
+ * The day every control on the screen reads and writes: its name, the week it sits
+ * in as a strip of days to tap, and round arrows a week at a time for further back.
+ * Never goes past today, and always offers the way back — a "Today" pill appears the
+ * moment you are anywhere else.
  */
 export function DateStepper({ value, onChange, max }: DateStepperProps) {
   const today = todayISO();
   const limit = max ?? today;
+  const start = weekStartISO(value);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(start, i);
+    return { date, disabled: date > limit };
+  });
+  const lastWeek = addDays(start, 7) > limit;
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        <Arrow icon="chevronLeft" label="Previous day" onPress={() => onChange(addDays(value, -1))} />
-        <Text style={styles.label} accessibilityRole="header">
+        <Text style={styles.label} accessibilityRole="header" numberOfLines={1}>
           {fmtDayLabel(value)}
         </Text>
-        <Arrow icon="chevronRight" label="Next day" disabled={value >= limit} onPress={() => onChange(addDays(value, 1))} />
+        {value !== today ? (
+          <Press onPress={() => onChange(today)} accessibilityRole="button" accessibilityLabel="Go back to today" hitSlop={8} style={styles.today}>
+            <Text style={styles.todayText}>Today</Text>
+          </Press>
+        ) : null}
+        <View style={styles.flex} />
+        <Arrow icon="chevronLeft" label="Previous week" onPress={() => onChange(addDays(value, -7))} />
+        <Arrow icon="chevronRight" label="Next week" disabled={lastWeek} onPress={() => onChange(addDays(value, 7) > limit ? limit : addDays(value, 7))} />
       </View>
-      {value !== today ? (
-        <PrimaryButton label="Back to today" tone="ghost" accessibilityLabel="Go back to today" onPress={() => onChange(today)} />
-      ) : null}
+      <DayStrip days={days} selected={value} onSelect={onChange} />
     </View>
   );
 }
@@ -72,29 +83,23 @@ function Arrow({ icon, label, disabled, onPress }: { icon: 'chevronLeft' | 'chev
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
-      feedback="highlight"
+      hitSlop={4}
       style={[styles.arrow, disabled && styles.disabled]}
       pressedStyle={styles.pressed}
     >
-      <Icon name={icon} size={20} color={color.text} />
+      <Icon name={icon} size={18} color={color.text} />
     </Press>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'stretch' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm, minHeight: hit.default },
-  arrow: {
-    width: hit.default,
-    height: hit.default,
-    borderRadius: radius.md,
-    backgroundColor: color.surface,
-    borderWidth: 1,
-    borderColor: color.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  wrap: { gap: space.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  flex: { flex: 1 },
+  label: { ...font.heading, color: color.text, flexShrink: 1 },
+  today: { height: 30, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.accentWash, justifyContent: 'center' },
+  todayText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.accent },
+  arrow: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: color.surface, alignItems: 'center', justifyContent: 'center' },
   pressed: { backgroundColor: color.surfaceHigh },
   disabled: { opacity: 0.35 },
-  label: { ...font.label, fontWeight: '600', color: color.text, flex: 1, textAlign: 'center' },
 });

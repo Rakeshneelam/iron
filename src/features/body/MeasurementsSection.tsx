@@ -23,7 +23,7 @@ const CORE = ['waist', 'hips', 'chest'];
  * any reading can be fixed or deleted with Undo. Log measurements in the dock is
  * the full set of sites, for the first time or a new one.
  */
-export function MeasurementsSection({ frame, tail }: BodySectionProps) {
+export function MeasurementsSection({ frame }: BodySectionProps) {
   const settings = useSettings();
   const today = todayISO();
   const measurements = useLive(() => listMeasurements(), ['measurement']);
@@ -55,11 +55,10 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
   return (
     <Screen
       {...frame}
-      subtitle={lastDate ? `Measured ${fmtDayLabel(lastDate)}` : frame.subtitle}
       tab
-      dock={<PrimaryButton label="Log measurements" size="gym" icon={<Icon name="ruler" size={18} color={color.onAccent} />} onPress={() => setMeasuring(true)} />}
+      dock={<PrimaryButton label="Log measurements" size="gym" icon={<Icon name="ruler" size={20} color={color.onAccent} />} onPress={() => setMeasuring(true)} />}
     >
-      <Text style={styles.lead}>Tap − or + to log today’s number. It saves as you go.</Text>
+      {lastDate ? <Text style={styles.lead}>Last measured {fmtDayLabel(lastDate).toLowerCase()}</Text> : null}
       <ListCard>
         {rows.map((s, i) => {
           const history = bySite.get(s.key) ?? [];
@@ -98,19 +97,17 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
           );
         })}
       </ListCard>
-      <Text style={styles.footnote}>Tap a name for its history. Other sites are in Log measurements.</Text>
 
       {whtr !== null ? (
-        <Card style={styles.gapTop}>
+        <Card tone="lav" style={styles.gapTop}>
           <View style={styles.rowBetween}>
             <Text style={styles.body}>Waist-to-height</Text>
-            <Text style={[styles.value, { color: whtr < 0.5 ? color.positive : color.text }]}>{whtr.toFixed(2)}</Text>
+            <Text style={styles.value}>{whtr.toFixed(2)}</Text>
           </View>
-          <Text style={styles.hint}>Below 0.50 is the healthy range for most adults.</Text>
+          <Text style={styles.hint}>Healthy below 0.50</Text>
         </Card>
       ) : null}
 
-      <View style={styles.gapTop}>{tail}</View>
       <MeasureSheet visible={measuring} latest={latestBySite} onClose={() => setMeasuring(false)} />
       <SiteSheet site={site} rows={site ? (bySite.get(site) ?? []) : []} onClose={() => setSite(null)} />
     </Screen>
@@ -120,17 +117,16 @@ export function MeasurementsSection({ frame, tail }: BodySectionProps) {
 const styles = StyleSheet.create({
   lead: { ...font.caption, color: color.textMuted, marginBottom: space.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: 64 },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
+  divider: { borderTopWidth: 1, borderTopColor: color.border },
   nameTouch: { flex: 1, minWidth: 0 },
   name: { minHeight: hit.default, justifyContent: 'center', paddingHorizontal: space.xs, borderRadius: radius.sm },
   held: { backgroundColor: color.surfaceHigh },
   title: { ...font.label, fontWeight: '600', color: color.text },
   sub: { ...font.caption, fontSize: 12, ...font.numeric, color: color.textFaint },
   field: { width: 176 },
-  footnote: { ...font.caption, fontSize: 12, color: color.textFaint },
   gapTop: { marginTop: space.lg },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
-  hint: { ...font.caption, color: color.textMuted, marginTop: space.sm },
-  body: { ...font.body, color: color.text },
-  value: { ...font.measure, fontSize: 28, lineHeight: 32, color: color.text, flexShrink: 1 },
+  hint: { ...font.caption, color: color.onTileMuted, marginTop: space.sm },
+  body: { ...font.label, color: color.onTile },
+  value: { ...font.measure, fontWeight: '900', fontSize: 34, lineHeight: 38, color: color.onTile, flexShrink: 1, paddingRight: 2 },
 });

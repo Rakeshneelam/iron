@@ -13,40 +13,37 @@ optional and comes last.
 
 ## Type
 
-Three widths of two families, embedded at build time by the `expo-font` config
-plugin (`app.json`), so nothing loads at runtime. **Width carries meaning:** IBM Plex
-Sans for everything you read, **Archivo** for names (titles, headings, filled buttons,
-exercise names), **Archivo Condensed** for measurements (the weight under your thumb,
-the trend, litres today). All OFL; the files and licences are in `assets/fonts/`. The
-family names live in `family` in the tokens — never write one in a screen. Numbers use
-tabular figures so weights don't jitter during a countdown or a stepper hold.
-`font.hero`, `font.display` and `font.measure` carry their own family — never spread
-`font.numeric` after them, it resets the width.
+Two families, embedded at build time by the `expo-font` config plugin (`app.json`),
+so nothing loads at runtime: **Plus Jakarta Sans** for everything you read and tap,
+**Archivo Condensed italic** for titles, the workout's name and every big number. All
+OFL; the files and licences are in `assets/fonts/`. The family names live in `family`
+in the tokens — never write one in a screen. Numbers use tabular figures so weights
+don't jitter during a countdown or a stepper hold. `font.hero`, `font.display` and
+`font.measure` carry their own family — never spread `font.numeric` after them, it
+resets the face.
 
 The logged number is the hero: weight and reps are the largest text on the screen,
 larger than any heading.
 
 ## Colour
 
-Three materials and one live thing — see `docs/13-THE-RECORD.md` §5 for why:
+"Volt" — see `docs/13-VOLT.md` for the full table and why:
 
-- **graphite** (`bg`, `surface`, `surfaceHigh`) — the ground
-- **chalk** (`text`) — the ink of everything logged
-- **heat** (`accent`) — only what is live: the primary action, the needle, the set under
-  your thumb, a running rest, the set just logged. Text links and selections are chalk.
-
-Then one meaning per ink: `cold` water, `positive` a new best, `warning` worth a look
-(a stall, a lighter week — violet, never an alarm), `danger` pain and nothing else.
+- a near-black stage (`bg`, `surface`, `surfaceHigh`)
+- **volt** (`accent`) for training, the one action on a screen and a new best
+- a colour per tracker: `cold` water, `peach` food, `lav` body, `pink` the third macro
+- near-black ink (`onTile`) on every coloured tile, never white
+- `warning` worth a look, `danger` pain and nothing else
 
 Never colour a missed day red. Never use red for bodyweight going up, or for eating
 over a target.
 
 ## Drawing conventions
 
-Every instrument draws by the same rules (docs/13 §3): **solid** is logged, **hollow or
-dashed** is planned, a **line** is derived, **heat** is live, a **datum** is a best, a
-**dimension** is a measured difference in its own unit. An estimate never shares a lane
-with what you lifted.
+Every control is a pill and every card a rounded slab without an outline; a border
+means state (selected, live, pain). Bars are rounded with one lit in its tracker's
+colour; trends are lines; an estimate is labelled as one and never drawn as a lift.
+Targets are dashed.
 
 ## Gym usability rules (non-negotiable)
 
@@ -73,7 +70,7 @@ with what you lifted.
 ## Charts
 
 - Trend line thick and opaque; raw data small solid dots at ~30% opacity
-- Lanes share a time axis, never a unit: sets, kilograms and calories each keep their own scale
+- One unit per chart: sets, kilograms and calories never share a scale
 - No gridlines unless they carry information
 - Touch to scrub, with a value readout — no tooltip that requires precision
 - Downsample beyond ~200 points

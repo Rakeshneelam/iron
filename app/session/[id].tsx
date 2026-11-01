@@ -2,20 +2,20 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { Keyframe } from 'react-native-reanimated';
+import Animated, { Keyframe, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Card, EmptyState, Icon, IconButton, ListCard, ListRow, Pill, type PillTone, Press, PrimaryButton, SectionHeader, setToastObstruction, Sheet, toast, useReducedMotion, type IconName } from '@/components';
+import { Card, EmptyState, Icon, IconButton, ListCard, ListRow, Pill, type PillTone, Press, PrimaryButton, setToastObstruction, Sheet, toast, useReducedMotion, type IconName } from '@/components';
 import type { RuleMark } from '@/components/Rule';
 import { CATALOG, CATALOG_BY_ID, type Stress } from '@/data/catalog';
 import { useLive } from '@/db/live';
 import type { Exercise } from '@/db/repositories/exercises';
+import { bestBefore } from '@/db/repositories/level';
 import { getDay, getSlots } from '@/db/repositories/program';
 import {
   addSessionExercise,
   cooldownSettled,
   deleteSet,
-  exerciseSessions,
   finishSession,
   getSessionStage,
   getLastPerformance,
@@ -50,7 +50,6 @@ import { ExercisePicker } from '@/features/exercises/ExercisePicker';
 import { drillKit, toolsOf } from '@/features/profile';
 import { cancelWorkout } from '@/features/session/cancel';
 import { allSettled, isSettled, nextPendingIndex, type ExState } from '@/features/session/order';
-import { LoadLine } from '@/features/progress/LoadLine';
 import { DrillStage } from '@/features/session/DrillStage';
 import { EditSetSheet } from '@/features/session/EditSetSheet';
 import { Elapsed } from '@/features/session/Elapsed';
@@ -58,7 +57,6 @@ import { PlateSheet } from '@/features/session/PlateSheet';
 import { nextStage, resolveStage, STAGE_LABEL, stagesShown, type SessionStage, type StageContent } from '@/features/session/stages';
 import { fmtSet, fmtSetList, liftOf, rampFor, readinessFrom, suggestFor, suggestionContext, verdictLabel, VERDICT_TONE } from '@/features/session/prescription';
 import { RestTimerBar } from '@/features/session/RestTimerBar';
-import { SessionRail } from '@/features/session/SessionRail';
 import { AdvanceButton, SetControls, type Advance } from '@/features/session/SetControls';
 import { minutesLabel, MODE_OPTIONS } from '@/features/warmup/labels';
 import { fmtClock, fmtDayLabel } from '@/lib/date';
@@ -90,6 +88,12 @@ const ARRIVE_PREV = new Keyframe({
   0: { opacity: 0, transform: [{ translateX: -16 }] },
   100: { opacity: 1, transform: [{ translateX: 0 }] },
 }).duration(200);
+
+/**
+ * A just-logged set springs into its pill. An entering animation of one element —
+ * transform and opacity, never layout — so the list itself never moves (docs/05).
+ */
+const POP = ZoomIn.springify().damping(12);
 
 export default function SessionScreen() {
   useKeepAwake();
@@ -132,6 +136,8 @@ export default function SessionScreen() {
    */
   const [travel, setTravel] = useState<0 | 1 | -1>(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  /** The current exercise's own tools: how-to, swap, skip, remove. */
+  const [exMenu, setExMenu] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [picker, setPicker] = useState<Picker | null>(null);
   const [plates, setPlates] = useState(false);
@@ -222,16 +228,8 @@ export default function SessionScreen() {
     [current?.exerciseId, id], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  /**
-   * Every finished session of this lift, for the history strip. Live on
-   * `set_log` so a set logged seconds ago is already part of the picture the
-   * next exercise's strip is drawn from.
-   */
-  const history = useLive(
-    () => (current ? exerciseSessions(current.exerciseId) : []),
-    ['set_log', 'session'],
-    [current?.exerciseId],
-  );
+  /** The best estimated 1RM from any other workout — what a set has to beat to be a new best. */
+  const best = useLive(() => (current ? bestBefore(current.exerciseId, id) : 0), ['exercise_session_stat'], [current?.exerciseId, id]);
 
   const exSets = current ? sets.filter((s) => s.exerciseId === current.exerciseId) : [];
   const exWork = exSets.filter((s) => s.isWarmup === 0);
@@ -357,6 +355,9 @@ export default function SessionScreen() {
     setJustLogged(row.id);
     success(); // gated centrally now — lib/haptics reads the user's setting
     setPain(false);
+    // Beat every earlier workout, and every set so far today: worth saying out loud.
+    const newBest = !asWarmup && measure === 'reps' && best > 0 && row.e1rm > Math.max(best, ...exWork.map((x) => x.e1rm)) + 0.5;
+    const said = newBest ? 'New best! ' : '';
     if (asWarmup) {
       // A warm-up is a persisted row like any other, so it gets the same Undo.
       toast(`Warm-up logged, ${setText(w, r)}`, { label: 'Undo', onPress: () => deleteSet(row.id) });
@@ -367,7 +368,7 @@ export default function SessionScreen() {
     const behind = partners.find((p) => p.exerciseId !== current.exerciseId && (counts.get(p.exerciseId) ?? 0) < exWork.length + 1 && (counts.get(p.exerciseId) ?? 0) < targetOf(p));
     if (behind) {
       goTo(plan.indexOf(behind));
-      toast(`Set ${exWork.length + 1} logged, ${setText(w, r)}. Next: ${behind.exercise.name}`, {
+      toast(`${said}Set ${exWork.length + 1} logged, ${setText(w, r)}. Next: ${behind.exercise.name}`, {
         label: 'Undo',
         onPress: () => deleteSet(row.id),
       });
@@ -376,7 +377,7 @@ export default function SessionScreen() {
     const roundStart = partners.length > 1 ? partners.find((p) => (counts.get(p.exerciseId) ?? 0) < targetOf(p)) : undefined;
     if (roundStart && roundStart.exerciseId !== current.exerciseId) goTo(plan.indexOf(roundStart));
     if (settings.restTimerAutoStart && !cardio) void startRest(id, restSeconds, current.exercise.name);
-    toast(`Set ${exWork.length + 1} logged, ${setText(w, r)}`, {
+    toast(`${said}Set ${exWork.length + 1} logged, ${setText(w, r)}`, {
       label: 'Undo',
       onPress: () => {
         deleteSet(row.id);
@@ -516,6 +517,7 @@ export default function SessionScreen() {
               {day?.label ?? 'Workout'}, optional
             </Text>
           </View>
+          <View style={styles.headerBalance} />
         </View>
         {strip}
         <ScrollView style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -601,14 +603,12 @@ export default function SessionScreen() {
   const range = current ? repRange(current) : null;
   const done = currentState === 'done';
   /*
-   * The facts about this exercise, as separate spans rather than one "A · B · C"
-   * string: the set count leads in full ink because it is the one you are counting;
-   * the rest are quieter and wrap as whole words instead of mid-phrase.
+   * The facts about this exercise, as chips under its name. The set count is not
+   * one of them: the row of set pills under the chips is that count, drawn.
    */
   const meta = current
     ? [
-        done ? `${exWork.length} of ${target} sets logged` : `Set ${Math.min(exWork.length + 1, target)} of ${target}`,
-        done ? '' : rangeText(range),
+        done ? `${exWork.length} of ${target} logged` : rangeText(range),
         cardio ? '' : `rest ${fmtClock(restSeconds)}`,
         current.slot?.supersetGroup ? `superset ${current.slot.supersetGroup}` : '',
         current.adHoc ? 'added today' : '',
@@ -654,7 +654,6 @@ export default function SessionScreen() {
     .join(', ');
   const repsContext = [lastSet ? `Last time ${toUnit(lastSet.reps)}` : '', range ? `target ${rangeText(range)}` : ''].filter(Boolean).join(', ');
 
-  const verdictTone = suggestion ? TONE_COLOR[VERDICT_TONE[suggestion.verdict]] : color.textMuted;
   const verdictIcon: IconName = !suggestion
     ? 'info'
     : suggestion.verdict.startsWith('ADD')
@@ -664,7 +663,6 @@ export default function SessionScreen() {
         : suggestion.verdict === 'CALIBRATE'
           ? 'spark'
           : 'info';
-  const reason = suggestion ? suggestion.reason.replace(/^([A-Z])(?=[a-z])/, (c) => c.toLowerCase()) : '';
 
   const setList = (rows: readonly SetRow[]) => fmtSetList(rows, measure, loadType);
 
@@ -727,8 +725,8 @@ export default function SessionScreen() {
     ? { eyebrow: nextIsLast ? 'Last exercise' : 'Next exercise', label: next.exercise.name, onPress: () => goTo(nextIdx) }
     : { eyebrow: 'Everything done', label: content.cooldown ? 'Cool-down' : 'Finish workout', onPress: finish };
 
-  /** Up to four across; beyond that, two balanced rows instead of six slivers. */
-  const toolCols = tools.length <= 4 ? Math.max(1, tools.length) : Math.ceil(tools.length / 2);
+  /** Three across, so a label never shrinks to fit. */
+  const toolCols = Math.min(3, Math.max(1, tools.length));
 
   return (
     <View style={[styles.flex, { paddingTop: insets.top }]}>
@@ -739,7 +737,7 @@ export default function SessionScreen() {
             {day?.label ?? 'Workout'}
           </Text>
           <Text style={styles.headerMeta}>
-            {plan.length ? `Exercise ${idx + 1} of ${plan.length}, ` : ''}
+            {plan.length ? `${idx + 1} of ${plan.length}, ` : ''}
             <Elapsed since={session.startedAt} />
           </Text>
         </View>
@@ -751,7 +749,7 @@ export default function SessionScreen() {
           style={styles.listBtn}
           pressedStyle={styles.listBtnHeld}
         >
-          <Icon name="list" size={18} />
+          <Icon name="list" size={18} color={color.text} />
           <Text style={styles.listBtnText}>
             {doneCount}/{plan.length}
           </Text>
@@ -766,15 +764,6 @@ export default function SessionScreen() {
         cool-down, where "which part of this am I in" is a real question, and the
         menu's Finish button is what says a cool-down is still coming.
       */}
-
-      {/* The workout as its sets. Tapping it opens the same list the button does. */}
-      <View style={styles.strip}>
-        <SessionRail
-          items={plan.map((p) => ({ id: p.exerciseId, done: counts.get(p.exerciseId) ?? 0, target: targetOf(p), skipped: p.skipped }))}
-          current={current?.exerciseId ?? null}
-          onPress={() => setMenuOpen(true)}
-        />
-      </View>
 
       <ScrollView style={styles.flex} contentContainerStyle={styles.scroll}>
         {/*
@@ -795,21 +784,38 @@ export default function SessionScreen() {
               entering={reduced || travel === 0 ? undefined : travel > 0 ? ARRIVE_NEXT : ARRIVE_PREV}
               style={styles.exHead}
             >
-              <Text style={styles.exName} numberOfLines={2} accessibilityRole="header">
-                {current.exercise.name}
-              </Text>
-              <View style={styles.metaRow}>
+              <View style={styles.nameRow}>
+                <Text style={[styles.exName, styles.flex1]} numberOfLines={2} accessibilityRole="header">
+                  {current.exercise.name}
+                </Text>
+                <IconButton icon="more" accessibilityLabel={`${current.exercise.name}: how-to, swap, skip and more`} onPress={() => setExMenu(true)} />
+              </View>
+              <View style={styles.chips}>
                 {current.skipped ? (
-                  <Text style={styles.metaLead}>Skipped for today</Text>
+                  <Chip text="Skipped for today" />
                 ) : (
-                  meta.map((m, i) => (
-                    <Text key={m} style={i === 0 ? styles.metaLead : styles.meta}>
-                      {m}
-                    </Text>
-                  ))
+                  <>
+                    {suggestion && !done ? <Chip text={verdictLabel(suggestion)} icon={verdictIcon} tone={VERDICT_TONE[suggestion.verdict]} /> : null}
+                    {meta.map((m) => (
+                      <Chip key={m} text={m} />
+                    ))}
+                  </>
                 )}
               </View>
             </Animated.View>
+
+            {/* Today's sets as pills: logged, the one you are on, and the ones to come. Tap a logged one to fix it. */}
+            {!current.skipped ? (
+              <SetPills
+                sets={exWork}
+                target={target}
+                open={!done || addingExtra}
+                label={(sr) => setText(sr.weight, sr.reps)}
+                fresh={reduced ? null : justLogged}
+                best={measure === 'reps' && best > 0 ? best : null}
+                onEdit={setEditing}
+              />
+            ) : null}
 
             {notes.get(current.exerciseId) ? (
               <View style={styles.note}>
@@ -835,20 +841,20 @@ export default function SessionScreen() {
                   accessibilityRole="button"
                   accessibilityHint={whyOpen ? 'Hides the rule behind this' : 'Shows the rule behind this'}
                 >
-                  <View style={styles.reasonIcon}>
-                    <Icon name={verdictIcon} size={14} color={verdictTone} strokeWidth={2.4} />
-                  </View>
                   {/*
                     Two lines collapsed, not three-plus. AGENTS §1.5 requires the
                     reason be shown and overridable; it does not require the whole
                     paragraph to sit above the number it explains. "Why?" is its
                     own element rather than the tail of the sentence, so clipping
-                    the prose can never clip the way to expand it.
+                    the prose can never clip the way to expand it. The verdict
+                    itself is the coloured chip under the name.
                   */}
-                  <Text style={styles.reasonText} numberOfLines={whyOpen ? undefined : 2}>
-                    <Text style={[styles.reasonVerdict, { color: verdictTone }]}>{verdictLabel(suggestion)},</Text> {reason}
+                  <Text style={styles.reasonText} numberOfLines={whyOpen ? undefined : 2} accessibilityLabel={`${verdictLabel(suggestion)}. ${suggestion.reason}`}>
+                    {suggestion.reason}
                   </Text>
-                  <Text style={styles.why}>{whyOpen ? 'Hide' : 'Why?'}</Text>
+                  <View style={styles.why}>
+                    <Text style={styles.whyText}>{whyOpen ? 'Hide' : 'Why?'}</Text>
+                  </View>
                 </Press>
                 {whyOpen ? (
                   <View style={styles.whyBox}>
@@ -866,34 +872,6 @@ export default function SessionScreen() {
             ) : null}
 
             {/*
-              The record, and today as its newest columns.
-              
-              This replaced an 84dp row of set tiles that could only ever show
-              today. The tiles answered "what did I just do"; the readout line
-              inside this answers that at the same 16pt, and the picture above it
-              also answers "how does that compare to every other time I have done
-              this lift" — which the tiles could not, and which is the question
-              progressive overload actually is (§6).
-
-              The hollow accent mark is bound to the steppers below, so the number
-              under your thumb moves against your own history as you dial it.
-            */}
-            {!current.skipped ? (
-              <LoadLine
-                sessions={history}
-                measure={measure}
-                height={92}
-                today={{
-                  sets: exWork,
-                  target,
-                  proposed: done && !addingExtra ? null : { weight, reps },
-                  justLoggedId: reduced ? null : justLogged,
-                  onEditSet: setEditing,
-                }}
-              />
-            ) : null}
-
-            {/*
               Done, in one line. It used to be a bordered card with a 40dp tick,
               a title, a top-set line and a footer — directly under three tiles
               already wearing green ticks, and directly above a dock whose button
@@ -901,7 +879,9 @@ export default function SessionScreen() {
             */}
             {done && !addingExtra ? (
               <View style={styles.doneRow}>
-                <Icon name="check" size={16} color={color.text} strokeWidth={3} />
+                <View style={styles.doneMark}>
+                  <Icon name="check" size={14} color={color.onAccent} strokeWidth={3} />
+                </View>
                 <Text style={styles.doneText}>
                   All {exWork.length} logged
                   {top && measure === 'reps' && top.weight > 0 ? `. Top set ${kgNum(top.weight)} × ${top.reps}, estimated 1RM ${Math.round(e1RM(top.weight, top.reps, top.rir))} kg` : ''}
@@ -1028,45 +1008,30 @@ export default function SessionScreen() {
           </>
         }
       >
-        {/*
-          The per-exercise tools, under the name of the exercise they act on.
-
-          They used to be a 124dp strip in the scroll of the logging screen,
-          between the sets and the steppers — five occasional actions holding the
-          space two constant ones needed, which is what pushed Weight and Reps
-          off an 800dp screen. Moving them here also ends a real ambiguity: on a
-          finished exercise that strip rendered directly under a card titled with
-          the NEXT exercise, so How-to looked like it belonged to a lift it had
-          nothing to do with.
-        */}
-        {current && tools.length ? (
-          <>
-            <SectionHeader title={current.exercise.name} />
-            <View style={styles.tools}>
-              {tools.map((t) => (
-                <View key={t.label} style={[styles.toolCell, { width: `${100 / toolCols}%` }]}>
-                  {/* Every one of these changes the screen behind the sheet, so
-                      every one of them closes it. */}
-                  <Tool
-                    {...t}
-                    onPress={() => {
-                      setMenuOpen(false);
-                      setReordering(false);
-                      t.onPress();
-                    }}
-                  />
-                </View>
-              ))}
-            </View>
-          </>
-        ) : null}
-
-        <SectionHeader
-          title="Today's exercises"
-          hint={reordering ? 'Move one up or down, or take it off today. Your plan is not changed.' : undefined}
-          action={plan.length ? { label: reordering ? 'Done' : 'Edit list', onPress: () => setReordering(!reordering) } : undefined}
-        />
+        <View style={styles.editRow}>
+          {plan.length ? (
+            <Press onPress={() => setReordering(!reordering)} accessibilityRole="button" hitSlop={10}>
+              <Text style={styles.editLink}>{reordering ? 'Done' : 'Edit list'}</Text>
+            </Press>
+          ) : null}
+        </View>
         <ListCard>
+          {warmup.items.length && !reordering ? (
+            <ListRow
+              left={<StatusMark state={warmupState === 'done' ? 'done' : warmupState === 'skipped' ? 'skipped' : 'todo'} now={false} />}
+              title="Warm-up"
+              sub={warmupState === 'done' ? 'Done' : warmupState === 'skipped' ? 'Skipped. Tap to do it now' : 'Not started'}
+              tone={warmupState === 'done' ? 'default' : 'muted'}
+              onPress={() => {
+                setMenuOpen(false);
+                // Back to pending as well as back to the stage: a warm-up marked
+                // skipped buys the first big lift an extra light ramp set, and
+                // going to do it means that no longer applies.
+                setWarmupState(id, 'pending');
+                setSessionStage(id, 'warmup');
+              }}
+            />
+          ) : null}
           {plan.map((p, i) => {
             const st = stateOf(p);
             const work = sets.filter((s) => s.exerciseId === p.exerciseId && s.isWarmup === 0);
@@ -1082,7 +1047,7 @@ export default function SessionScreen() {
             return (
               <ListRow
                 key={p.exerciseId}
-                divider={i > 0}
+                divider={i > 0 || (warmup.items.length > 0 && !reordering)}
                 left={<StatusMark state={st} now={isNow} />}
                 title={p.exercise.name}
                 sub={p.adHoc ? `${sub}, added today` : sub}
@@ -1112,53 +1077,51 @@ export default function SessionScreen() {
               />
             );
           })}
-        </ListCard>
-        <View style={styles.menuEnd}>
-          <PrimaryButton
-            label="Add exercise"
-            tone="neutral"
-            icon={<Icon name="plus" size={18} />}
-            onPress={() => {
-              setMenuOpen(false);
-              setPicker({ mode: 'add' });
-            }}
-          />
-          {warmup.items.length ? (
-            <PrimaryButton
-              label={warmupState === 'pending' ? 'Warm up first' : 'Back to the warm-up'}
-              tone="neutral"
-              icon={<Icon name="flame" size={16} color={color.textMuted} />}
+          {reordering ? null : (
+            <ListRow
+              divider
+              left={
+                <View style={styles.addMark}>
+                  <Icon name="plus" size={14} color={color.accent} strokeWidth={2.8} />
+                </View>
+              }
+              title="Add exercise"
+              tone="accent"
+              chevron={false}
               onPress={() => {
                 setMenuOpen(false);
-                // Back to pending as well as back to the stage: a warm-up marked
-                // skipped buys the first big lift an extra light ramp set, and
-                // going to do it means that no longer applies.
-                setWarmupState(id, 'pending');
-                setSessionStage(id, 'warmup');
+                setPicker({ mode: 'add' });
               }}
             />
-          ) : null}
-          {/*
-            Ending the workout lives here, deliberately. The dock offers Finish only
-            once everything is done or skipped; leaving early is a decision, and it
-            belongs with the list that shows what is being left (UX-04).
-          */}
-          <PrimaryButton
-            label={settled ? (content.cooldown ? 'Cool-down, then finish' : 'Finish workout') : 'Finish early'}
-            size="gym"
-            icon={<Icon name="check" size={20} color={color.onAccent} />}
-            onPress={finish}
-          />
-          {/*
-            A real alternative, so it looks like one. As a `ghost` it was muted grey
-            text with no frame — the app's own "dismiss, go back" weight — which on
-            the one destructive action here read as disabled (§1).
-          */}
-          <PrimaryButton label="Cancel workout" tone="dangerOutline" icon={<Icon name="close" size={16} color={color.danger} />} onPress={cancel} />
-          <Text style={styles.captionCenter}>
-            Finish saves what you did — unfinished exercises count as partial. Cancel asks first, and never counts as done.
-          </Text>
+          )}
+        </ListCard>
+        {/*
+          Ending lives here, with the list that shows what is being left; the dock
+          offers Finish only once everything is done or skipped (UX-04). Two quiet
+          buttons side by side, not a loud Finish over a red one.
+        */}
+        <View style={styles.endRow}>
+          <PrimaryButton label={settled ? (content.cooldown ? 'Cool-down' : 'Finish') : 'End workout'} tone={settled ? 'accent' : 'neutral'} style={styles.flex1} onPress={finish} />
+          <PrimaryButton label="Cancel" tone="dangerOutline" style={styles.flex1} onPress={cancel} accessibilityLabel="Cancel the workout. Asks first; never counts as done." />
         </View>
+      </Sheet>
+
+      {/* The current exercise's tools. Every one changes the screen behind, so every one closes this. */}
+      <Sheet visible={exMenu} onClose={() => setExMenu(false)} title={current?.exercise.name}>
+        <View style={styles.tools}>
+          {tools.map((t) => (
+            <View key={t.label} style={[styles.toolCell, { width: `${100 / toolCols}%` }]}>
+              <Tool
+                {...t}
+                onPress={() => {
+                  setExMenu(false);
+                  t.onPress();
+                }}
+              />
+            </View>
+          ))}
+        </View>
+        <View style={styles.sheetTail} />
       </Sheet>
 
       <Sheet visible={picker !== null} onClose={() => setPicker(null)} title={picker?.mode === 'swap' ? `Swap ${picker.from.exercise.name}` : 'Add exercise'}>
@@ -1187,6 +1150,97 @@ export default function SessionScreen() {
       <PlateSheet visible={plates} weight={weight} onClose={() => setPlates(false)} />
       <EditSetSheet set={editing} step={step} onClose={() => setEditing(null)} />
       <ExerciseInfoSheet exercise={info} onClose={() => setInfo(null)} />
+    </View>
+  );
+}
+
+/** A fact about the exercise as a small pill; a verdict wears its tone and an arrow. */
+function Chip({ text, icon, tone = 'muted' }: { text: string; icon?: IconName; tone?: PillTone }) {
+  const ink = TONE_COLOR[tone];
+  const bg = tone === 'positive' || tone === 'accent' ? color.accentWash : tone === 'warning' ? color.warningWash : tone === 'danger' ? color.dangerWash : color.surface;
+  return (
+    <View style={[styles.chip, { backgroundColor: bg }]}>
+      {icon ? <Icon name={icon} size={13} color={ink} strokeWidth={2.6} /> : null}
+      <Text style={[styles.chipText, { color: ink }]} numberOfLines={1}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+/** Five pills to a row; a sixth set starts a second row rather than shrinking the first. */
+const SETS_PER_ROW = 5;
+
+/**
+ * Today's sets for the exercise you are on, as pills. A logged set shows what it was
+ * and opens for editing; the one you are on is outlined in volt; the rest wait as
+ * dashes. The set logged a moment ago is filled volt for `motion.cool`, then settles.
+ */
+function SetPills({
+  sets,
+  target,
+  open,
+  label,
+  fresh,
+  best,
+  onEdit,
+}: {
+  sets: readonly SetRow[];
+  target: number;
+  open: boolean;
+  label: (s: SetRow) => string;
+  fresh: string | null;
+  /** The best estimated 1RM before today; a set that beats it gets a star. Null when it does not apply. */
+  best: number | null;
+  onEdit: (s: SetRow) => void;
+}) {
+  const count = Math.max(target, sets.length + (open ? 1 : 0));
+  const cells = Array.from({ length: count }, (_, i) => i);
+  const rows = Array.from({ length: Math.ceil(count / SETS_PER_ROW) }, (_, r) => cells.slice(r * SETS_PER_ROW, r * SETS_PER_ROW + SETS_PER_ROW));
+  const cols = Math.min(count, SETS_PER_ROW);
+  return (
+    <View style={styles.sets}>
+      {rows.map((row) => (
+        <View key={row[0]} style={styles.setRow}>
+          {row.map((i) => {
+            const set = sets[i];
+            if (set) {
+              const hot = set.id === fresh;
+              const star = best !== null && set.e1rm > best + 0.5;
+              return (
+                <Animated.View key={set.id} entering={hot ? POP : undefined} style={styles.flex1}>
+                <Press
+                  onPress={() => onEdit(set)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Set ${i + 1}: ${label(set)}${star ? ', a new best' : ''}. Tap to edit.`}
+                  touchStyle={styles.flex1}
+                  style={[styles.set, hot ? styles.setHot : styles.setDone]}
+                >
+                  <Text style={[styles.setValue, hot ? styles.setValueHot : styles.setValueDone]} numberOfLines={1} adjustsFontSizeToFit>
+                    {label(set)}
+                  </Text>
+                  <View style={styles.setFoot}>
+                    {star ? <Icon name="star" size={10} color={hot ? color.onAccent : color.accent} strokeWidth={2.6} /> : null}
+                    <Text style={[styles.setLabel, hot && styles.setLabelHot]}>Set {i + 1}</Text>
+                  </View>
+                </Press>
+                </Animated.View>
+              );
+            }
+            const now = open && i === sets.length;
+            return (
+              <View key={`next-${i}`} style={[styles.flex1, styles.set, now && styles.setNow]} accessible accessibilityLabel={`Set ${i + 1}, ${now ? 'the one you are on' : 'to come'}`}>
+                <Text style={[styles.setValue, now && styles.setValueNow]}>{now ? 'Now' : '—'}</Text>
+                <Text style={[styles.setLabel, now && styles.setLabelNow]}>Set {i + 1}</Text>
+              </View>
+            );
+          })}
+          {/* Keeps a short last row's pills the same width as the full rows above it. */}
+          {Array.from({ length: cols - row.length }, (_, k) => (
+            <View key={`pad-${k}`} style={styles.flex1} />
+          ))}
+        </View>
+      ))}
     </View>
   );
 }
@@ -1237,7 +1291,7 @@ function Tool({ icon, label, a11y, on, onPress }: { icon: IconName; label: strin
       style={styles.tool}
       pressedStyle={styles.toolPressed}
     >
-      <Icon name={icon} size={20} color={on ? color.text : color.textMuted} />
+      <Icon name={icon} size={20} color={on ? color.accent : color.text} />
       <Text style={[styles.toolText, on && styles.accentText]} numberOfLines={1}>
         {label}
       </Text>
@@ -1246,16 +1300,14 @@ function Tool({ icon, label, a11y, on, onPress }: { icon: IconName; label: strin
 }
 
 /**
- * In the app's marks: done is solid chalk with a tick, the one you are on is a heat
- * ring with a dot (the live thing), started is a chalk ring, the rest an open faint
- * ring, skipped a short rule. Finishing is the normal case, so it is not green —
- * green is kept for a best.
+ * Done is a volt disc with a tick, the one you are on a volt ring with a dot,
+ * started a white ring, the rest an open faint ring, skipped a short rule.
  */
 function StatusMark({ state, now }: { state: ExState; now: boolean }) {
   if (state === 'done') {
     return (
       <View style={[styles.mark, styles.markDone]}>
-        <Icon name="check" size={14} color={color.bg} strokeWidth={3} />
+        <Icon name="check" size={14} color={color.onAccent} strokeWidth={3} />
       </View>
     );
   }
@@ -1269,87 +1321,76 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: color.bg },
   flex1: { flex: 1 },
   scroll: { paddingHorizontal: layout.screenPadding, paddingTop: space.xs, paddingBottom: space.xl, gap: space.md },
-  header: { flexDirection: 'row', alignItems: 'center', paddingLeft: space.sm, paddingRight: space.md, paddingTop: space.sm, gap: space.xs },
-  headerText: { flex: 1 },
-  headerTitle: { ...font.heading, fontSize: 18, fontWeight: '700', color: color.text },
-  headerMeta: { ...font.caption, ...font.numeric, color: color.textMuted },
-  listBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    minHeight: hit.default,
-    paddingHorizontal: space.md + 2,
-    borderRadius: radius.button,
-    backgroundColor: color.surfaceHigh,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
-  listBtnText: { ...font.label, fontWeight: '700', ...font.numeric, color: color.text },
-  listBtnHeld: { backgroundColor: color.border },
-  strip: { paddingHorizontal: layout.screenPadding - space.xs, paddingTop: space.xs, paddingBottom: space.sm },
-  stripSeg: { flex: 1, height: 4, borderRadius: radius.pill },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.xs, gap: space.md },
+  headerText: { flex: 1, alignItems: 'center' },
+  headerTitle: { ...font.titleSm, fontSize: 16, color: color.text, textAlign: 'center' },
+  headerMeta: { ...font.caption, fontSize: 12, ...font.numeric, fontWeight: '600', color: color.textMuted },
+  headerBalance: { width: 46 },
+  listBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 46, paddingHorizontal: space.md + 2, borderRadius: radius.pill, backgroundColor: color.surface },
+  listBtnText: { ...font.label, fontWeight: '800', ...font.numeric, color: color.text },
+  listBtnHeld: { backgroundColor: color.surfaceHigh },
   stageStrip: { flexDirection: 'row', gap: space.sm, paddingHorizontal: layout.screenPadding, paddingTop: space.sm, paddingBottom: space.sm },
-  stageCell: { flex: 1, gap: space.xs, minWidth: 0 },
-  stageBar: { height: 3, borderRadius: radius.pill, backgroundColor: color.surfaceHigh },
-  stageBarDone: { backgroundColor: color.border },
+  stageCell: { flex: 1, gap: space.xs + 2, minWidth: 0 },
+  stageBar: { height: 6, borderRadius: radius.pill, backgroundColor: color.surface },
+  stageBarDone: { backgroundColor: color.rule },
   stageBarNow: { backgroundColor: color.accent },
-  stageLabel: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '600', color: color.textFaint },
+  stageLabel: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '700', color: color.textFaint },
   stageLabelNow: { color: color.text },
   row: { flexDirection: 'row', gap: space.sm },
-  rowStart: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
-  gapTop: { marginTop: space.md },
-  cardTitle: { ...font.body, color: color.text, fontWeight: '700' },
-  exHead: { gap: space.xs },
-  exName: { ...font.title, fontSize: 28, lineHeight: 33, color: color.text },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: space.md, rowGap: 2 },
-  metaLead: { ...font.label, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'], color: color.text },
-  meta: { ...font.label, fontSize: 14, fontWeight: '400', fontVariant: ['tabular-nums'], color: color.textMuted },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: space.md },
-  reason: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md - 2, minHeight: hit.default - 4, paddingVertical: space.xs, borderRadius: radius.sm },
-  reasonHeld: { backgroundColor: color.surface },
-  reasonIcon: { width: 24, height: 24, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, alignItems: 'center', justifyContent: 'center' },
-  reasonText: { ...font.caption, fontSize: 14, lineHeight: 20, color: color.textMuted, flex: 1 },
-  reasonVerdict: { fontWeight: '600' },
-  why: { ...font.caption, fontSize: 13, lineHeight: 20, color: color.text, fontWeight: '700', textDecorationLine: 'underline' },
-  /** The rule behind the number, as a note in the margin: commentary, not another card. */
-  whyBox: { gap: space.sm, borderLeftWidth: 2, borderLeftColor: color.border, paddingLeft: space.md, paddingVertical: space.xs, marginTop: space.sm, marginLeft: space.xs },
-  doneRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  doneText: { ...font.caption, fontSize: 13, ...font.numeric, color: color.textMuted, flex: 1 },
-  strong: { color: color.text, fontWeight: '600' },
-  delta: { ...font.caption, fontWeight: '600', ...font.numeric },
-  upNext: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    minHeight: 76,
-    paddingHorizontal: space.lg,
-    backgroundColor: color.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border,
-  },
-  eyebrow: { ...font.eyebrow, color: color.textFaint },
-  tools: { flexDirection: 'row', flexWrap: 'wrap', backgroundColor: color.surface, borderRadius: radius.button, borderWidth: 1, borderColor: color.border, overflow: 'hidden' },
-  toolCell: { minHeight: hit.gym },
-  tool: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs, paddingVertical: space.sm, minHeight: hit.gym },
-  toolPressed: { backgroundColor: color.surfaceHigh },
-  toolText: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '600', color: color.textMuted },
-  footer: { ...font.caption, fontSize: 13, color: color.textMuted },
+
+  exHead: { gap: space.sm + 2, marginTop: space.xs },
+  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  setFoot: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  editRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: space.sm, minHeight: 20 },
+  editLink: { ...font.label, fontSize: 13, color: color.accent },
+  addMark: { width: 26, height: 26, borderRadius: radius.pill, backgroundColor: color.accentWash, alignItems: 'center', justifyContent: 'center' },
+  endRow: { flexDirection: 'row', gap: space.sm, marginTop: space.lg, paddingBottom: space.md },
+  sheetTail: { height: space.lg },
+  // Italic display type overhangs its box; the right padding keeps the last glyph whole.
+  exName: { ...font.title, fontSize: 42, lineHeight: 44, letterSpacing: -0.8, color: color.text, paddingRight: space.xs },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm - 2 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: space.md, borderRadius: radius.pill },
+  chipText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
+
+  sets: { gap: space.sm },
+  setRow: { flexDirection: 'row', gap: space.sm },
+  set: { height: 56, borderRadius: radius.md + 2, alignItems: 'center', justifyContent: 'center', gap: 1, paddingHorizontal: space.xs, backgroundColor: color.surface, borderWidth: 2, borderColor: 'transparent' },
+  setDone: { backgroundColor: color.accentWash },
+  setHot: { backgroundColor: color.accent },
+  setNow: { borderColor: color.accent, backgroundColor: color.bg },
+  setValue: { ...font.label, fontSize: 14, lineHeight: 18, fontWeight: '800', fontVariant: ['tabular-nums'], color: color.textMuted },
+  setValueDone: { color: color.accent },
+  setValueHot: { color: color.onAccent },
+  setValueNow: { color: color.accent },
+  setLabel: { ...font.caption, fontSize: 11, lineHeight: 13, fontWeight: '700', color: color.textFaint },
+  setLabelHot: { color: color.onTileMuted },
+  setLabelNow: { color: color.accent },
+
+  reason: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: hit.default, paddingVertical: space.sm + 2, paddingLeft: space.lg, paddingRight: space.sm + 2, borderRadius: radius.lg, backgroundColor: color.surface },
+  reasonHeld: { backgroundColor: color.surfaceHigh },
+  reasonText: { ...font.caption, fontSize: 13, lineHeight: 18, color: color.textMuted, flex: 1 },
+  why: { height: 32, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.surfaceHigh, justifyContent: 'center' },
+  whyText: { ...font.caption, fontSize: 12, lineHeight: 16, fontWeight: '800', color: color.text },
+  /** The rule behind the number, as a note under the reason: commentary, not another card. */
+  whyBox: { gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.md },
+  doneRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm + 2, paddingVertical: space.sm, paddingHorizontal: space.md, borderRadius: radius.lg, backgroundColor: color.surface },
+  doneMark: { width: 24, height: 24, borderRadius: radius.pill, backgroundColor: color.accent, alignItems: 'center', justifyContent: 'center' },
+  doneText: { ...font.caption, fontSize: 13, ...font.numeric, fontWeight: '600', color: color.textMuted, flex: 1 },
+  delta: { ...font.caption, fontWeight: '800', ...font.numeric },
+
+  tools: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -space.xs, rowGap: space.sm, marginTop: space.xs },
+  toolCell: { paddingHorizontal: space.xs },
+  tool: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.xs + 2, minHeight: 76, borderRadius: radius.md + 4, backgroundColor: color.surfaceHigh },
+  toolPressed: { backgroundColor: color.border },
+  toolText: { ...font.caption, fontSize: 12, lineHeight: 15, fontWeight: '700', color: color.text },
   body: { ...font.body, color: color.text },
   caption: { ...font.caption, color: color.textMuted },
-  captionCenter: { ...font.caption, color: color.textMuted, textAlign: 'center' },
-  accentText: { color: color.text, textDecorationLine: 'underline' },
-  dock: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: space.md,
-    backgroundColor: color.bg,
-    borderTopWidth: 1,
-    borderTopColor: color.border,
-  },
-  mark: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  markDone: { backgroundColor: color.text, borderColor: color.text },
-  markSkipped: { width: 24, alignItems: 'center', justifyContent: 'center', height: 2, borderRadius: 1, backgroundColor: color.textFaint },
+  accentText: { color: color.accent },
+  dock: { paddingHorizontal: layout.screenPadding, paddingTop: space.sm, backgroundColor: color.bg },
+  mark: { width: 26, height: 26, borderRadius: radius.pill, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  markDone: { backgroundColor: color.accent, borderColor: color.accent },
+  markSkipped: { width: 26, alignItems: 'center', justifyContent: 'center', height: 2, borderRadius: 1, backgroundColor: color.textFaint },
   markDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: color.accent },
-  menuEnd: { gap: space.sm, marginTop: space.sm, paddingBottom: space.md },
   restOnlyDock: { gap: space.sm },
 });

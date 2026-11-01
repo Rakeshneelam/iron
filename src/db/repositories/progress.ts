@@ -600,6 +600,8 @@ export interface WeekRecord {
   rest: number;
   /** Working sets logged. */
   sets: number;
+  /** Kilograms moved in those sets: weight × reps, summed. */
+  tonnage: number;
   /** Smoothed bodyweight at the week's end, once any reading exists by then. */
   trend: number | null;
   /** Days with any food logged, and their mean kcal. Blank days are absent, never zero. */
@@ -630,6 +632,7 @@ export function weeksRecord(lastWeekStart: string, weeks: number, waterTargetMl:
     missed: 0,
     rest: 0,
     sets: 0,
+    tonnage: 0,
     trend: null,
     foodDays: 0,
     avgKcal: null,
@@ -652,7 +655,7 @@ export function weeksRecord(lastWeekStart: string, weeks: number, waterTargetMl:
   }
 
   const sets = db
-    .select({ date: schema.session.date, n: sql<number>`count(*)` })
+    .select({ date: schema.session.date, n: sql<number>`count(*)`, kg: sql<number>`coalesce(sum(${schema.setLog.weight} * ${schema.setLog.reps}), 0)` })
     .from(schema.setLog)
     .innerJoin(schema.session, eq(schema.setLog.sessionId, schema.session.id))
     .where(and(gte(schema.session.date, from), lte(schema.session.date, to), isNotNull(schema.session.endedAt), eq(schema.setLog.isWarmup, 0)))
@@ -660,7 +663,9 @@ export function weeksRecord(lastWeekStart: string, weeks: number, waterTargetMl:
     .all();
   for (const r of sets) {
     const w = at(r.date);
-    if (w) w.sets += Number(r.n);
+    if (!w) continue;
+    w.sets += Number(r.n);
+    w.tonnage += Number(r.kg);
   }
 
   const trend = weightTrend(listWeighIns().filter((x) => x.date <= to));

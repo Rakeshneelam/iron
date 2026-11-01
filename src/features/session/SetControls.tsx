@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { ChipRow, Chips } from '@/components/ChipRow';
+import { ChipRow } from '@/components/ChipRow';
 import { Icon } from '@/components/Icon';
 import { Press } from '@/components/Press';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import type { RuleProps } from '@/components/Rule';
 import { Stepper } from '@/components/Stepper';
+import { selection } from '@/lib/haptics';
 import { color, family, font, hit, material, radius, space } from '@/theme/tokens';
 
 export const RIR_OPTIONS = [0, 1, 2, 3, 4].map((n) => ({ label: `RIR ${n}`, value: n }));
@@ -51,7 +52,9 @@ export function AdvanceButton({ eyebrow, label, onPress, tone = 'accent' }: Adva
           {label}
         </Text>
       </View>
-      <Icon name="chevronRight" size={24} color={hot ? color.onAccent : color.text} strokeWidth={2.4} />
+      <View style={[styles.go, !hot && styles.goQuiet]}>
+        <Icon name="chevronRight" size={24} color={hot ? color.accent : color.text} strokeWidth={2.6} />
+      </View>
     </Press>
   );
 }
@@ -116,7 +119,7 @@ export function SetControls(p: SetControlsProps) {
           Two full-width rows cost 60dp of a dock that has no steppers in it.
         */}
         {p.advance ? <AdvanceButton {...p.advance} /> : null}
-        <PrimaryButton label="Add another set" tone="neutral" size="gym" icon={<Icon name="plus" size={18} />} onPress={() => p.onExpand?.()} />
+        <PrimaryButton label="Add another set" tone="neutral" size="gym" icon={<Icon name="plus" size={18} color={color.text} />} onPress={() => p.onExpand?.()} />
       </View>
     );
   }
@@ -171,19 +174,26 @@ export function SetControls(p: SetControlsProps) {
           <View style={styles.flex1}>
             <ChipRow options={RIR_CHIPS} value={p.rir} onChange={p.onRir} />
           </View>
-          <View style={styles.pain}>
-            <Chips
-              options={[{ label: 'Pain', value: 1, icon: <Icon name="flag" size={14} color={p.pain ? color.danger : color.textMuted} strokeWidth={2.2} /> }]}
-              isOn={() => p.pain}
-              onPress={() => p.onPain(!p.pain)}
-              role="checkbox"
-            />
-          </View>
+          {/* Red means pain and nothing else, so the flag is red whether or not it is set. */}
+          <Press
+            onPress={() => {
+              selection();
+              p.onPain(!p.pain);
+            }}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: p.pain }}
+            accessibilityLabel="Pain"
+            style={[styles.pain, p.pain && styles.painOn]}
+            pressedStyle={styles.painHeld}
+          >
+            <Icon name="flag" size={15} color={color.danger} strokeWidth={2.4} />
+            <Text style={styles.painText}>Pain</Text>
+          </Press>
         </View>
       )}
 
       {p.rest}
-      <PrimaryButton label={p.logLabel} size="gym" icon={<Icon name="check" size={20} color={color.onAccent} />} onPress={p.onLog} />
+      <PrimaryButton label={p.logLabel} size="gym" icon={<Icon name="check" size={22} color={color.onAccent} />} onPress={p.onLog} />
 
       {/* Expanded past the target: the way on stays one tap away, and quiet, because
           Log set is the loud one while the inputs are open. */}
@@ -196,27 +206,32 @@ const styles = StyleSheet.create({
   wrap: { gap: space.sm },
   flex1: { flex: 1 },
   effort: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  effortLabel: { ...font.eyebrow, color: color.textFaint, width: 28 },
-  pain: { width: 84 },
+  effortLabel: { ...font.caption, fontSize: 11, fontWeight: '800', color: color.textMuted, width: 26 },
+  pain: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: hit.default, paddingHorizontal: space.md, borderRadius: radius.pill, backgroundColor: color.surface },
+  painOn: { backgroundColor: color.dangerWash, borderWidth: 1.5, borderColor: color.danger },
+  painHeld: { backgroundColor: color.surfaceHigh },
+  painText: { ...font.label, fontSize: 14, fontWeight: '800', color: color.danger },
 
   advance: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    minHeight: hit.gym,
-    paddingVertical: space.sm,
-    paddingLeft: space.lg,
-    paddingRight: space.md,
-    borderRadius: radius.button,
+    minHeight: hit.gym + 12,
+    paddingVertical: 6,
+    paddingLeft: space.xl - 2,
+    paddingRight: 6,
+    borderRadius: radius.pill,
   },
-  /** The destination's box. `minWidth: 0` is what lets the name wrap instead of pushing the chevron off. */
+  /** The destination's box. `minWidth: 0` is what lets the name wrap instead of pushing the circle off. */
   advanceText: { flex: 1, minWidth: 0, gap: 1 },
   advanceHot: { backgroundColor: color.accentFill, boxShadow: material.heat },
   advanceHeld: { backgroundColor: color.accentFillPressed },
-  advanceQuiet: { backgroundColor: 'transparent', borderWidth: 1, borderColor: color.border },
+  advanceQuiet: { backgroundColor: color.surface },
   advanceQuietHeld: { backgroundColor: color.surfaceHigh },
-  advanceEyebrow: { ...font.eyebrow, fontSize: 10, color: color.onAccent, opacity: 0.85 },
-  advanceEyebrowQuiet: { color: color.textFaint, opacity: 1 },
-  advanceName: { fontFamily: family.display, fontSize: 18, lineHeight: 23, fontWeight: '700', letterSpacing: -0.2, color: color.onAccent },
+  advanceEyebrow: { ...font.caption, fontSize: 11, lineHeight: 14, fontWeight: '700', color: color.onTileMuted },
+  advanceEyebrowQuiet: { color: color.textMuted },
+  advanceName: { fontFamily: family.text, fontSize: 17, lineHeight: 22, fontWeight: '800', letterSpacing: -0.2, color: color.onAccent },
   advanceNameQuiet: { color: color.text },
+  go: { width: 54, height: 54, borderRadius: radius.pill, backgroundColor: color.onAccent, alignItems: 'center', justifyContent: 'center' },
+  goQuiet: { backgroundColor: color.surfaceHigh },
 });

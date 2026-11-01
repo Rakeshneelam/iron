@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { bounds, downsample, linePath, scaleX, scaleY, type Pt } from '@/lib/chart';
 import { color, font, space } from '@/theme/tokens';
@@ -18,6 +18,8 @@ export interface TrendChartProps {
   formatX?: (x: number) => string;
   /** The value line above the plot. Off where the number is already shown beside it. */
   readout?: boolean;
+  /** Line, dots and fill colour — near-black when the chart sits on a coloured tile. */
+  ink?: string;
 }
 
 /** A drag has to mean it before the page loses its scroll. */
@@ -25,7 +27,7 @@ const SCRUB_SLOP = 12;
 const PAD = space.md;
 const MAX_POINTS = 200;
 
-export function TrendChart({ trend, raw = [], markers = [], height = 180, onScrub, format, formatX, readout = true }: TrendChartProps) {
+export function TrendChart({ trend, raw = [], markers = [], height = 180, onScrub, format, formatX, readout = true, ink = color.chart }: TrendChartProps) {
   const [width, setWidth] = useState(0);
   const [scrub, setScrub] = useState<Pt | null>(null);
 
@@ -84,8 +86,8 @@ export function TrendChart({ trend, raw = [], markers = [], height = 180, onScru
     <View>
       {readout ? (
         <View style={styles.readout}>
-          <Text style={styles.readValue}>{shown ? fmt(shown.y) : '—'}</Text>
-          {shown && formatX ? <Text style={styles.readLabel}>{formatX(shown.x)}</Text> : null}
+          <Text style={[styles.readValue, { color: ink }]}>{shown ? fmt(shown.y) : '—'}</Text>
+          {shown && formatX ? <Text style={[styles.readLabel, { color: ink, opacity: 0.7 }]}>{formatX(shown.x)}</Text> : null}
         </View>
       ) : null}
       <View
@@ -119,25 +121,29 @@ export function TrendChart({ trend, raw = [], markers = [], height = 180, onScru
       >
         {width > 0 ? (
           <Svg width={width} height={height}>
-            {/* The floor, so the trend sits on something rather than floating. */}
-            <Line x1={0} y1={height - 0.5} x2={width} y2={height - 0.5} stroke={color.border} strokeWidth={1} />
-            {/* What you logged: small, solid, faint — present, never the headline (AGENTS §6). */}
+            <Defs>
+              <LinearGradient id="trendArea" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={ink} stopOpacity={0.22} />
+                <Stop offset="1" stopColor={ink} stopOpacity={0} />
+              </LinearGradient>
+            </Defs>
+            {/* The trend, with a soft fill under it. */}
+            {t.length > 1 && first && last ? <Path d={`${trendPath}L${sx(last.x)} ${height}L${sx(first.x)} ${height}Z`} fill="url(#trendArea)" /> : null}
+            {/* What you logged: small, faint dots — present, never the headline (AGENTS §6). */}
             {r.map((p, i) => (
-              <Circle key={`r${i}`} cx={sx(p.x)} cy={sy(p.y)} r={2.2} fill={color.chartFaint} />
+              <Circle key={`r${i}`} cx={sx(p.x)} cy={sy(p.y)} r={2.6} fill={ink} opacity={0.32} />
             ))}
-            {/* What it means: derived, so a line, and the thickest thing here. */}
-            {t.length > 1 ? (
-              <Path d={trendPath} stroke={color.chart} strokeWidth={2.6} fill="none" strokeLinejoin="round" strokeLinecap="round" />
-            ) : null}
-            {t.length === 1 && last ? <Circle cx={sx(last.x)} cy={sy(last.y)} r={4} fill={color.chart} /> : null}
+            {t.length > 1 ? <Path d={trendPath} stroke={ink} strokeWidth={3} fill="none" strokeLinejoin="round" strokeLinecap="round" /> : null}
+            {t.length > 1 && last ? <Circle cx={sx(last.x)} cy={sy(last.y)} r={5.5} fill={ink} /> : null}
+            {t.length === 1 && last ? <Circle cx={sx(last.x)} cy={sy(last.y)} r={5} fill={ink} /> : null}
             {markers.map((p, i) => (
               <Circle key={`m${i}`} cx={sx(p.x)} cy={sy(p.y)} r={5} fill="none" stroke={color.warning} strokeWidth={2} />
             ))}
             {scrub ? (
               <>
                 {/* The finger is the live thing on a chart being scrubbed. */}
-                <Line x1={sx(scrub.x)} x2={sx(scrub.x)} y1={PAD} y2={height - PAD} stroke={color.accent} strokeWidth={1.5} />
-                <Circle cx={sx(scrub.x)} cy={sy(scrub.y)} r={4.5} fill={color.bg} stroke={color.accent} strokeWidth={2} />
+                <Line x1={sx(scrub.x)} x2={sx(scrub.x)} y1={PAD} y2={height - PAD} stroke={ink} strokeWidth={1.5} strokeDasharray="3 3" />
+                <Circle cx={sx(scrub.x)} cy={sy(scrub.y)} r={6} fill={ink} />
               </>
             ) : null}
           </Svg>

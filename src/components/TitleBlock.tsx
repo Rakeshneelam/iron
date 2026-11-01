@@ -2,7 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { type ReactNode, useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { color, font, space } from '@/theme/tokens';
+import { color, font, radius, space } from '@/theme/tokens';
 
 import { FitText } from './FitText';
 
@@ -15,21 +15,16 @@ export interface TitleCell {
 }
 
 /**
- * A drawing's title block: the handful of facts that identify what you are
- * looking at, in ruled cells — label over figure, figures in the measuring face.
- *
- * It replaces the row of floating stat tiles that every dashboard has. The cells
- * share one frame and one baseline, divided by hairlines rather than boxed one by
- * one, so four numbers read as one statement about one thing (this workout, this
- * lift) instead of four widgets competing for the eye.
+ * A row of stat tiles: a small label over a big italic figure, one dark tile each.
+ * The handful of facts that say what you are looking at — this workout, this lift.
  */
 export function TitleBlock({ cells }: { cells: readonly TitleCell[] }) {
   return (
     <View style={styles.block}>
-      {cells.map((c, i) => (
+      {cells.map((c) => (
         <View
           key={c.label}
-          style={[styles.cell, i > 0 && styles.divided]}
+          style={styles.cell}
           accessible
           accessibilityLabel={`${c.label}: ${typeof c.value === 'string' || typeof c.value === 'number' ? c.value : ''}${c.unit ? ` ${c.unit}` : ''}`}
         >
@@ -64,17 +59,11 @@ export function useNow(): Date {
 }
 
 const styles = StyleSheet.create({
-  block: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: color.border,
-  },
-  cell: { flex: 1, minWidth: 0, paddingVertical: space.sm + 2, paddingHorizontal: space.sm, gap: 2 },
-  divided: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: color.border },
-  label: { ...font.caption, fontSize: 12, lineHeight: 15, color: color.textMuted },
-  value: { ...font.measure, fontSize: 26, lineHeight: 30, color: color.text },
-  unit: { ...font.caption, fontSize: 13, fontWeight: '400', color: color.textFaint, letterSpacing: 0 },
+  block: { flexDirection: 'row', gap: space.sm + 2 },
+  cell: { flex: 1, minWidth: 0, paddingVertical: space.md, paddingHorizontal: space.md, gap: 4, backgroundColor: color.surface, borderRadius: radius.md + 4 },
+  label: { ...font.caption, fontSize: 12, lineHeight: 15, fontWeight: '700', color: color.textMuted },
+  value: { ...font.measure, fontWeight: '900', fontSize: 30, lineHeight: 34, color: color.text },
+  unit: { fontFamily: font.caption.fontFamily, fontStyle: 'normal', fontSize: 13, fontWeight: '700', color: color.textMuted, letterSpacing: 0 },
   heat: { color: color.accent },
   positive: { color: color.positive },
 });

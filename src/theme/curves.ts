@@ -17,10 +17,10 @@
  * There is no `ease-in` here. It starts slow, which delays the exact instant the
  * user is watching for, and on a control under a thumb that reads as lag.
  */
-import { StyleSheet, type ViewStyle } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import { cubicBezier, Easing, type CSSStyle } from 'react-native-reanimated';
 
-import { material, motion, radius } from './tokens';
+import { motion } from './tokens';
 
 /**
  * A style an `Animated.View` accepts: everything `ViewStyle` has, plus the CSS
@@ -31,10 +31,6 @@ export type AnimatedViewStyle = CSSStyle<ViewStyle>;
 
 /** Entering, exiting, and anything under a thumb. The workhorse. */
 export const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
-/** Something already on screen moving to a new place — a tab pill, a reorder. */
-export const EASE_IN_OUT = Easing.bezier(0.77, 0, 0.175, 1);
-/** iOS's own sheet curve, for the one thing that is a sheet. */
-export const EASE_SHEET = Easing.bezier(0.32, 0.72, 0, 1);
 
 /** The CSS-transition form of EASE_OUT. */
 export const CSS_EASE_OUT = cubicBezier(0.23, 1, 0.32, 1);
@@ -72,19 +68,3 @@ export const press: Record<'base' | 'down', AnimatedViewStyle> = {
   down: { transform: [{ scale: motion.pressScale }] },
 };
 
-/**
- * The machined top edge, as a child view rather than a border.
- *
- * A `borderTopColor` would need `borderTopWidth`, which changes the box and so
- * shifts every child down a pixel; an absolutely positioned hairline costs no
- * layout and can sit inside the parent's corner radius. Render it as the first
- * child of a card, under `pointerEvents="none"`.
- */
-export const edgeStyle = {
-  position: 'absolute' as const,
-  top: 0,
-  left: radius.lg,
-  right: radius.lg,
-  height: StyleSheet.hairlineWidth,
-  backgroundColor: material.edge,
-};
